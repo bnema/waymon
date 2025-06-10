@@ -1,0 +1,94 @@
+version: 2
+
+before:
+  hooks:
+    - go mod tidy
+    - go generate ./...
+
+builds:
+  - env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+    goarch:
+      - amd64
+      - arm64
+    binary: waymon
+    ldflags:
+      - -s -w -X main.version={{.Version}} -X main.commit={{.Commit}} -X main.date={{.Date}}
+    mod_timestamp: '{{ .CommitTimestamp }}'
+
+archives:
+  - name_template: >-
+      {{ .ProjectName }}_
+      {{- title .Os }}_
+      {{- if eq .Arch "amd64" }}x86_64
+      {{- else if eq .Arch "386" }}i386
+      {{- else }}{{ .Arch }}{{ end }}
+      {{- if .Arm }}v{{ .Arm }}{{ end }}
+    format_overrides:
+      - goos: windows
+        format: zip
+
+checksum:
+  name_template: 'checksums.txt'
+
+snapshot:
+  name_template: "{{ incpatch .Version }}-next"
+
+changelog:
+  sort: asc
+  filters:
+    exclude:
+      - '^docs:'
+      - '^test:'
+      - '^chore:'
+      - Merge pull request
+      - Merge branch
+  groups:
+    - title: Features
+      regexp: "^.*feat[(\\w)]*:+.*$"
+      order: 0
+    - title: Bug fixes
+      regexp: "^.*fix[(\\w)]*:+.*$"
+      order: 1
+    - title: Other
+      order: 999
+
+release:
+  github:
+    owner: bnema
+    name: waymon
+  name_template: "{{.ProjectName}}-v{{.Version}}"
+  header: |
+    ## Waymon {{.Version}} ({{ .Date }})
+    
+    Mouse sharing for Wayland systems.
+  footer: |
+    **Full Changelog**: https://github.com/bnema/waymon/compare/{{ .PreviousTag }}...{{ .Tag }}
+
+nfpms:
+  - id: packages
+    package_name: waymon
+    vendor: waymon
+    homepage: https://github.com/bnema/waymon
+    maintainer: Brice <brice@example.com>
+    description: Mouse sharing for Wayland systems
+    license: MIT
+    formats:
+      - deb
+      - rpm
+      - apk
+    bindir: /usr/bin
+    section: utils
+    priority: optional
+    architectures:
+      - amd64
+      - arm64
+    recommends:
+      - uinput-tools
+    contents:
+      - src: ./README.md
+        dst: /usr/share/doc/waymon/README.md
+      - src: ./LICENSE
+        dst: /usr/share/doc/waymon/LICENSE
