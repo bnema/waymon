@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/bnema/waymon/internal/config"
 	"github.com/spf13/cobra"
 )
 
@@ -27,17 +28,31 @@ func Execute() error {
 }
 
 func init() {
+	// Initialize configuration
+	cobra.OnInitialize(initConfig)
+
 	rootCmd.Version = Version
 	rootCmd.SetVersionTemplate(`{{with .Name}}{{printf "%s " .}}{{end}}{{printf "version %s\n" .Version}}`)
+
+	// Add global flags
+	rootCmd.PersistentFlags().String("config", "", "config file (default is $HOME/.config/waymon/waymon.toml)")
 
 	// Add commands
 	rootCmd.AddCommand(serverCmd)
 	rootCmd.AddCommand(clientCmd)
 	rootCmd.AddCommand(testCmd)
+	rootCmd.AddCommand(configCmd)
 }
 
 // Exit with error message
 func exitError(format string, args ...interface{}) {
 	fmt.Fprintf(os.Stderr, "Error: "+format+"\n", args...)
 	os.Exit(1)
+}
+
+// initConfig reads in config file
+func initConfig() {
+	if err := config.Init(); err != nil {
+		fmt.Fprintf(os.Stderr, "Warning: %v\n", err)
+	}
 }

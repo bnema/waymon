@@ -7,17 +7,20 @@ import (
 	"os/signal"
 	"syscall"
 
+	"github.com/bnema/waymon/internal/config"
 	"github.com/bnema/waymon/internal/display"
 	"github.com/bnema/waymon/internal/network"
 	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
 )
 
 var (
 	serverAddr string
 	edgeSize   int
+	hostName   string
 )
 
 var clientCmd = &cobra.Command{
@@ -30,11 +33,41 @@ The client will capture mouse movement at screen edges and redirect it to the se
 
 func init() {
 	clientCmd.Flags().StringVarP(&serverAddr, "host", "H", "", "Server address (host:port)")
-	clientCmd.Flags().IntVarP(&edgeSize, "edge", "e", 5, "Edge detection size in pixels")
-	clientCmd.MarkFlagRequired("host")
+	clientCmd.Flags().IntVarP(&edgeSize, "edge", "e", 0, "Edge detection size in pixels")
+	clientCmd.Flags().StringVarP(&hostName, "name", "n", "", "Host name from config")
+	
+	// Bind flags to viper
+	viper.BindPFlag("client.server_address", clientCmd.Flags().Lookup("host"))
+	viper.BindPFlag("client.edge_threshold", clientCmd.Flags().Lookup("edge"))
 }
 
 func runClient(cmd *cobra.Command, args []string) error {
+	// Get configuration
+	cfg := config.Get()
+	
+	// Determine server address
+	if hostName != "" {
+		// Look up host from config
+		host, err := config.GetHost(hostName)
+		if err != nil {
+			return fmt.Errorf("host '%s' not found in config", hostName)
+		}
+		serverAddr = host.Address
+	} else if serverAddr == "" {
+		// Use default from config
+		serverAddr = cfg.Client.ServerAddress
+	}
+	
+	// Validate we have a server address
+	if serverAddr == "" {
+		return fmt.Errorf("no server address specified (use --host or configure a default)")
+	}
+	
+	// Use edge size from config if not specified
+	if edgeSize == 0 {
+		edgeSize = cfg.Client.EdgeThreshold
+	}
+	
 	// Initialize display detection
 	disp, err := display.New()
 	if err != nil {
