@@ -100,24 +100,10 @@ func runServer(cmd *cobra.Command, args []string) error {
 		}
 	}()
 
-	// Create TUI
-	monitorList := []ui.Monitor{}
-	for _, mon := range monitors {
-		monitorList = append(monitorList, ui.Monitor{
-			Name:     mon.Name,
-			Size:     fmt.Sprintf("%dx%d", mon.Width, mon.Height),
-			Position: fmt.Sprintf("%d,%d", mon.X, mon.Y),
-			Primary:  mon.Primary,
-		})
-	}
+	// Create simple TUI
+	model := ui.NewSimpleServerModel(serverPort, cfg.Server.Name)
 	
-	model := ui.NewServerModel(ui.ServerConfig{
-		Port:     serverPort,
-		Name:     cfg.Server.Name,
-		Monitors: monitorList,
-	})
-	
-	p := tea.NewProgram(model)
+	p := tea.NewProgram(model, tea.WithAltScreen())
 
 	// Handle graceful shutdown
 	sigCh := make(chan os.Signal, 1)

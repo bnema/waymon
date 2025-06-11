@@ -63,7 +63,15 @@ func getEnv(key string) string {
 }
 
 func isProcessRunning(name string) bool {
-	cmd := exec.Command("pgrep", "-x", name)
+	var cmd *exec.Cmd
+	
+	// If running with sudo, check processes as the actual user
+	if sudoUser := os.Getenv("SUDO_USER"); sudoUser != "" {
+		cmd = exec.Command("sudo", "-u", sudoUser, "pgrep", "-x", name)
+	} else {
+		cmd = exec.Command("pgrep", "-x", name)
+	}
+	
 	err := cmd.Run()
 	return err == nil
 }
@@ -85,32 +93,48 @@ func (c *compositorBackend) GetMonitors() ([]*Monitor, error) {
 
 func (c *compositorBackend) getMonitorsHyprland() ([]*Monitor, error) {
 	// Use hyprctl to get monitor info
-	// Try common paths when running as root/sudo
-	hyprctlPaths := []string{
-		"hyprctl",
-		"/usr/bin/hyprctl",
-		"/usr/local/bin/hyprctl",
-	}
-	
 	var cmd *exec.Cmd
 	var output []byte
 	var err error
 	
-	for _, path := range hyprctlPaths {
-		cmd = exec.Command(path, "monitors", "-j")
-		// If running with sudo, preserve user environment
-		if sudoUser := os.Getenv("SUDO_USER"); sudoUser != "" {
-			cmd.Env = append(os.Environ(), 
-				fmt.Sprintf("HYPRLAND_INSTANCE_SIGNATURE=%s", os.Getenv("HYPRLAND_INSTANCE_SIGNATURE")))
+	// If running with sudo, run hyprctl as the actual user
+	if sudoUser := os.Getenv("SUDO_USER"); sudoUser != "" {
+		// Get the real user's environment
+		sudoUID := os.Getenv("SUDO_UID")
+		sudoGID := os.Getenv("SUDO_GID")
+		
+		// Run hyprctl as the sudo user
+		cmd = exec.Command("sudo", "-u", sudoUser, "hyprctl", "monitors", "-j")
+		
+		// Preserve important environment variables
+		if hyprSig := os.Getenv("HYPRLAND_INSTANCE_SIGNATURE"); hyprSig != "" {
+			cmd.Env = append(cmd.Env, fmt.Sprintf("HYPRLAND_INSTANCE_SIGNATURE=%s", hyprSig))
 		}
-		output, err = cmd.Output()
-		if err == nil {
-			break
+		
+		// Also try to get it from the user's environment if not set
+		if sudoUID != "" && sudoGID != "" {
+			cmd.Env = append(cmd.Env,
+				fmt.Sprintf("HOME=/home/%s", sudoUser),
+				fmt.Sprintf("USER=%s", sudoUser),
+				fmt.Sprintf("WAYLAND_DISPLAY=%s", os.Getenv("WAYLAND_DISPLAY")),
+				fmt.Sprintf("XDG_RUNTIME_DIR=/run/user/%s", sudoUID),
+			)
 		}
+	} else {
+		// Normal execution
+		cmd = exec.Command("hyprctl", "monitors", "-j")
 	}
 	
+	output, err = cmd.Output()
 	if err != nil {
-		return nil, fmt.Errorf("failed to run hyprctl: %w", err)
+		// If sudo approach fails, try without sudo as fallback
+		if sudoUser := os.Getenv("SUDO_USER"); sudoUser != "" {
+			cmd = exec.Command("hyprctl", "monitors", "-j")
+			output, err = cmd.Output()
+		}
+		if err != nil {
+			return nil, fmt.Errorf("failed to run hyprctl: %w", err)
+		}
 	}
 	
 	// Parse JSON output
@@ -350,7 +374,15 @@ func (c *compositorBackend) GetCursorPosition() (x, y int32, err error) {
 
 func (c *compositorBackend) getCursorHyprland() (x, y int32, err error) {
 	// Try to get cursor position from hyprctl
-	cmd := exec.Command("hyprctl", "cursorpos", "-j")
+	var cmd *exec.Cmd
+	
+	// If running with sudo, run hyprctl as the actual user
+	if sudoUser := os.Getenv("SUDO_USER"); sudoUser != "" {
+		cmd = exec.Command("sudo", "-u", sudoUser, "hyprctl", "cursorpos", "-j")
+	} else {
+		cmd = exec.Command("hyprctl", "cursorpos", "-j")
+	}
+	
 	output, err := cmd.Output()
 	if err != nil {
 		return 0, 0, err

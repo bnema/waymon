@@ -1,7 +1,6 @@
 package cmd
 
 import (
-	"context"
 	"fmt"
 	"os"
 	"os/signal"
@@ -81,14 +80,12 @@ func runClient(cmd *cobra.Command, args []string) error {
 		fmt.Printf("  %s: %dx%d at (%d,%d)\n", mon.Name, mon.Width, mon.Height, mon.X, mon.Y)
 	}
 
-	// Create client
+	// Create client (will connect later)
 	client := network.NewClient()
-
-	// Connect to server
-	if err := client.Connect(context.Background(), serverAddr); err != nil {
-		return fmt.Errorf("failed to connect to server: %w", err)
-	}
 	defer client.Disconnect()
+
+	// Create simple TUI model
+	model := ui.NewSimpleClientModel(serverAddr, hostName)
 
 	// TODO: Create edge detector when implementing mouse capture
 	// edgeDetector := &EdgeDetector{
@@ -97,15 +94,8 @@ func runClient(cmd *cobra.Command, args []string) error {
 	// 	threshold: int32(edgeSize),
 	// 	active:    false,
 	// }
-
-	// Create TUI
-	model := ui.NewClientModel(ui.ClientConfig{
-		ServerAddress: serverAddr,
-		ServerName:    hostName,
-		EdgeThreshold: edgeSize,
-	})
 	
-	p := tea.NewProgram(model)
+	p := tea.NewProgram(model, tea.WithAltScreen())
 
 	// Handle graceful shutdown
 	sigCh := make(chan os.Signal, 1)
