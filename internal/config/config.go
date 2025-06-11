@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/spf13/viper"
 )
@@ -123,10 +124,19 @@ func Init() error {
 	viper.SetConfigName("waymon")
 	viper.SetConfigType("toml")
 
-	// Add config paths
-	viper.AddConfigPath(".")                          // Current directory
-	viper.AddConfigPath("$HOME/.config/waymon")       // User config directory
-	viper.AddConfigPath("/etc/waymon")                // System config directory
+	// Add config paths in order of precedence
+	viper.AddConfigPath("/etc/waymon")                // System config directory (primary)
+	
+	// If running with sudo, try the real user's config
+	if sudoUser := os.Getenv("SUDO_USER"); sudoUser != "" {
+		userConfigPath := fmt.Sprintf("/home/%s/.config/waymon", sudoUser)
+		viper.AddConfigPath(userConfigPath)
+	} else if home := os.Getenv("HOME"); home != "" && home != "/root" {
+		// Normal user config
+		viper.AddConfigPath(filepath.Join(home, ".config", "waymon"))
+	}
+	
+	viper.AddConfigPath(".")                          // Current directory (lowest priority)
 
 	// Set defaults
 	viper.SetDefault("server", DefaultConfig.Server)
@@ -168,6 +178,10 @@ func Save() error {
 	// Create directory if it doesn't exist
 	dir := filepath.Dir(configPath)
 	if err := os.MkdirAll(dir, 0755); err != nil {
+		// If we can't create it (e.g., /etc/waymon needs sudo), provide helpful message
+		if os.IsPermission(err) && strings.Contains(configPath, "/etc/") {
+			return fmt.Errorf("failed to create config directory %s: permission denied. Try running with sudo", dir)
+		}
 		return fmt.Errorf("failed to create config directory: %w", err)
 	}
 
@@ -186,10 +200,15 @@ func GetConfigPath() string {
 		return viper.ConfigFileUsed()
 	}
 
-	// Default to user config directory
+	// For servers/sudo, prefer system config
+	if os.Getuid() == 0 || os.Getenv("SUDO_USER") != "" {
+		return "/etc/waymon/waymon.toml"
+	}
+
+	// For regular users, use user config directory
 	home, err := os.UserHomeDir()
 	if err != nil {
-		return "waymon.toml"
+		return "/etc/waymon/waymon.toml"
 	}
 
 	return filepath.Join(home, ".config", "waymon", "waymon.toml")

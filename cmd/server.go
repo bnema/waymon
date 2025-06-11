@@ -46,6 +46,11 @@ func runServer(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("server mode requires root privileges for uinput access\nPlease run with: sudo waymon server")
 	}
 
+	// Ensure config file exists
+	if err := ensureServerConfig(); err != nil {
+		return fmt.Errorf("failed to initialize config: %w", err)
+	}
+
 	// Initialize display detection
 	disp, err := display.New()
 	if err != nil {
@@ -135,6 +140,25 @@ func runServer(cmd *cobra.Command, args []string) error {
 
 	// Cleanup
 	server.Stop()
+	return nil
+}
+
+// ensureServerConfig ensures the config file exists when running as server
+func ensureServerConfig() error {
+	configPath := config.GetConfigPath()
+	
+	// Check if config file exists
+	if _, err := os.Stat(configPath); os.IsNotExist(err) {
+		fmt.Printf("No config file found. Creating default config at %s\n", configPath)
+		
+		// Save default config
+		if err := config.Save(); err != nil {
+			return err
+		}
+		
+		fmt.Println("Default configuration created successfully")
+	}
+	
 	return nil
 }
 

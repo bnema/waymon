@@ -85,8 +85,30 @@ func (c *compositorBackend) GetMonitors() ([]*Monitor, error) {
 
 func (c *compositorBackend) getMonitorsHyprland() ([]*Monitor, error) {
 	// Use hyprctl to get monitor info
-	cmd := exec.Command("hyprctl", "monitors", "-j")
-	output, err := cmd.Output()
+	// Try common paths when running as root/sudo
+	hyprctlPaths := []string{
+		"hyprctl",
+		"/usr/bin/hyprctl",
+		"/usr/local/bin/hyprctl",
+	}
+	
+	var cmd *exec.Cmd
+	var output []byte
+	var err error
+	
+	for _, path := range hyprctlPaths {
+		cmd = exec.Command(path, "monitors", "-j")
+		// If running with sudo, preserve user environment
+		if sudoUser := os.Getenv("SUDO_USER"); sudoUser != "" {
+			cmd.Env = append(os.Environ(), 
+				fmt.Sprintf("HYPRLAND_INSTANCE_SIGNATURE=%s", os.Getenv("HYPRLAND_INSTANCE_SIGNATURE")))
+		}
+		output, err = cmd.Output()
+		if err == nil {
+			break
+		}
+	}
+	
 	if err != nil {
 		return nil, fmt.Errorf("failed to run hyprctl: %w", err)
 	}
