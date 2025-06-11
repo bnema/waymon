@@ -12,9 +12,8 @@ import (
 	"github.com/bnema/waymon/internal/display"
 	"github.com/bnema/waymon/internal/input"
 	"github.com/bnema/waymon/internal/network"
-	"github.com/charmbracelet/bubbles/spinner"
+	"github.com/bnema/waymon/internal/ui"
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 )
@@ -97,7 +96,23 @@ func runServer(cmd *cobra.Command, args []string) error {
 	}()
 
 	// Create TUI
-	p := tea.NewProgram(newServerModel(server))
+	monitorList := []ui.Monitor{}
+	for _, mon := range monitors {
+		monitorList = append(monitorList, ui.Monitor{
+			Name:     mon.Name,
+			Size:     fmt.Sprintf("%dx%d", mon.Width, mon.Height),
+			Position: fmt.Sprintf("%d,%d", mon.X, mon.Y),
+			Primary:  mon.Primary,
+		})
+	}
+	
+	model := ui.NewServerModel(ui.ServerConfig{
+		Port:     serverPort,
+		Name:     cfg.Server.Name,
+		Monitors: monitorList,
+	})
+	
+	p := tea.NewProgram(model)
 
 	// Handle graceful shutdown
 	sigCh := make(chan os.Signal, 1)
@@ -123,83 +138,3 @@ func runServer(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
-// serverModel is the TUI model for server mode
-type serverModel struct {
-	server   *network.Server
-	spinner  spinner.Model
-	status   string
-	clients  []string
-	quitting bool
-}
-
-func newServerModel(server *network.Server) serverModel {
-	s := spinner.New()
-	s.Spinner = spinner.Dot
-	s.Style = lipgloss.NewStyle().Foreground(lipgloss.Color("205"))
-	
-	return serverModel{
-		server:  server,
-		spinner: s,
-		status:  fmt.Sprintf("Listening on port %d", serverPort),
-	}
-}
-
-func (m serverModel) Init() tea.Cmd {
-	return m.spinner.Tick
-}
-
-func (m serverModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
-	switch msg := msg.(type) {
-	case tea.KeyMsg:
-		switch msg.String() {
-		case "q", "ctrl+c":
-			m.quitting = true
-			return m, tea.Quit
-		}
-
-	case spinner.TickMsg:
-		var cmd tea.Cmd
-		m.spinner, cmd = m.spinner.Update(msg)
-		return m, cmd
-
-	case tea.WindowSizeMsg:
-		// Handle resize if needed
-	}
-
-	return m, nil
-}
-
-func (m serverModel) View() string {
-	if m.quitting {
-		return "Shutting down server...\n"
-	}
-
-	// Header
-	header := lipgloss.NewStyle().
-		Bold(true).
-		Foreground(lipgloss.Color("39")).
-		Render("Waymon Server")
-
-	// Status
-	statusStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("241"))
-	
-	status := fmt.Sprintf("%s %s", m.spinner.View(), m.status)
-
-	// Build view
-	view := header + "\n\n" + statusStyle.Render(status) + "\n"
-
-	// Show connected clients
-	if len(m.clients) > 0 {
-		view += "\nConnected clients:\n"
-		for _, client := range m.clients {
-			view += fmt.Sprintf("  • %s\n", client)
-		}
-	} else {
-		view += "\nNo clients connected\n"
-	}
-
-	view += "\nPress 'q' to quit\n"
-
-	return view
-}
