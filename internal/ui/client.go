@@ -36,8 +36,9 @@ type ClientConfig struct {
 // NewClientModel creates a new client UI model
 func NewClientModel(cfg ClientConfig) *ClientModel {
 	statusBar := NewStatusBar("Waymon Client")
-	statusBar.Status = fmt.Sprintf("Connected to %s", cfg.ServerAddress)
-	statusBar.Connected = true
+	statusBar.Status = fmt.Sprintf("Connecting to %s...", cfg.ServerAddress)
+	statusBar.Connected = false
+	statusBar.ShowSpinner = true
 
 	serverInfo := &InfoPanel{
 		Title: "Server Information",
@@ -53,7 +54,7 @@ func NewClientModel(cfg ClientConfig) *ClientModel {
 		serverInfo:    serverInfo,
 		serverAddress: cfg.ServerAddress,
 		serverName:    cfg.ServerName,
-		connected:     true,
+		connected:     false,
 		captureStatus: &InfoPanel{
 			Title:   "Capture Status",
 			Content: []string{"Mouse capture inactive"},
