@@ -1,0 +1,50 @@
+syntax = "proto3";
+
+package waymon;
+
+option go_package = "github.com/bnema/waymon/internal/proto";
+
+// EventType defines the type of mouse event
+enum EventType {
+  EVENT_TYPE_UNSPECIFIED = 0;
+  EVENT_TYPE_MOVE = 1;
+  EVENT_TYPE_CLICK = 2;
+  EVENT_TYPE_SCROLL = 3;
+  EVENT_TYPE_ENTER = 4;
+  EVENT_TYPE_LEAVE = 5;
+}
+
+// MouseButton defines mouse button values
+enum MouseButton {
+  MOUSE_BUTTON_UNSPECIFIED = 0;
+  MOUSE_BUTTON_LEFT = 1;
+  MOUSE_BUTTON_RIGHT = 2;
+  MOUSE_BUTTON_MIDDLE = 3;
+  MOUSE_BUTTON_BACK = 4;
+  MOUSE_BUTTON_FORWARD = 5;
+}
+
+// ScrollDirection defines scroll directions
+enum ScrollDirection {
+  SCROLL_DIRECTION_UNSPECIFIED = 0;
+  SCROLL_DIRECTION_UP = 1;
+  SCROLL_DIRECTION_DOWN = 2;
+  SCROLL_DIRECTION_LEFT = 3;
+  SCROLL_DIRECTION_RIGHT = 4;
+}
+
+// MouseEvent represents a mouse event
+message MouseEvent {
+  EventType type = 1;
+  double x = 2;
+  double y = 3;
+  MouseButton button = 4;
+  ScrollDirection direction = 5;
+  int64 timestamp_ms = 6;
+  bool is_pressed = 7; // For click events: true = press, false = release
+}
+
+// EventBatch allows sending multiple events at once for efficiency
+message EventBatch {
+  repeated MouseEvent events = 1;
+}

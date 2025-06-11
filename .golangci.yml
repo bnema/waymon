@@ -1,146 +1,43 @@
+# golangci-lint configuration
+version: 2
+
 run:
   timeout: 5m
   tests: true
-  build-tags:
-    - integration
 
 linters:
   enable:
-    - gofmt
-    - goimports
-    - revive
+    - errcheck
     - govet
     - staticcheck
-    - misspell
     - ineffassign
-    - typecheck
     - unused
-    - errcheck
-    - gosimple
-    - structcheck
-    - varcheck
-    - deadcode
+    - revive
+    - misspell
     - bodyclose
-    - dupl
-    - funlen
-    - gocognit
-    - goconst
     - gocritic
-    - gocyclo
     - gosec
     - unconvert
-    - unparam
-    - nakedret
-    - prealloc
-    - exportloopref
-    - exhaustive
-    - sqlclosecheck
-    - nolintlint
-    - dogsled
-    - rowserrcheck
-    - errorlint
-    - godot
-    - godox
-    - thelper
-    - tparallel
-    - paralleltest
-    - testpackage
-    - nestif
-    - makezero
-    - forbidigo
-
-  disable:
-    - wsl
-    - whitespace
-    - wrapcheck
-    - varnamelen
-    - testpackage
-    - nlreturn
-    - gomnd
-    - goerr113
-    - godox
-    - gci
-    - exhaustivestruct
-    - forbidigo
 
 linters-settings:
+  revive:
+    rules:
+      - name: blank-imports
+      - name: error-return
+      - name: error-strings
+      - name: error-naming
+      - name: var-naming
+      - name: receiver-naming
+
   govet:
-    check-shadowing: true
-  gocyclo:
-    min-complexity: 15
-  dupl:
-    threshold: 100
-  goconst:
-    min-len: 3
-    min-occurrences: 3
-  misspell:
-    locale: US
-  funlen:
-    lines: 100
-    statements: 50
-  goimports:
-    local-prefixes: github.com/brice/waymon
-  golint:
-    min-confidence: 0.8
-  gofmt:
-    simplify: true
-  gocognit:
-    min-complexity: 20
-  nestif:
-    min-complexity: 4
+    enable-all: true
+
   gocritic:
     enabled-tags:
       - diagnostic
-      - experimental
-      - opinionated
       - performance
       - style
-    disabled-checks:
-      - dupImport
-      - ifElseChain
-      - octalLiteral
-      - whyNoLint
-      - wrapperFunc
-  unused:
-    check-exported: false
-  unparam:
-    check-exported: false
-  nakedret:
-    max-func-lines: 30
-  prealloc:
-    simple: true
-    range-loops: true
-    for-loops: false
-  errorlint:
-    errorf: true
-    asserts: true
-    comparison: true
-  thelper:
-    test:
-      begin: true
-    benchmark:
-      begin: true
-    tb:
-      begin: true
 
 issues:
-  exclude-rules:
-    - path: _test\.go
-      linters:
-        - cyclop
-        - dupl
-        - errcheck
-        - funlen
-        - gocognit
-        - goconst
-        - gosec
-        - lll
-        - prealloc
-        - scopelint
-        - unparam
-    - path: cmd/
-      linters:
-        - forbidigo
-    - linters:
-        - lll
-      source: "^//go:generate "
+  exclude-files:
+    - ".*\\.pb\\.go$"
