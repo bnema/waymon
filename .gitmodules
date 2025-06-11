@@ -1,0 +1,9 @@
+[submodule "internal/display/protocols/internal/display/protocols/wlr-protocols"]
+	path = internal/display/protocols/internal/display/protocols/wlr-protocols
+	url = https://gitlab.freedesktop.org/wlroots/wlr-protocols.git
+[submodule "internal/display/protocols/protocols/wlr-protocols"]
+	path = internal/display/protocols/protocols/wlr-protocols
+	url = https://gitlab.freedesktop.org/wlroots/wlr-protocols.git
+[submodule "third_party/wlr-protocols"]
+	path = third_party/wlr-protocols
+	url = https://gitlab.freedesktop.org/wlroots/wlr-protocols.git

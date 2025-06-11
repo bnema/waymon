@@ -42,6 +42,11 @@ func runServer(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("server mode requires root privileges for uinput access\nPlease run with: sudo waymon server")
 	}
 
+	// Verify uinput setup has been completed
+	if err := VerifyUinputSetup(); err != nil {
+		return fmt.Errorf("uinput setup verification failed: %w", err)
+	}
+
 	// Ensure config file exists
 	if err := ensureServerConfig(); err != nil {
 		return fmt.Errorf("failed to initialize config: %w", err)

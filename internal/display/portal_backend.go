@@ -22,6 +22,11 @@ func newPortalBackend() (Backend, error) {
 	return &portalBackend{}, nil
 }
 
+// newRandrBackend is an alias for portal backend (uses xrandr)
+func newRandrBackend() (Backend, error) {
+	return newPortalBackend()
+}
+
 func (p *portalBackend) GetMonitors() ([]*Monitor, error) {
 	// Portal backend is now just a fallback - we prefer wlr-randr
 	// Try xrandr if available (XWayland)
