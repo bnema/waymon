@@ -1,0 +1,99 @@
+# Waymon Configuration File
+# Copy this file to one of the following locations:
+# - ./waymon.toml (current directory)
+# - ~/.config/waymon/waymon.toml (user config)
+# - /etc/waymon/waymon.toml (system config)
+
+[server]
+# Port to listen on (default: 52525)
+port = 52525
+
+# Bind address (default: "0.0.0.0" for all interfaces)
+bind_address = "0.0.0.0"
+
+# Server name (default: hostname)
+name = "my-desktop"
+
+# Require authentication (default: false)
+require_auth = false
+
+# Authentication token (required if require_auth is true)
+auth_token = ""
+
+# Maximum number of simultaneous clients (default: 1)
+max_clients = 1
+
+# Enable TLS encryption (default: false)
+enable_tls = false
+
+# TLS certificate and key paths (required if enable_tls is true)
+tls_cert = ""
+tls_key = ""
+
+[client]
+# Default server address (can be overridden with --host flag)
+server_address = ""
+
+# Auto-connect to server on startup (default: false)
+auto_connect = false
+
+# Reconnect delay in seconds (default: 5)
+reconnect_delay = 5
+
+# Edge detection threshold in pixels (default: 5)
+edge_threshold = 5
+
+# Hotkey for switching between computers (default: ctrl+alt+s)
+hotkey_modifier = "ctrl+alt"
+hotkey_key = "s"
+
+# Enable TLS encryption (default: false)
+enable_tls = false
+
+# Skip TLS certificate verification (default: false, use only for testing)
+tls_skip_verify = false
+
+[display]
+# Monitor refresh interval in seconds (default: 5)
+refresh_interval = 5
+
+# Display backend (default: "auto")
+# Options: "auto", "compositor", "portal", "wayland", "sysfs"
+backend = "auto"
+
+# Enable cursor position tracking (default: true)
+cursor_tracking = true
+
+[input]
+# Mouse sensitivity multiplier (default: 1.0)
+mouse_sensitivity = 1.0
+
+# Scroll speed multiplier (default: 1.0)
+scroll_speed = 1.0
+
+# Enable keyboard input (default: true)
+enable_keyboard = true
+
+# Keyboard layout (default: "us")
+keyboard_layout = "us"
+
+# Known hosts for quick connections
+# You can define multiple hosts with their positions relative to this computer
+[[hosts]]
+name = "laptop"
+address = "192.168.1.100:52525"
+position = "left"  # This computer is to the left of the current one
+auth_token = ""
+
+[[hosts]]
+name = "workstation"
+address = "192.168.1.101:52525"
+position = "right"  # This computer is to the right of the current one
+auth_token = ""
+
+# Example of a host with authentication
+# [[hosts]]
+# name = "secure-server"
+# address = "10.0.0.5:52525"
+# position = "top"
+# auth_token = "my-secret-token"

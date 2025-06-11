@@ -6,9 +6,9 @@ import (
 	"log"
 	"os"
 	"os/signal"
-	"strconv"
 	"syscall"
 
+	"github.com/bnema/waymon/internal/config"
 	"github.com/bnema/waymon/internal/display"
 	"github.com/bnema/waymon/internal/input"
 	"github.com/bnema/waymon/internal/network"
@@ -16,10 +16,12 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
 )
 
 var (
-	serverPort string
+	serverPort int
+	bindAddress string
 )
 
 var serverCmd = &cobra.Command{
@@ -31,7 +33,12 @@ The server will inject received events using the uinput kernel module.`,
 }
 
 func init() {
-	serverCmd.Flags().StringVarP(&serverPort, "port", "p", "52525", "Port to listen on")
+	serverCmd.Flags().IntVarP(&serverPort, "port", "p", 0, "Port to listen on")
+	serverCmd.Flags().StringVarP(&bindAddress, "bind", "b", "", "Bind address")
+	
+	// Bind flags to viper
+	viper.BindPFlag("server.port", serverCmd.Flags().Lookup("port"))
+	viper.BindPFlag("server.bind_address", serverCmd.Flags().Lookup("bind"))
 }
 
 func runServer(cmd *cobra.Command, args []string) error {
@@ -61,12 +68,25 @@ func runServer(cmd *cobra.Command, args []string) error {
 	}
 	defer inputHandler.Close()
 
-	// Create server
-	port, err := strconv.Atoi(serverPort)
-	if err != nil {
-		return fmt.Errorf("invalid port number: %w", err)
+	// Get configuration
+	cfg := config.Get()
+	
+	// Use flag values if provided, otherwise use config
+	if serverPort == 0 {
+		serverPort = cfg.Server.Port
 	}
-	server := network.NewServer(port)
+	if bindAddress == "" {
+		bindAddress = cfg.Server.BindAddress
+	}
+	
+	// Show server info
+	fmt.Printf("Starting Waymon server '%s' on %s:%d\n", cfg.Server.Name, bindAddress, serverPort)
+	if cfg.Server.RequireAuth {
+		fmt.Println("Authentication enabled")
+	}
+	
+	// Create server
+	server := network.NewServer(serverPort)
 
 	// Start server in background
 	errCh := make(chan error)
@@ -120,7 +140,7 @@ func newServerModel(server *network.Server) serverModel {
 	return serverModel{
 		server:  server,
 		spinner: s,
-		status:  fmt.Sprintf("Listening on port %s", serverPort),
+		status:  fmt.Sprintf("Listening on port %d", serverPort),
 	}
 }
 
