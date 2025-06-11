@@ -18,6 +18,9 @@ type Server struct {
 	stop         chan struct{}
 	stopOnce     sync.Once
 	wg           sync.WaitGroup
+	
+	// Event handler
+	OnMouseEvent EventHandler
 }
 
 // NewServer creates a new server instance
@@ -76,6 +79,11 @@ func (s *Server) Address() string {
 		return ""
 	}
 	return s.listener.Addr().String()
+}
+
+// Port returns the server's port
+func (s *Server) Port() int {
+	return s.port
 }
 
 // Connected returns a channel that signals when a client connects

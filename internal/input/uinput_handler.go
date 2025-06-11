@@ -98,7 +98,7 @@ func (h *uInputHandler) Close() error {
 	}
 
 	h.closed = true
-	
+
 	var err error
 	if h.mouse != nil {
 		err = h.mouse.Close()
@@ -108,7 +108,7 @@ func (h *uInputHandler) Close() error {
 			err = e
 		}
 	}
-	
+
 	return err
 }
 
@@ -116,16 +116,16 @@ func (h *uInputHandler) handleMove(event *proto.MouseEvent) error {
 	// Calculate relative movement
 	deltaX := int32(event.X - h.currentX)
 	deltaY := int32(event.Y - h.currentY)
-	
+
 	// Update tracked position
 	h.currentX = event.X
 	h.currentY = event.Y
-	
+
 	// Apply relative movement
 	if deltaX != 0 || deltaY != 0 {
 		return h.mouse.Move(deltaX, deltaY)
 	}
-	
+
 	return nil
 }
 

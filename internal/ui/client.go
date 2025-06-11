@@ -10,20 +10,20 @@ import (
 
 // ClientModel is the Bubble Tea model for client UI
 type ClientModel struct {
-	statusBar      *StatusBar
-	serverInfo     *InfoPanel
-	captureStatus  *InfoPanel
-	controls       *ControlsHelp
-	edgeIndicator  *EdgeIndicator
-	messages       []Message
-	width          int
-	height         int
-	serverAddress  string
-	serverName     string
-	capturing      bool
-	connected      bool
-	quitting       bool
-	currentEdge    string
+	statusBar     *StatusBar
+	serverInfo    *InfoPanel
+	captureStatus *InfoPanel
+	controls      *ControlsHelp
+	edgeIndicator *EdgeIndicator
+	messages      []Message
+	width         int
+	height        int
+	serverAddress string
+	serverName    string
+	capturing     bool
+	connected     bool
+	quitting      bool
+	currentEdge   string
 }
 
 // ClientConfig holds configuration for the client UI
@@ -125,7 +125,7 @@ func (m *ClientModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case EdgeDetectedMsg:
 		m.currentEdge = msg.Edge
 		m.edgeIndicator.SetEdge(msg.Edge)
-		
+
 	case MouseSwitchedMsg:
 		if msg.ToServer {
 			m.AddMessage(MessageInfo, fmt.Sprintf("Mouse switched to %s", m.serverName))
@@ -174,18 +174,18 @@ func (m *ClientModel) View() string {
 		var msgSection strings.Builder
 		msgSection.WriteString(SubheaderStyle.Render("Activity:"))
 		msgSection.WriteString("\n\n")
-		
+
 		// Show last 3 messages
 		start := 0
 		if len(m.messages) > 3 {
 			start = len(m.messages) - 3
 		}
-		
+
 		for _, msg := range m.messages[start:] {
 			msgSection.WriteString(msg.View())
 			msgSection.WriteString("\n")
 		}
-		
+
 		sections = append(sections, BoxStyle.Width(m.width).Render(msgSection.String()))
 	}
 
@@ -210,10 +210,10 @@ func (m *ClientModel) ToggleCapture() {
 		m.AddMessage(MessageWarning, "Cannot capture - not connected to server")
 		return
 	}
-	
+
 	m.capturing = !m.capturing
 	m.UpdateCaptureStatus()
-	
+
 	if m.capturing {
 		m.AddMessage(MessageSuccess, "Mouse capture enabled")
 	} else {
@@ -224,7 +224,7 @@ func (m *ClientModel) ToggleCapture() {
 // UpdateCaptureStatus updates the capture status panel
 func (m *ClientModel) UpdateCaptureStatus() {
 	var content []string
-	
+
 	if !m.connected {
 		content = append(content, ErrorStyle.Render("✗ Disconnected from server"))
 	} else if m.capturing {
@@ -236,7 +236,7 @@ func (m *ClientModel) UpdateCaptureStatus() {
 		content = append(content, "")
 		content = append(content, "Press Space to enable")
 	}
-	
+
 	m.captureStatus.Content = content
 }
 
@@ -273,17 +273,17 @@ func (e *EdgeIndicator) View() string {
 	if !e.Visible || e.Edge == "" {
 		return ""
 	}
-	
+
 	var b strings.Builder
 	b.WriteString(SubheaderStyle.Render("Edge Detection:"))
 	b.WriteString("\n\n")
-	
+
 	// Visual representation of edges
 	top := "───"
 	bottom := "───"
 	left := "│"
 	right := "│"
-	
+
 	// Highlight active edge
 	activeStyle := lipgloss.NewStyle().Foreground(ColorActive)
 	switch e.Edge {
@@ -296,17 +296,17 @@ func (e *EdgeIndicator) View() string {
 	case "right":
 		right = activeStyle.Render("┃")
 	}
-	
+
 	// Simple box representation
 	b.WriteString(fmt.Sprintf("    %s\n", top))
 	b.WriteString(fmt.Sprintf("  %s   %s\n", left, right))
 	b.WriteString(fmt.Sprintf("    %s\n", bottom))
-	
+
 	if e.Edge != "" {
 		b.WriteString("\n")
 		b.WriteString(InfoStyle.Render(fmt.Sprintf("Active: %s edge", e.Edge)))
 	}
-	
+
 	return BoxStyle.Width(e.Width).Render(b.String())
 }
 

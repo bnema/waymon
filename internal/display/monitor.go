@@ -3,18 +3,19 @@ package display
 
 import (
 	"fmt"
+	"os"
 )
 
 // Monitor represents a physical display
 type Monitor struct {
-	ID       string
-	Name     string
-	X        int32 // Position in global coordinate space
-	Y        int32
-	Width    int32
-	Height   int32
-	Primary  bool
-	Scale    float64
+	ID      string
+	Name    string
+	X       int32 // Position in global coordinate space
+	Y       int32
+	Width   int32
+	Height  int32
+	Primary bool
+	Scale   float64
 }
 
 // Bounds returns the monitor's boundaries
@@ -44,23 +45,32 @@ type Backend interface {
 func New() (*Display, error) {
 	// Try different backends in order of preference
 	backends := []func() (Backend, error){
-		newCompositorBackend, // Our compositor-specific backend
-		newWaylandBackend,    // Direct Wayland protocols
-		newPortalBackend,     // XDG Desktop Portal
+		newSudoBackend,       // Sudo privilege separation (when running with sudo)
+		newWlrCgoBackend,     // Native Wayland via CGO (if available)
+		newWlrRandrBackend,   // wlr-randr command (fallback)
+		newPortalBackend,     // XDG Desktop Portal (xrandr fallback)
 		newRandrBackend,      // X11/XWayland fallback
-		newSysfsBackend,      // /sys/class/drm fallback
 	}
 
 	var backend Backend
 	var err error
-	
-	for _, createBackend := range backends {
+
+	for i, createBackend := range backends {
 		backend, err = createBackend()
-		if err == nil {
+		// Only show debug if not running as display-helper
+		if os.Getenv("WAYMON_DISPLAY_HELPER") != "1" {
+			backendNames := []string{"sudoBackend", "wlrCgoBackend", "wlrRandrBackend", "portalBackend", "randrBackend"}
+			fmt.Printf("DEBUG: Trying backend %d: %s\n", i, backendNames[i])
+			if err == nil {
+				fmt.Printf("DEBUG: Successfully created backend: %s\n", backendNames[i])
+				break
+			}
+			fmt.Printf("DEBUG: Backend %s failed: %v\n", backendNames[i], err)
+		} else if err == nil {
 			break
 		}
 	}
-	
+
 	if backend == nil {
 		return nil, fmt.Errorf("no display backend available")
 	}
@@ -112,7 +122,7 @@ func (d *Display) GetCursorPosition() (x, y int32, monitor *Monitor, err error) 
 	if err != nil {
 		return 0, 0, nil, err
 	}
-	
+
 	monitor = d.GetMonitorAt(x, y)
 	return x, y, monitor, nil
 }
@@ -125,7 +135,7 @@ func (d *Display) GetEdge(x, y int32, threshold int32) Edge {
 	}
 
 	x1, y1, x2, y2 := monitor.Bounds()
-	
+
 	// Check each edge with threshold
 	if x-x1 < threshold {
 		return EdgeLeft
@@ -139,7 +149,7 @@ func (d *Display) GetEdge(x, y int32, threshold int32) Edge {
 	if y2-y < threshold {
 		return EdgeBottom
 	}
-	
+
 	return EdgeNone
 }
 

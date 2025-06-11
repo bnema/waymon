@@ -61,12 +61,12 @@ func TestFormatStatus(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			got := FormatStatus(tt.connected, tt.status)
-			
+
 			// Should contain the status text
 			if !strings.Contains(got, tt.status) {
 				t.Errorf("FormatStatus() missing status text %q", tt.status)
 			}
-			
+
 			// Should have different indicators
 			if tt.connected && !strings.Contains(got, "●") {
 				t.Errorf("FormatStatus() connected=true should contain filled circle")
@@ -99,7 +99,7 @@ func TestFormatListItem(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			got := FormatListItem(tt.item, tt.active)
-			
+
 			// Should contain bullet point and item
 			if !strings.Contains(got, "•") {
 				t.Errorf("FormatListItem() missing bullet point")
@@ -137,7 +137,7 @@ func TestCenter(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			got := Center(tt.width, tt.content)
-			
+
 			// Should contain the content
 			if !strings.Contains(got, tt.content) {
 				t.Errorf("Center() missing content %q", tt.content)
@@ -167,7 +167,7 @@ func TestRight(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			got := Right(tt.width, tt.content)
-			
+
 			// Should contain the content
 			if !strings.Contains(got, tt.content) {
 				t.Errorf("Right() missing content %q", tt.content)

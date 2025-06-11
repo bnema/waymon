@@ -9,9 +9,6 @@ import (
 )
 
 var (
-	// Version is set during build
-	Version = "0.1.0-dev"
-
 	rootCmd = &cobra.Command{
 		Use:   "waymon",
 		Short: "Waymon - Wayland mouse sharing",

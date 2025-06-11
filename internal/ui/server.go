@@ -10,16 +10,16 @@ import (
 
 // ServerModel is the Bubble Tea model for server UI
 type ServerModel struct {
-	statusBar    *StatusBar
-	connections  *ConnectionList
-	monitors     *MonitorInfo
-	controls     *ControlsHelp
-	messages     []Message
-	width        int
-	height       int
-	port         int
-	name         string
-	quitting     bool
+	statusBar   *StatusBar
+	connections *ConnectionList
+	monitors    *MonitorInfo
+	controls    *ControlsHelp
+	messages    []Message
+	width       int
+	height      int
+	port        int
+	name        string
+	quitting    bool
 }
 
 // ServerConfig holds configuration for the server UI
@@ -128,18 +128,18 @@ func (m *ServerModel) View() string {
 		var msgSection strings.Builder
 		msgSection.WriteString(SubheaderStyle.Render("Recent Activity:"))
 		msgSection.WriteString("\n\n")
-		
+
 		// Show last 5 messages
 		start := 0
 		if len(m.messages) > 5 {
 			start = len(m.messages) - 5
 		}
-		
+
 		for _, msg := range m.messages[start:] {
 			msgSection.WriteString(msg.View())
 			msgSection.WriteString("\n")
 		}
-		
+
 		sections = append(sections, BoxStyle.Width(m.width).Render(msgSection.String()))
 	}
 
@@ -158,7 +158,7 @@ func (m *ServerModel) AddConnection(name, address string) {
 		Connected: true,
 		Active:    false,
 	}
-	
+
 	m.connections.Connections = append(m.connections.Connections, conn)
 }
 

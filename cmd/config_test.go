@@ -44,7 +44,7 @@ func TestConfigInit(t *testing.T) {
 	t.Run("doesn't overwrite existing config without force", func(t *testing.T) {
 		// Reset viper
 		viper.Reset()
-		
+
 		// Try to init again without force
 		err := executeCommand(rootCmd, "config", "init")
 		if err != nil {
@@ -56,17 +56,17 @@ func TestConfigInit(t *testing.T) {
 	t.Run("overwrites with force flag", func(t *testing.T) {
 		// Reset viper
 		viper.Reset()
-		
+
 		// Write some content to verify overwrite
 		configPath := filepath.Join(tmpDir, ".config", "waymon", "waymon.toml")
 		os.WriteFile(configPath, []byte("test = true"), 0644)
-		
+
 		// Init with force
 		err := executeCommand(rootCmd, "config", "init", "--force")
 		if err != nil {
 			t.Errorf("config init --force failed: %v", err)
 		}
-		
+
 		// Read file and check it was overwritten
 		content, _ := os.ReadFile(configPath)
 		if string(content) == "test = true" {

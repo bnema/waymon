@@ -8,7 +8,7 @@ import (
 func TestStatusBar(t *testing.T) {
 	t.Run("creates new status bar", func(t *testing.T) {
 		sb := NewStatusBar("Test App")
-		
+
 		if sb.Title != "Test App" {
 			t.Errorf("Expected title 'Test App', got %q", sb.Title)
 		}
@@ -22,9 +22,9 @@ func TestStatusBar(t *testing.T) {
 		sb.Width = 80
 		sb.Status = "Running"
 		sb.Connected = true
-		
+
 		view := sb.View()
-		
+
 		if !strings.Contains(view, "Test App") {
 			t.Error("Status bar should contain title")
 		}
@@ -36,8 +36,8 @@ func TestStatusBar(t *testing.T) {
 
 func TestInfoPanel(t *testing.T) {
 	tests := []struct {
-		name    string
-		panel   InfoPanel
+		name     string
+		panel    InfoPanel
 		mustHave []string
 	}{
 		{
@@ -62,7 +62,7 @@ func TestInfoPanel(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			view := tt.panel.View()
-			
+
 			for _, must := range tt.mustHave {
 				if !strings.Contains(view, must) {
 					t.Errorf("InfoPanel should contain %q", must)
@@ -79,9 +79,9 @@ func TestConnectionList(t *testing.T) {
 			Connections: []Connection{},
 			Width:       60,
 		}
-		
+
 		view := cl.View()
-		
+
 		if !strings.Contains(view, "Connections") {
 			t.Error("Should contain title")
 		}
@@ -99,9 +99,9 @@ func TestConnectionList(t *testing.T) {
 			},
 			Width: 60,
 		}
-		
+
 		view := cl.View()
-		
+
 		if !strings.Contains(view, "Server1") {
 			t.Error("Should contain Server1")
 		}
@@ -132,9 +132,9 @@ func TestMonitorInfo(t *testing.T) {
 		},
 		Width: 80,
 	}
-	
+
 	view := mi.View()
-	
+
 	if !strings.Contains(view, "Detected 2 monitor(s)") {
 		t.Error("Should show monitor count")
 	}
@@ -161,13 +161,13 @@ func TestControlsHelp(t *testing.T) {
 		},
 		Width: 60,
 	}
-	
+
 	view := ch.View()
-	
+
 	if !strings.Contains(view, "Controls:") {
 		t.Error("Should have Controls header")
 	}
-	
+
 	for _, ctrl := range ch.Controls {
 		if !strings.Contains(view, ctrl.Key) {
 			t.Errorf("Should contain key %q", ctrl.Key)
@@ -211,7 +211,7 @@ func TestProgressIndicator(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			view := tt.progress.View()
-			
+
 			for _, must := range tt.mustHave {
 				if !strings.Contains(view, must) {
 					t.Errorf("Progress indicator should contain %q", must)
@@ -257,7 +257,7 @@ func TestMessage(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			view := tt.msg.View()
-			
+
 			if !strings.Contains(view, tt.mustContain) {
 				t.Errorf("Message should contain %q", tt.mustContain)
 			}

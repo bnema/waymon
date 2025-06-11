@@ -3,12 +3,12 @@ package display
 import "fmt"
 
 // waylandBackend uses native Wayland protocols
+// This would require implementing wlr-output-management protocol
+// For now, we rely on wlr-randr backend
 type waylandBackend struct{}
 
 func newWaylandBackend() (Backend, error) {
-	// TODO: Implement using Wayland client library
-	// This would use wl_output protocol for monitor info
-	return nil, fmt.Errorf("native Wayland backend not implemented yet")
+	return nil, fmt.Errorf("native Wayland backend not implemented - use wlr-randr")
 }
 
 func (w *waylandBackend) GetMonitors() ([]*Monitor, error) {
@@ -22,6 +22,7 @@ func (w *waylandBackend) GetCursorPosition() (x, y int32, err error) {
 func (w *waylandBackend) Close() error {
 	return nil
 }
+
 
 // randrBackend uses X11 RandR extension (for XWayland)
 type randrBackend struct{}

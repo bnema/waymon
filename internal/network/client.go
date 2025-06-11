@@ -7,6 +7,9 @@ import (
 	"net"
 	"sync"
 	"time"
+
+	waymonProto "github.com/bnema/waymon/internal/proto"
+	"google.golang.org/protobuf/proto"
 )
 
 // Client handles outgoing mouse event connections
@@ -46,7 +49,7 @@ func (c *Client) Connect(ctx context.Context, address string) error {
 
 	c.conn = conn
 	c.stop = make(chan struct{}) // Reset stop channel for new connection
-	c.stopOnce = sync.Once{}      // Reset sync.Once
+	c.stopOnce = sync.Once{}     // Reset sync.Once
 
 	// Start read loop
 	c.wg.Add(1)
@@ -108,4 +111,39 @@ func (c *Client) readLoop() {
 			// Process received data (placeholder for now)
 		}
 	}
+}
+
+// SendEvent sends a mouse event to the server
+func (c *Client) SendEvent(event *waymonProto.MouseEvent) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	if c.conn == nil {
+		return fmt.Errorf("not connected")
+	}
+
+	// Marshal the event to protobuf
+	data, err := proto.Marshal(event)
+	if err != nil {
+		return fmt.Errorf("failed to marshal event: %w", err)
+	}
+
+	// Write the length prefix (4 bytes)
+	lengthBuf := make([]byte, 4)
+	lengthBuf[0] = byte(len(data) >> 24)
+	lengthBuf[1] = byte(len(data) >> 16)
+	lengthBuf[2] = byte(len(data) >> 8)
+	lengthBuf[3] = byte(len(data))
+
+	// Write length prefix
+	if _, err := c.conn.Write(lengthBuf); err != nil {
+		return fmt.Errorf("failed to write length: %w", err)
+	}
+
+	// Write the event data
+	if _, err := c.conn.Write(data); err != nil {
+		return fmt.Errorf("failed to write event: %w", err)
+	}
+
+	return nil
 }

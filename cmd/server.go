@@ -1,17 +1,13 @@
 package cmd
 
 import (
-	"context"
 	"fmt"
-	"log"
 	"os"
 	"os/signal"
 	"syscall"
 
 	"github.com/bnema/waymon/internal/config"
-	"github.com/bnema/waymon/internal/display"
-	"github.com/bnema/waymon/internal/input"
-	"github.com/bnema/waymon/internal/network"
+	"github.com/bnema/waymon/internal/server"
 	"github.com/bnema/waymon/internal/ui"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/spf13/cobra"
@@ -19,7 +15,7 @@ import (
 )
 
 var (
-	serverPort int
+	serverPort  int
 	bindAddress string
 )
 
@@ -34,7 +30,7 @@ The server will inject received events using the uinput kernel module.`,
 func init() {
 	serverCmd.Flags().IntVarP(&serverPort, "port", "p", 0, "Port to listen on")
 	serverCmd.Flags().StringVarP(&bindAddress, "bind", "b", "", "Bind address")
-	
+
 	// Bind flags to viper
 	viper.BindPFlag("server.port", serverCmd.Flags().Lookup("port"))
 	viper.BindPFlag("server.bind_address", serverCmd.Flags().Lookup("bind"))
@@ -51,30 +47,9 @@ func runServer(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("failed to initialize config: %w", err)
 	}
 
-	// Initialize display detection
-	disp, err := display.New()
-	if err != nil {
-		return fmt.Errorf("failed to initialize display: %w", err)
-	}
-	defer disp.Close()
-
-	// Show monitor configuration
-	monitors := disp.GetMonitors()
-	fmt.Printf("Detected %d monitor(s):\n", len(monitors))
-	for _, mon := range monitors {
-		fmt.Printf("  %s: %dx%d at (%d,%d)\n", mon.Name, mon.Width, mon.Height, mon.X, mon.Y)
-	}
-
-	// Initialize input handler
-	inputHandler, err := input.NewHandler()
-	if err != nil {
-		return fmt.Errorf("failed to initialize input handler: %w", err)
-	}
-	defer inputHandler.Close()
-
 	// Get configuration
 	cfg := config.Get()
-	
+
 	// Use flag values if provided, otherwise use config
 	if serverPort == 0 {
 		serverPort = cfg.Server.Port
@@ -82,27 +57,46 @@ func runServer(cmd *cobra.Command, args []string) error {
 	if bindAddress == "" {
 		bindAddress = cfg.Server.BindAddress
 	}
-	
+	cfg.Server.Port = serverPort
+	cfg.Server.BindAddress = bindAddress
+
+	// Create privilege-separated server
+	srv, err := server.New(cfg)
+	if err != nil {
+		return fmt.Errorf("failed to create server: %w", err)
+	}
+
+	// Start the server
+	if err := srv.Start(); err != nil {
+		return fmt.Errorf("failed to start server: %w", err)
+	}
+	defer srv.Stop()
+
+	// Show monitor configuration
+	if disp := srv.GetDisplay(); disp != nil {
+		monitors := disp.GetMonitors()
+		fmt.Printf("Detected %d monitor(s):\n", len(monitors))
+		for _, mon := range monitors {
+			fmt.Printf("  %s: %dx%d at (%d,%d)", mon.Name, mon.Width, mon.Height, mon.X, mon.Y)
+			if mon.Primary {
+				fmt.Printf(" [PRIMARY]")
+			}
+			if mon.Scale != 1.0 {
+				fmt.Printf(" scale=%.1f", mon.Scale)
+			}
+			fmt.Println()
+		}
+	}
+
 	// Show server info
-	fmt.Printf("Starting Waymon server '%s' on %s:%d\n", cfg.Server.Name, bindAddress, serverPort)
+	fmt.Printf("\nStarting Waymon server '%s' on %s:%d\n", cfg.Server.Name, bindAddress, serverPort)
 	if cfg.Server.RequireAuth {
 		fmt.Println("Authentication enabled")
 	}
-	
-	// Create server
-	server := network.NewServer(serverPort)
-
-	// Start server in background
-	errCh := make(chan error)
-	go func() {
-		if err := server.Start(context.Background()); err != nil {
-			errCh <- err
-		}
-	}()
 
 	// Create simple TUI
-	model := ui.NewSimpleServerModel(serverPort, cfg.Server.Name)
-	
+	model := ui.NewSimpleServerModel(srv.GetPort(), srv.GetName())
+
 	p := tea.NewProgram(model, tea.WithAltScreen())
 
 	// Handle graceful shutdown
@@ -110,13 +104,8 @@ func runServer(cmd *cobra.Command, args []string) error {
 	signal.Notify(sigCh, os.Interrupt, syscall.SIGTERM)
 
 	go func() {
-		select {
-		case <-sigCh:
-			p.Send(tea.Quit())
-		case err := <-errCh:
-			log.Printf("Server error: %v", err)
-			p.Send(tea.Quit())
-		}
+		<-sigCh
+		p.Send(tea.Quit())
 	}()
 
 	// Run TUI
@@ -124,27 +113,24 @@ func runServer(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	// Cleanup
-	server.Stop()
 	return nil
 }
 
 // ensureServerConfig ensures the config file exists when running as server
 func ensureServerConfig() error {
 	configPath := config.GetConfigPath()
-	
+
 	// Check if config file exists
 	if _, err := os.Stat(configPath); os.IsNotExist(err) {
 		fmt.Printf("No config file found. Creating default config at %s\n", configPath)
-		
+
 		// Save default config
 		if err := config.Save(); err != nil {
 			return err
 		}
-		
+
 		fmt.Println("Default configuration created successfully")
 	}
-	
+
 	return nil
 }
-
