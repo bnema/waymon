@@ -94,26 +94,38 @@ func TestMouseEvent_Serialization(t *testing.T) {
 
 func TestEventBatch_Serialization(t *testing.T) {
 	batch := &EventBatch{
-		Events: []*MouseEvent{
+		Events: []*InputEvent{
 			{
-				Type:        EventType_EVENT_TYPE_MOVE,
-				X:           100,
-				Y:           200,
-				TimestampMs: time.Now().UnixMilli(),
+				Event: &InputEvent_Mouse{
+					Mouse: &MouseEvent{
+						Type:        EventType_EVENT_TYPE_MOVE,
+						X:           100,
+						Y:           200,
+						TimestampMs: time.Now().UnixMilli(),
+					},
+				},
 			},
 			{
-				Type:        EventType_EVENT_TYPE_MOVE,
-				X:           150,
-				Y:           250,
-				TimestampMs: time.Now().UnixMilli() + 10,
+				Event: &InputEvent_Mouse{
+					Mouse: &MouseEvent{
+						Type:        EventType_EVENT_TYPE_MOVE,
+						X:           150,
+						Y:           250,
+						TimestampMs: time.Now().UnixMilli() + 10,
+					},
+				},
 			},
 			{
-				Type:        EventType_EVENT_TYPE_CLICK,
-				X:           150,
-				Y:           250,
-				Button:      MouseButton_MOUSE_BUTTON_LEFT,
-				IsPressed:   true,
-				TimestampMs: time.Now().UnixMilli() + 20,
+				Event: &InputEvent_Mouse{
+					Mouse: &MouseEvent{
+						Type:        EventType_EVENT_TYPE_CLICK,
+						X:           150,
+						Y:           250,
+						Button:      MouseButton_MOUSE_BUTTON_LEFT,
+						IsPressed:   true,
+						TimestampMs: time.Now().UnixMilli() + 20,
+					},
+				},
 			},
 		},
 	}

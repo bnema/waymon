@@ -114,26 +114,38 @@ func TestHandler_ProcessBatch(t *testing.T) {
 	defer func() { _ = handler.Close() }()
 
 	batch := &proto.EventBatch{
-		Events: []*proto.MouseEvent{
+		Events: []*proto.InputEvent{
 			{
-				Type:        proto.EventType_EVENT_TYPE_MOVE,
-				X:           100,
-				Y:           100,
-				TimestampMs: time.Now().UnixMilli(),
+				Event: &proto.InputEvent_Mouse{
+					Mouse: &proto.MouseEvent{
+						Type:        proto.EventType_EVENT_TYPE_MOVE,
+						X:           100,
+						Y:           100,
+						TimestampMs: time.Now().UnixMilli(),
+					},
+				},
 			},
 			{
-				Type:        proto.EventType_EVENT_TYPE_MOVE,
-				X:           150,
-				Y:           150,
-				TimestampMs: time.Now().UnixMilli() + 10,
+				Event: &proto.InputEvent_Mouse{
+					Mouse: &proto.MouseEvent{
+						Type:        proto.EventType_EVENT_TYPE_MOVE,
+						X:           150,
+						Y:           150,
+						TimestampMs: time.Now().UnixMilli() + 10,
+					},
+				},
 			},
 			{
-				Type:        proto.EventType_EVENT_TYPE_CLICK,
-				X:           150,
-				Y:           150,
-				Button:      proto.MouseButton_MOUSE_BUTTON_LEFT,
-				IsPressed:   true,
-				TimestampMs: time.Now().UnixMilli() + 20,
+				Event: &proto.InputEvent_Mouse{
+					Mouse: &proto.MouseEvent{
+						Type:        proto.EventType_EVENT_TYPE_CLICK,
+						X:           150,
+						Y:           150,
+						Button:      proto.MouseButton_MOUSE_BUTTON_LEFT,
+						IsPressed:   true,
+						TimestampMs: time.Now().UnixMilli() + 20,
+					},
+				},
 			},
 		},
 	}
@@ -174,9 +186,12 @@ func (m *MockHandler) ProcessBatch(batch *proto.EventBatch) error {
 		return ErrInvalidEvent
 	}
 	for _, event := range batch.Events {
-		if err := m.ProcessEvent(event); err != nil {
-			return err
+		if event.GetMouse() != nil {
+			if err := m.ProcessEvent(event.GetMouse()); err != nil {
+				return err
+			}
 		}
+		// Skip keyboard events for now in the mock handler
 	}
 	return nil
 }

@@ -116,13 +116,43 @@ func (c *SSHClient) Connect(ctx context.Context, serverAddr string) error {
 		return fmt.Errorf("failed to start SSH session: %w", err)
 	}
 
-	// Check if we got a rejection message
-	buf := make([]byte, 256)
-	n, _ := stdout.Read(buf)
-	if n > 0 && strings.Contains(string(buf[:n]), "maximum number of active clients") {
+	// Check for connection status from server
+	buf := make([]byte, 512)
+	// Set a short timeout for the initial read
+	readChan := make(chan int, 1)
+	go func() {
+		n, _ := stdout.Read(buf)
+		readChan <- n
+	}()
+	
+	select {
+	case n := <-readChan:
+		if n > 0 {
+			response := string(buf[:n])
+			if strings.Contains(response, "maximum number of active clients") {
+				session.Close()
+				client.Close()
+				return fmt.Errorf("connection rejected: server has maximum number of active clients")
+			}
+			// Wait for either approval or established message
+			if !strings.Contains(response, "Waymon SSH connection established") {
+				// Keep reading for final status
+				n2, _ := stdout.Read(buf)
+				if n2 > 0 {
+					response += string(buf[:n2])
+				}
+			}
+			if !strings.Contains(response, "Waymon SSH connection established") {
+				session.Close()
+				client.Close()
+				return fmt.Errorf("connection not established: waiting for server approval")
+			}
+		}
+	case <-time.After(2 * time.Second):
+		// No immediate response, assume we're waiting for approval
 		session.Close()
 		client.Close()
-		return fmt.Errorf("connection rejected: server has maximum number of active clients")
+		return fmt.Errorf("connection pending: waiting for server approval")
 	}
 
 	c.client = client
