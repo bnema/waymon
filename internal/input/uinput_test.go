@@ -61,7 +61,7 @@ func TestUInputHandler_Integration(t *testing.T) {
 
 		// Verify internal position tracking
 		if handler.currentX != 150 || handler.currentY != 120 {
-			t.Errorf("Position not tracked correctly: got (%f, %f), want (150, 120)", 
+			t.Errorf("Position not tracked correctly: got (%f, %f), want (150, 120)",
 				handler.currentX, handler.currentY)
 		}
 	})

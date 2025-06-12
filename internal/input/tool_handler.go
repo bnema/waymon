@@ -115,7 +115,7 @@ func (h *toolHandler) handleClick(event *proto.MouseEvent) error {
 
 	// Map button
 	buttonName := h.mapButton(event.Button)
-	
+
 	var action string
 	if event.IsPressed {
 		action = "mousedown"

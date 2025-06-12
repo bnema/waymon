@@ -66,13 +66,13 @@ func main() {
 	fmt.Println("\nMonitor arrangement:")
 	for _, mon := range monitors {
 		x, y := mon.X+mon.Width/2, mon.Y+mon.Height/2
-		
+
 		// Check what's to the right
 		rightMon := disp.GetMonitorAt(x+mon.Width, y)
 		if rightMon != nil && rightMon != mon {
 			fmt.Printf("  %s -> %s (right)\n", mon.Name, rightMon.Name)
 		}
-		
+
 		// Check what's below
 		belowMon := disp.GetMonitorAt(x, y+mon.Height)
 		if belowMon != nil && belowMon != mon {

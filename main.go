@@ -1,17 +1,25 @@
 package main
 
 import (
-	"fmt"
 	"os"
 
 	"github.com/bnema/waymon/cmd"
 )
 
-const version = "0.1.0-dev"
+// Build variables set by goreleaser
+var (
+	version = "dev"
+	commit  = "none"
+	date    = "unknown"
+)
 
 func main() {
+	// Set version info
+	cmd.Version = version
+	cmd.Commit = commit
+	cmd.Date = date
+
 	if err := cmd.Execute(); err != nil {
-		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 		os.Exit(1)
 	}
 }

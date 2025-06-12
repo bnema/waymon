@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/bnema/waymon/internal/input"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 )
@@ -19,6 +20,7 @@ type SimpleClientModel struct {
 	width         int
 	height        int
 	err           error
+	edgeDetector  *input.EdgeDetector
 }
 
 // NewSimpleClientModel creates a new simple client model
@@ -31,6 +33,16 @@ func NewSimpleClientModel(serverAddress, serverName string) *SimpleClientModel {
 	}
 }
 
+// SetEdgeDetector sets the edge detector for the model
+func (m *SimpleClientModel) SetEdgeDetector(ed *input.EdgeDetector) {
+	m.edgeDetector = ed
+}
+
+// SetCapturing updates the capturing state
+func (m *SimpleClientModel) SetCapturing(capturing bool) {
+	m.capturing = capturing
+}
+
 func (m *SimpleClientModel) Init() tea.Cmd {
 	return nil
 }
@@ -40,10 +52,19 @@ func (m *SimpleClientModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.KeyMsg:
 		switch msg.String() {
 		case "q", "ctrl+c":
+			if m.edgeDetector != nil {
+				m.edgeDetector.Stop()
+			}
 			return m, tea.Quit
 		case " ":
-			if m.connected {
-				m.capturing = !m.capturing
+			if m.connected && m.edgeDetector != nil {
+				if m.capturing {
+					m.edgeDetector.Stop()
+					m.capturing = false
+				} else {
+					m.edgeDetector.Start()
+					m.capturing = true
+				}
 			}
 		case "r":
 			// TODO: Reconnect
@@ -62,7 +83,7 @@ func (m *SimpleClientModel) View() string {
 
 	// Title
 	title := TitleStyle.Render("Waymon Client")
-	
+
 	// Connection status
 	var status string
 	if m.connected {
@@ -72,7 +93,7 @@ func (m *SimpleClientModel) View() string {
 		status = fmt.Sprintf("✗ Disconnected from server")
 		status = ErrorStyle.Render(status)
 	}
-	
+
 	// Capture status
 	var captureStatus string
 	if !m.connected {
@@ -82,7 +103,7 @@ func (m *SimpleClientModel) View() string {
 	} else {
 		captureStatus = MutedStyle.Render("○ Mouse capture inactive")
 	}
-	
+
 	// Controls
 	controls := []string{
 		"[Space] Toggle capture",
@@ -90,7 +111,7 @@ func (m *SimpleClientModel) View() string {
 		"[q] Quit",
 	}
 	controlsText := MutedStyle.Render(strings.Join(controls, "  •  "))
-	
+
 	// Build the view
 	content := lipgloss.JoinVertical(lipgloss.Left,
 		title,
@@ -102,7 +123,7 @@ func (m *SimpleClientModel) View() string {
 		"",
 		controlsText,
 	)
-	
+
 	// Center everything
 	return lipgloss.Place(m.width, m.height,
 		lipgloss.Center, lipgloss.Center,
@@ -112,12 +133,12 @@ func (m *SimpleClientModel) View() string {
 
 // SimpleServerModel is a simplified server UI
 type SimpleServerModel struct {
-	port        int
-	name        string
-	listening   bool
-	clients     []string
-	width       int
-	height      int
+	port      int
+	name      string
+	listening bool
+	clients   []string
+	width     int
+	height    int
 }
 
 // NewSimpleServerModel creates a new simple server model
@@ -155,14 +176,14 @@ func (m *SimpleServerModel) View() string {
 
 	// Title
 	title := TitleStyle.Render("Waymon Server")
-	
+
 	// Server info
 	info := fmt.Sprintf("Listening on port %d", m.port)
 	if m.name != "" {
 		info = fmt.Sprintf("%s (%s)", info, m.name)
 	}
 	info = InfoStyle.Render(info)
-	
+
 	// Client list
 	var clientsText string
 	if len(m.clients) == 0 {
@@ -174,10 +195,10 @@ func (m *SimpleServerModel) View() string {
 		}
 		clientsText = strings.Join(clientsList, "\n")
 	}
-	
+
 	// Controls
 	controls := MutedStyle.Render("[q] Quit")
-	
+
 	// Build the view
 	content := lipgloss.JoinVertical(lipgloss.Left,
 		title,
@@ -189,7 +210,7 @@ func (m *SimpleServerModel) View() string {
 		"",
 		controls,
 	)
-	
+
 	// Center everything
 	return lipgloss.Place(m.width, m.height,
 		lipgloss.Center, lipgloss.Center,

@@ -78,7 +78,7 @@ func main() {
 
 	for _, btn := range buttons {
 		fmt.Printf("  Testing %s click\n", btn.name)
-		
+
 		// Press
 		pressEvent := &proto.MouseEvent{
 			Type:        proto.EventType_EVENT_TYPE_CLICK,
@@ -91,9 +91,9 @@ func main() {
 		if err := coord.ProcessEvent(pressEvent); err != nil {
 			log.Printf("Error pressing %s button: %v", btn.name, err)
 		}
-		
+
 		time.Sleep(100 * time.Millisecond)
-		
+
 		// Release
 		releaseEvent := &proto.MouseEvent{
 			Type:        proto.EventType_EVENT_TYPE_CLICK,
@@ -106,7 +106,7 @@ func main() {
 		if err := coord.ProcessEvent(releaseEvent); err != nil {
 			log.Printf("Error releasing %s button: %v", btn.name, err)
 		}
-		
+
 		time.Sleep(500 * time.Millisecond)
 	}
 

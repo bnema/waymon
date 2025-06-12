@@ -8,6 +8,7 @@ import (
 
 	"github.com/bnema/waymon/internal/config"
 	"github.com/bnema/waymon/internal/display"
+	"github.com/bnema/waymon/internal/input"
 	"github.com/bnema/waymon/internal/network"
 	"github.com/bnema/waymon/internal/ui"
 	tea "github.com/charmbracelet/bubbletea"
@@ -33,7 +34,7 @@ func init() {
 	clientCmd.Flags().StringVarP(&serverAddr, "host", "H", "", "Server address (host:port)")
 	clientCmd.Flags().IntVarP(&edgeSize, "edge", "e", 0, "Edge detection size in pixels")
 	clientCmd.Flags().StringVarP(&hostName, "name", "n", "", "Host name from config")
-	
+
 	// Bind flags to viper
 	viper.BindPFlag("client.server_address", clientCmd.Flags().Lookup("host"))
 	viper.BindPFlag("client.edge_threshold", clientCmd.Flags().Lookup("edge"))
@@ -42,7 +43,7 @@ func init() {
 func runClient(cmd *cobra.Command, args []string) error {
 	// Get configuration
 	cfg := config.Get()
-	
+
 	// Determine server address
 	if hostName != "" {
 		// Look up host from config
@@ -55,17 +56,17 @@ func runClient(cmd *cobra.Command, args []string) error {
 		// Use default from config
 		serverAddr = cfg.Client.ServerAddress
 	}
-	
+
 	// Validate we have a server address
 	if serverAddr == "" {
 		return fmt.Errorf("no server address specified (use --host or configure a default)")
 	}
-	
+
 	// Use edge size from config if not specified
 	if edgeSize == 0 {
 		edgeSize = cfg.Client.EdgeThreshold
 	}
-	
+
 	// Initialize display detection
 	disp, err := display.New()
 	if err != nil {
@@ -84,17 +85,29 @@ func runClient(cmd *cobra.Command, args []string) error {
 	client := network.NewClient()
 	defer client.Disconnect()
 
+	// Create edge detector
+	edgeDetector := input.NewEdgeDetector(disp, client, int32(edgeSize))
+
 	// Create simple TUI model
 	model := ui.NewSimpleClientModel(serverAddr, hostName)
+	model.SetEdgeDetector(edgeDetector)
 
-	// TODO: Create edge detector when implementing mouse capture
-	// edgeDetector := &EdgeDetector{
-	// 	display:   disp,
-	// 	client:    client,
-	// 	threshold: int32(edgeSize),
-	// 	active:    false,
-	// }
-	
+	// Set up edge callbacks
+	edgeDetector.SetCallbacks(
+		func(edge display.Edge, x, y int32) {
+			// Edge entered - start capture
+			if client.IsConnected() {
+				edgeDetector.StartCapture(edge)
+				model.SetCapturing(true)
+			}
+		},
+		func() {
+			// Edge left - stop capture
+			edgeDetector.StopCapture()
+			model.SetCapturing(false)
+		},
+	)
+
 	p := tea.NewProgram(model, tea.WithAltScreen())
 
 	// Handle graceful shutdown
@@ -112,25 +125,4 @@ func runClient(cmd *cobra.Command, args []string) error {
 	}
 
 	return nil
-}
-
-// EdgeDetector monitors cursor position and triggers edge events
-type EdgeDetector struct {
-	display   *display.Display
-	client    *network.Client
-	threshold int32
-	active    bool
-	lastEdge  display.Edge
-	capturing bool
-}
-
-func (e *EdgeDetector) Start() {
-	e.active = true
-	// TODO: Start monitoring cursor position
-	// This would use a separate goroutine to poll cursor position
-	// and detect when it hits screen edges
-}
-
-func (e *EdgeDetector) Stop() {
-	e.active = false
 }

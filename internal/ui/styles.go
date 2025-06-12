@@ -103,7 +103,7 @@ var (
 
 	ServerStatusStyle = SubtleStyle.Copy()
 
-	// Client UI styles  
+	// Client UI styles
 	ClientHeaderStyle = HeaderStyle.Copy().
 				Render("Waymon Client")
 
@@ -169,8 +169,8 @@ var (
 
 // Spinner presets
 var (
-	SpinnerDot = []string{"⣾", "⣽", "⣻", "⢿", "⡿", "⣟", "⣯", "⣷"}
-	SpinnerLine = []string{"|", "/", "-", "\\"}
+	SpinnerDot    = []string{"⣾", "⣽", "⣻", "⢿", "⡿", "⣟", "⣯", "⣷"}
+	SpinnerLine   = []string{"|", "/", "-", "\\"}
 	SpinnerCircle = []string{"◐", "◓", "◑", "◒"}
 )
 

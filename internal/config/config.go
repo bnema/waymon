@@ -30,27 +30,27 @@ type Config struct {
 
 // ServerConfig contains server-specific settings
 type ServerConfig struct {
-	Port         int    `mapstructure:"port"`
-	BindAddress  string `mapstructure:"bind_address"`
-	Name         string `mapstructure:"name"`
-	RequireAuth  bool   `mapstructure:"require_auth"`
-	AuthToken    string `mapstructure:"auth_token"`
-	MaxClients   int    `mapstructure:"max_clients"`
-	EnableTLS    bool   `mapstructure:"enable_tls"`
-	TLSCert      string `mapstructure:"tls_cert"`
-	TLSKey       string `mapstructure:"tls_key"`
+	Port        int    `mapstructure:"port"`
+	BindAddress string `mapstructure:"bind_address"`
+	Name        string `mapstructure:"name"`
+	RequireAuth bool   `mapstructure:"require_auth"`
+	AuthToken   string `mapstructure:"auth_token"`
+	MaxClients  int    `mapstructure:"max_clients"`
+	EnableTLS   bool   `mapstructure:"enable_tls"`
+	TLSCert     string `mapstructure:"tls_cert"`
+	TLSKey      string `mapstructure:"tls_key"`
 }
 
 // ClientConfig contains client-specific settings
 type ClientConfig struct {
-	ServerAddress   string `mapstructure:"server_address"`
-	AutoConnect     bool   `mapstructure:"auto_connect"`
-	ReconnectDelay  int    `mapstructure:"reconnect_delay"`
-	EdgeThreshold   int    `mapstructure:"edge_threshold"`
-	HotkeyModifier  string `mapstructure:"hotkey_modifier"`
-	HotkeyKey       string `mapstructure:"hotkey_key"`
-	EnableTLS       bool   `mapstructure:"enable_tls"`
-	TLSSkipVerify   bool   `mapstructure:"tls_skip_verify"`
+	ServerAddress  string `mapstructure:"server_address"`
+	AutoConnect    bool   `mapstructure:"auto_connect"`
+	ReconnectDelay int    `mapstructure:"reconnect_delay"`
+	EdgeThreshold  int    `mapstructure:"edge_threshold"`
+	HotkeyModifier string `mapstructure:"hotkey_modifier"`
+	HotkeyKey      string `mapstructure:"hotkey_key"`
+	EnableTLS      bool   `mapstructure:"enable_tls"`
+	TLSSkipVerify  bool   `mapstructure:"tls_skip_verify"`
 }
 
 // DisplayConfig contains display detection settings
@@ -70,9 +70,9 @@ type InputConfig struct {
 
 // HostConfig represents a known host for quick connections
 type HostConfig struct {
-	Name     string `mapstructure:"name"`
-	Address  string `mapstructure:"address"`
-	Position string `mapstructure:"position"` // left, right, top, bottom
+	Name      string `mapstructure:"name"`
+	Address   string `mapstructure:"address"`
+	Position  string `mapstructure:"position"` // left, right, top, bottom
 	AuthToken string `mapstructure:"auth_token"`
 }
 
@@ -80,25 +80,25 @@ var (
 	// DefaultConfig provides sensible defaults
 	DefaultConfig = Config{
 		Server: ServerConfig{
-			Port:         52525,
-			BindAddress:  "0.0.0.0",
-			Name:         getHostname(),
-			RequireAuth:  false,
-			AuthToken:    "",
-			MaxClients:   1,
-			EnableTLS:    false,
-			TLSCert:      "",
-			TLSKey:       "",
+			Port:        52525,
+			BindAddress: "0.0.0.0",
+			Name:        getHostname(),
+			RequireAuth: false,
+			AuthToken:   "",
+			MaxClients:  1,
+			EnableTLS:   false,
+			TLSCert:     "",
+			TLSKey:      "",
 		},
 		Client: ClientConfig{
-			ServerAddress:   "",
-			AutoConnect:     false,
-			ReconnectDelay:  5,
-			EdgeThreshold:   5,
-			HotkeyModifier:  "ctrl+alt",
-			HotkeyKey:       "s",
-			EnableTLS:       false,
-			TLSSkipVerify:   false,
+			ServerAddress:  "",
+			AutoConnect:    false,
+			ReconnectDelay: 5,
+			EdgeThreshold:  5,
+			HotkeyModifier: "ctrl+alt",
+			HotkeyKey:      "s",
+			EnableTLS:      false,
+			TLSSkipVerify:  false,
 		},
 		Display: DisplayConfig{
 			RefreshInterval: 5,
@@ -125,8 +125,8 @@ func Init() error {
 	viper.SetConfigType("toml")
 
 	// Add config paths in order of precedence
-	viper.AddConfigPath("/etc/waymon")                // System config directory (primary)
-	
+	viper.AddConfigPath("/etc/waymon") // System config directory (primary)
+
 	// If running with sudo, try the real user's config
 	if sudoUser := os.Getenv("SUDO_USER"); sudoUser != "" {
 		userConfigPath := fmt.Sprintf("/home/%s/.config/waymon", sudoUser)
@@ -135,8 +135,8 @@ func Init() error {
 		// Normal user config
 		viper.AddConfigPath(filepath.Join(home, ".config", "waymon"))
 	}
-	
-	viper.AddConfigPath(".")                          // Current directory (lowest priority)
+
+	viper.AddConfigPath(".") // Current directory (lowest priority)
 
 	// Set defaults
 	viper.SetDefault("server", DefaultConfig.Server)
@@ -174,7 +174,7 @@ func Get() *Config {
 // Save saves the current configuration to file
 func Save() error {
 	configPath := GetConfigPath()
-	
+
 	// Create directory if it doesn't exist
 	dir := filepath.Dir(configPath)
 	if err := os.MkdirAll(dir, 0755); err != nil {
@@ -217,7 +217,7 @@ func GetConfigPath() string {
 // AddHost adds a new host to the configuration
 func AddHost(host HostConfig) error {
 	cfg := Get()
-	
+
 	// Check if host already exists
 	for i, h := range cfg.Hosts {
 		if h.Name == host.Name {
@@ -237,7 +237,7 @@ func AddHost(host HostConfig) error {
 // RemoveHost removes a host from the configuration
 func RemoveHost(name string) error {
 	cfg := Get()
-	
+
 	// Find and remove host
 	for i, h := range cfg.Hosts {
 		if h.Name == name {
@@ -253,7 +253,7 @@ func RemoveHost(name string) error {
 // GetHost returns a host configuration by name
 func GetHost(name string) (*HostConfig, error) {
 	cfg := Get()
-	
+
 	for _, h := range cfg.Hosts {
 		if h.Name == name {
 			return &h, nil

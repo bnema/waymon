@@ -12,12 +12,12 @@ import (
 
 // StatusBar represents a reusable status bar component
 type StatusBar struct {
-	Width      int
-	Title      string
-	Status     string
-	Connected  bool
+	Width       int
+	Title       string
+	Status      string
+	Connected   bool
 	ShowSpinner bool
-	spinner    spinner.Model
+	spinner     spinner.Model
 }
 
 // NewStatusBar creates a new status bar
@@ -30,9 +30,9 @@ func NewStatusBar(title string) *StatusBar {
 	s.Style = SpinnerStyle
 
 	return &StatusBar{
-		Title:      title,
+		Title:       title,
 		ShowSpinner: true,
-		spinner:    s,
+		spinner:     s,
 	}
 }
 
@@ -57,24 +57,24 @@ func (s *StatusBar) Update(msg tea.Msg) (*StatusBar, tea.Cmd) {
 // View renders the status bar
 func (s *StatusBar) View() string {
 	title := TitleStyle.Render(s.Title)
-	
+
 	var status string
 	if s.ShowSpinner {
 		status = s.spinner.View() + " " + s.Status
 	} else {
 		status = s.Status
 	}
-	
+
 	statusFormatted := FormatStatus(s.Connected, status)
-	
+
 	// Create a line that spans the width
 	gap := s.Width - lipgloss.Width(title) - lipgloss.Width(statusFormatted) - 2
 	if gap < 0 {
 		gap = 0
 	}
-	
+
 	line := title + strings.Repeat(" ", gap) + statusFormatted
-	
+
 	return BoxStyle.Width(s.Width).Render(line)
 }
 
@@ -88,17 +88,17 @@ type InfoPanel struct {
 // View renders the info panel
 func (p *InfoPanel) View() string {
 	var b strings.Builder
-	
+
 	if p.Title != "" {
 		b.WriteString(SubheaderStyle.Render(p.Title))
 		b.WriteString("\n")
 	}
-	
+
 	for _, line := range p.Content {
 		b.WriteString(TextStyle.Render(line))
 		b.WriteString("\n")
 	}
-	
+
 	return BoxStyle.Width(p.Width).Render(b.String())
 }
 
@@ -120,34 +120,34 @@ type Connection struct {
 // View renders the connection list
 func (c *ConnectionList) View() string {
 	var b strings.Builder
-	
+
 	b.WriteString(SubheaderStyle.Render(c.Title))
 	b.WriteString("\n\n")
-	
+
 	if len(c.Connections) == 0 {
 		b.WriteString(MutedStyle.Render("No connections"))
 	} else {
 		for _, conn := range c.Connections {
 			indicator := DisconnectedIndicator
 			style := ListItemStyle
-			
+
 			if conn.Connected {
 				indicator = ConnectedIndicator
 			}
 			if conn.Active {
 				style = style.Copy().Foreground(ColorActive)
 			}
-			
-			line := fmt.Sprintf("%s %s (%s)", 
-				indicator, 
-				style.Render(conn.Name), 
+
+			line := fmt.Sprintf("%s %s (%s)",
+				indicator,
+				style.Render(conn.Name),
 				SubtleStyle.Render(conn.Address))
-			
+
 			b.WriteString(line)
 			b.WriteString("\n")
 		}
 	}
-	
+
 	return BoxStyle.Width(c.Width).Render(b.String())
 }
 
@@ -159,35 +159,35 @@ type MonitorInfo struct {
 
 // Monitor represents display information
 type Monitor struct {
-	Name    string
-	Size    string
+	Name     string
+	Size     string
 	Position string
-	Primary bool
+	Primary  bool
 }
 
 // View renders the monitor info
 func (m *MonitorInfo) View() string {
 	var b strings.Builder
-	
+
 	b.WriteString(SubheaderStyle.Render(fmt.Sprintf("Detected %d monitor(s):", len(m.Monitors))))
 	b.WriteString("\n\n")
-	
+
 	for i, mon := range m.Monitors {
 		name := mon.Name
 		if mon.Primary {
 			name += " " + InfoStyle.Render("(primary)")
 		}
-		
+
 		b.WriteString(fmt.Sprintf("%d. %s\n", i+1, BoldStyle.Render(name)))
-		b.WriteString(fmt.Sprintf("   %s at %s\n", 
+		b.WriteString(fmt.Sprintf("   %s at %s\n",
 			TextStyle.Render(mon.Size),
 			SubtleStyle.Render(mon.Position)))
-		
+
 		if i < len(m.Monitors)-1 {
 			b.WriteString("\n")
 		}
 	}
-	
+
 	return BoxStyle.Width(m.Width).Render(b.String())
 }
 
@@ -206,32 +206,32 @@ type Control struct {
 // View renders the controls help
 func (c *ControlsHelp) View() string {
 	var b strings.Builder
-	
+
 	b.WriteString(SubheaderStyle.Render("Controls:"))
 	b.WriteString("\n\n")
-	
+
 	maxKeyLen := 0
 	for _, ctrl := range c.Controls {
 		if len(ctrl.Key) > maxKeyLen {
 			maxKeyLen = len(ctrl.Key)
 		}
 	}
-	
+
 	for _, ctrl := range c.Controls {
 		key := ControlKeyStyle.Width(maxKeyLen).Render(ctrl.Key)
 		desc := ControlDescStyle.Render(ctrl.Desc)
 		b.WriteString(fmt.Sprintf("  %s  %s\n", key, desc))
 	}
-	
+
 	return BoxStyle.Width(c.Width).Render(b.String())
 }
 
 // ProgressIndicator shows progress
 type ProgressIndicator struct {
-	Label    string
-	Current  int
-	Total    int
-	Width    int
+	Label          string
+	Current        int
+	Total          int
+	Width          int
 	ShowPercentage bool
 }
 
@@ -241,30 +241,30 @@ func (p *ProgressIndicator) View() string {
 	if percentage > 1.0 {
 		percentage = 1.0
 	}
-	
+
 	barWidth := p.Width - len(p.Label) - 10 // Leave space for label and percentage
 	if barWidth < 10 {
 		barWidth = 10
 	}
-	
+
 	filled := int(float64(barWidth) * percentage)
 	empty := barWidth - filled
-	
+
 	bar := SuccessStyle.Render(strings.Repeat("█", filled)) +
 		MutedStyle.Render(strings.Repeat("░", empty))
-	
+
 	var result string
 	if p.ShowPercentage {
-		result = fmt.Sprintf("%s %s %3.0f%%", 
-			TextStyle.Render(p.Label), 
-			bar, 
+		result = fmt.Sprintf("%s %s %3.0f%%",
+			TextStyle.Render(p.Label),
+			bar,
 			percentage*100)
 	} else {
-		result = fmt.Sprintf("%s %s", 
-			TextStyle.Render(p.Label), 
+		result = fmt.Sprintf("%s %s",
+			TextStyle.Render(p.Label),
 			bar)
 	}
-	
+
 	return result
 }
 
@@ -288,7 +288,7 @@ const (
 func (m *Message) View() string {
 	var style lipgloss.Style
 	var prefix string
-	
+
 	switch m.Type {
 	case MessageSuccess:
 		style = SuccessStyle
@@ -303,6 +303,6 @@ func (m *Message) View() string {
 		style = InfoStyle
 		prefix = "ℹ "
 	}
-	
+
 	return style.Render(prefix + m.Content)
 }

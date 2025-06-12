@@ -34,9 +34,9 @@ func main() {
 	centerX, centerY := 960.0, 540.0 // Center of 1920x1080 screen
 	radius := 200.0
 	steps := 60
-	
+
 	fmt.Printf("Drawing circle at (%.0f, %.0f) with radius %.0f\n", centerX, centerY, radius)
-	
+
 	// Move to starting position
 	startEvent := &proto.MouseEvent{
 		Type:        proto.EventType_EVENT_TYPE_MOVE,
@@ -55,18 +55,18 @@ func main() {
 			angle := float64(i) * 2 * math.Pi / float64(steps)
 			x := centerX + radius*math.Cos(angle)
 			y := centerY + radius*math.Sin(angle)
-			
+
 			event := &proto.MouseEvent{
 				Type:        proto.EventType_EVENT_TYPE_MOVE,
 				X:           x,
 				Y:           y,
 				TimestampMs: time.Now().UnixMilli(),
 			}
-			
+
 			if err := coord.ProcessEvent(event); err != nil {
 				log.Printf("Error moving mouse: %v", err)
 			}
-			
+
 			time.Sleep(20 * time.Millisecond) // 50 FPS
 		}
 	}
