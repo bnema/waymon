@@ -41,6 +41,11 @@ func init() {
 }
 
 func runClient(cmd *cobra.Command, args []string) error {
+	// Verify uinput setup has been completed
+	if err := VerifyUinputSetup(); err != nil {
+		return fmt.Errorf("uinput setup verification failed: %w", err)
+	}
+
 	// Get configuration
 	cfg := config.Get()
 

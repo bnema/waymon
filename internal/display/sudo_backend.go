@@ -67,8 +67,8 @@ func (s *sudoBackend) GetMonitors() ([]*Monitor, error) {
 		waylandDisplay = "wayland-1"
 	}
 
-	// Run display-helper directly with proper environment
-	cmd := exec.Command(exePath, "display-helper")
+	// Run monitors --json directly with proper environment
+	cmd := exec.Command(exePath, "monitors", "--json")
 	cmd.Env = os.Environ()
 	cmd.Env = append(cmd.Env, 
 		fmt.Sprintf("XDG_RUNTIME_DIR=/run/user/%s", sudoUID),
@@ -84,8 +84,19 @@ func (s *sudoBackend) GetMonitors() ([]*Monitor, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	
-	cmd = exec.CommandContext(ctx, exePath, "display-helper")
+	cmd = exec.CommandContext(ctx, exePath, "monitors", "--json")
 	cmd.Env = os.Environ()
+	
+	// Remove SUDO_* vars to prevent recursive sudoBackend usage
+	newEnv := make([]string, 0, len(cmd.Env))
+	for _, env := range cmd.Env {
+		if !strings.HasPrefix(env, "SUDO_") {
+			newEnv = append(newEnv, env)
+		}
+	}
+	cmd.Env = newEnv
+	
+	// Add required environment
 	cmd.Env = append(cmd.Env, 
 		fmt.Sprintf("XDG_RUNTIME_DIR=/run/user/%s", sudoUID),
 		fmt.Sprintf("WAYLAND_DISPLAY=%s", waylandDisplay),
@@ -93,10 +104,10 @@ func (s *sudoBackend) GetMonitors() ([]*Monitor, error) {
 
 	output, err := cmd.CombinedOutput()
 	if ctx.Err() == context.DeadlineExceeded {
-		return nil, fmt.Errorf("display helper timed out")
+		return nil, fmt.Errorf("monitors command timed out")
 	}
 	if err != nil {
-		return nil, fmt.Errorf("display helper failed: %w\nOutput: %s", err, output)
+		return nil, fmt.Errorf("monitors command failed: %w\nOutput: %s", err, output)
 	}
 
 	// Parse JSON output
@@ -115,7 +126,7 @@ func (s *sudoBackend) GetMonitors() ([]*Monitor, error) {
 	}
 
 	if err := json.Unmarshal(output, &info); err != nil {
-		return nil, fmt.Errorf("failed to parse display helper output: %w", err)
+		return nil, fmt.Errorf("failed to parse monitors output: %w", err)
 	}
 
 	if info.Error != "" {

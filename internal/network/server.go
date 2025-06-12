@@ -3,8 +3,13 @@ package network
 import (
 	"context"
 	"fmt"
+	"io"
 	"net"
 	"sync"
+	"time"
+
+	Proto "github.com/bnema/waymon/internal/proto"
+	"google.golang.org/protobuf/proto"
 )
 
 // Server handles incoming mouse event connections
@@ -18,7 +23,7 @@ type Server struct {
 	stop         chan struct{}
 	stopOnce     sync.Once
 	wg           sync.WaitGroup
-	
+
 	// Event handler
 	OnMouseEvent EventHandler
 }
@@ -139,7 +144,7 @@ func (s *Server) handleConnection(conn net.Conn) {
 	default:
 	}
 
-	// Handle the connection (placeholder for now)
+	// Handle the connection
 	s.wg.Add(1)
 	go func() {
 		defer s.wg.Done()
@@ -156,13 +161,57 @@ func (s *Server) handleConnection(conn net.Conn) {
 			}
 		}()
 
-		// Read loop will be implemented when we add event handling
-		buf := make([]byte, 1024)
-		for {
-			_, err := conn.Read(buf)
+		s.handleClientConnection(conn)
+	}()
+}
+
+func (s *Server) handleClientConnection(conn net.Conn) {
+	for {
+		select {
+		case <-s.stop:
+			return
+		default:
+			// Set read deadline to allow checking stop channel
+			_ = conn.SetReadDeadline(time.Now().Add(100 * time.Millisecond))
+
+			// Read the length prefix (4 bytes)
+			lengthBuf := make([]byte, 4)
+			_, err := io.ReadFull(conn, lengthBuf)
+			if err != nil {
+				if netErr, ok := err.(net.Error); ok && netErr.Timeout() {
+					continue
+				}
+				// Connection error or EOF
+				return
+			}
+
+			// Decode length
+			length := int(lengthBuf[0])<<24 | int(lengthBuf[1])<<16 | int(lengthBuf[2])<<8 | int(lengthBuf[3])
+			if length <= 0 || length > 4096 { // Sanity check
+				return
+			}
+
+			// Read the event data
+			eventBuf := make([]byte, length)
+			_, err = io.ReadFull(conn, eventBuf)
 			if err != nil {
 				return
 			}
+
+			// Unmarshal the protobuf event
+			var protoEvent Proto.MouseEvent
+			if err := proto.Unmarshal(eventBuf, &protoEvent); err != nil {
+				continue // Skip malformed events
+			}
+
+			// Call the event handler if set
+			if s.OnMouseEvent != nil {
+				event := &MouseEvent{MouseEvent: &protoEvent}
+				if err := s.OnMouseEvent(event); err != nil {
+					// Log error but continue processing
+					continue
+				}
+			}
 		}
-	}()
+	}
 }

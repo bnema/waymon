@@ -45,11 +45,12 @@ type Backend interface {
 func New() (*Display, error) {
 	// Try different backends in order of preference
 	backends := []func() (Backend, error){
-		newSudoBackend,       // Sudo privilege separation (when running with sudo)
-		newWlrCgoBackend,     // Native Wayland via CGO (if available)
-		newWlrRandrBackend,   // wlr-randr command (fallback)
-		newPortalBackend,     // XDG Desktop Portal (xrandr fallback)
-		newRandrBackend,      // X11/XWayland fallback
+		newSudoBackend,                // Sudo privilege separation (when running with sudo)
+		newWlrOutputManagementBackend, // Native wlr-output-management protocol
+		newWlrCgoBackend,              // Basic Wayland via CGO (limited info)
+		newWlrRandrBackend,            // wlr-randr command (fallback)
+		newPortalBackend,              // XDG Desktop Portal (xrandr fallback)
+		newRandrBackend,               // X11/XWayland fallback
 	}
 
 	var backend Backend
@@ -57,9 +58,9 @@ func New() (*Display, error) {
 
 	for i, createBackend := range backends {
 		backend, err = createBackend()
-		// Only show debug if not running as display-helper
+		// Only show debug if not running as monitors --json
 		if os.Getenv("WAYMON_DISPLAY_HELPER") != "1" {
-			backendNames := []string{"sudoBackend", "wlrCgoBackend", "wlrRandrBackend", "portalBackend", "randrBackend"}
+			backendNames := []string{"sudoBackend", "wlrOutputManagementBackend", "wlrCgoBackend", "wlrRandrBackend", "portalBackend", "randrBackend"}
 			fmt.Printf("DEBUG: Trying backend %d: %s\n", i, backendNames[i])
 			if err == nil {
 				fmt.Printf("DEBUG: Successfully created backend: %s\n", backendNames[i])
