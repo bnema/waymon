@@ -14,6 +14,7 @@ import (
 	"github.com/bnema/waymon/internal/input"
 	"github.com/bnema/waymon/internal/logger"
 	"github.com/bnema/waymon/internal/network"
+	waymonProto "github.com/bnema/waymon/internal/proto"
 )
 
 // Server represents the main server
@@ -138,6 +139,24 @@ func (s *Server) runNetworkServer(ctx context.Context) {
 func (s *Server) handleMouseEvent(event *network.MouseEvent) error {
 	if s.inputHandler == nil {
 		return fmt.Errorf("input handler not initialized")
+	}
+	
+	// Log event details
+	switch event.MouseEvent.Type {
+	case waymonProto.EventType_EVENT_TYPE_ENTER:
+		logger.Info("Mouse entered from client - taking control")
+	case waymonProto.EventType_EVENT_TYPE_LEAVE:
+		logger.Info("Mouse left to client - releasing control")
+	case waymonProto.EventType_EVENT_TYPE_MOVE:
+		logger.Debugf("Mouse move: dx=%.0f, dy=%.0f", event.MouseEvent.X, event.MouseEvent.Y)
+	case waymonProto.EventType_EVENT_TYPE_CLICK:
+		action := "pressed"
+		if !event.MouseEvent.IsPressed {
+			action = "released"
+		}
+		logger.Debugf("Mouse button %s: %s", event.MouseEvent.Button.String(), action)
+	case waymonProto.EventType_EVENT_TYPE_SCROLL:
+		logger.Debugf("Mouse scroll: %s", event.MouseEvent.Direction.String())
 	}
 	
 	// The network.MouseEvent wraps proto.MouseEvent, so we can pass it directly

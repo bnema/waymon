@@ -103,8 +103,32 @@ func runClient(cmd *cobra.Command, args []string) error {
 	client := network.NewSSHClient(privateKeyPath)
 	defer client.Disconnect()
 
-	// Create edge detector
-	edgeDetector := input.NewEdgeDetector(disp, client, int32(edgeSize))
+	// Create Wayland barrier system
+	barrier := input.NewWaylandBarrier(disp, client, int32(edgeSize))
+	
+	// Create hotkey system for manual switching
+	modifiers := uint32(0)
+	if cfg.Client.HotkeyModifier == "ctrl+alt" {
+		modifiers = input.ModCtrl | input.ModAlt
+	}
+	hotkeyCapture := input.NewHotkeyCapture(modifiers, input.KEY_S, func() {
+		if barrier.IsCapturing() {
+			barrier.StopCapture()
+		} else {
+			// Toggle to primary monitor right edge as default
+			primary := disp.GetPrimaryMonitor()
+			if primary != nil {
+				barrier.StartCapture(display.EdgeRight, primary)
+			}
+		}
+	})
+	
+	// Try to start hotkey capture (optional feature)
+	if err := hotkeyCapture.Start(); err != nil {
+		logger.Warnf("Hotkey capture not available: %v", err)
+		logger.Info("Edge detection will be the primary switching method")
+	}
+	defer hotkeyCapture.Stop()
 
 	// Create inline TUI model
 	model := ui.NewInlineClientModel(serverAddr)
@@ -141,21 +165,38 @@ func runClient(cmd *cobra.Command, args []string) error {
 		}
 	}()
 
-	// Set up edge callbacks
-	edgeDetector.SetCallbacks(
-		func(edge display.Edge, x, y int32) {
-			// Edge entered - start capture
+	// Set up barrier callbacks
+	barrier.SetCallbacks(
+		func(edge display.Edge, host string) {
+			// Edge activated
 			if client.IsConnected() {
-				edgeDetector.StartCapture(edge)
 				p.Send(ui.CaptureStartMsg{})
 			}
 		},
 		func() {
-			// Edge left - stop capture
-			edgeDetector.StopCapture()
+			// Edge deactivated
 			p.Send(ui.CaptureStopMsg{})
 		},
 	)
+	
+	// Start barrier system
+	if err := barrier.Start(); err != nil {
+		return fmt.Errorf("failed to start barrier system: %w", err)
+	}
+	defer barrier.Stop()
+	
+	// For now, simulate edge detection with a simple demo
+	// In production, this would use actual Wayland pointer constraints
+	go func() {
+		time.Sleep(5 * time.Second)
+		logger.Info("Demo: Simulating mouse reaching right edge")
+		if primary := disp.GetPrimaryMonitor(); primary != nil {
+			barrier.StartCapture(display.EdgeRight, primary)
+			time.Sleep(3 * time.Second)
+			logger.Info("Demo: Simulating return from remote")
+			barrier.StopCapture()
+		}
+	}()
 
 	// Handle graceful shutdown
 	sigCh := make(chan os.Signal, 1)

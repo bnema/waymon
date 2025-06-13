@@ -1,0 +1,82 @@
+# Waymon Configuration Example
+# This file shows how to configure Waymon for various setups
+
+# Server configuration
+[server]
+name = "workstation"
+port = 52525
+bind_address = "0.0.0.0"
+max_clients = 1
+ssh_host_key_path = "~/.config/waymon/host_key"
+ssh_authorized_keys_path = "~/.config/waymon/authorized_keys"
+ssh_whitelist_only = true
+ssh_whitelist = []  # Add client SSH fingerprints here after first connection
+
+# Client configuration
+[client]
+edge_threshold = 5  # Pixels from edge to trigger
+screen_position = "right"  # Deprecated - use edge_mappings instead
+hotkey_modifier = "ctrl+alt"
+hotkey_key = "s"
+ssh_private_key = ""  # Path to SSH key, empty for default
+
+# Multi-monitor edge mappings
+# This is where you configure which edges connect to which computers
+[[client.edge_mappings]]
+monitor_id = "primary"  # Use "primary" for primary monitor
+edge = "right"          # Which edge triggers the connection
+host = "laptop"         # Host name (must be defined in hosts section)
+description = "Move to laptop on the right"
+
+[[client.edge_mappings]]
+monitor_id = "DP-2"     # Use specific monitor ID/name
+edge = "left"           # Different edge can go to different host
+host = "server"         # Another host
+description = "Move to server on the left of second monitor"
+
+# For setups where any monitor edge should connect to the same host
+[[client.edge_mappings]]
+monitor_id = "*"        # Wildcard - applies to any monitor
+edge = "bottom"         # Bottom edge of any monitor
+host = "laptop"         
+description = "Any monitor bottom edge goes to laptop"
+
+# Display configuration
+[display]
+backend = "auto"        # auto, wlr-randr, portal, etc.
+cursor_tracking = true
+refresh_interval = 5
+
+# Input configuration
+[input]
+mouse_sensitivity = 1.0
+scroll_speed = 1.0
+enable_keyboard = true
+keyboard_layout = "us"
+
+# Known hosts for quick connections
+[[hosts]]
+name = "laptop"
+address = "192.168.1.100:52525"
+position = "right"  # Legacy field for backward compatibility
+
+[[hosts]]
+name = "server"
+address = "10.0.0.5:52525"
+position = "left"
+
+# Example multi-monitor setup scenarios:
+#
+# Scenario 1: Laptop on the right of desktop
+# - Desktop primary monitor right edge -> laptop
+# - Laptop left edge -> desktop
+#
+# Scenario 2: Three computers in a row
+# - Left computer: right edge -> middle computer
+# - Middle computer: left edge -> left computer, right edge -> right computer  
+# - Right computer: left edge -> middle computer
+#
+# Scenario 3: Desktop with two monitors, laptop below
+# - Desktop monitor 1 bottom edge -> laptop
+# - Desktop monitor 2 bottom edge -> laptop
+# - Laptop top edge -> desktop (defaults to primary monitor)
