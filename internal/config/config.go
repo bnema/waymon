@@ -193,6 +193,11 @@ func Get() *Config {
 	return cfg
 }
 
+// Set sets the current configuration (for testing)
+func Set(c *Config) {
+	cfg = c
+}
+
 // Save saves the current configuration to file
 func Save() error {
 	configPath := GetConfigPath()

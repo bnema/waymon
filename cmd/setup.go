@@ -212,6 +212,37 @@ func testUinputAccess() error {
 	return nil
 }
 
+// CheckUinputAvailable checks if uinput is available but doesn't fail if no access
+func CheckUinputAvailable() error {
+	// Check if uinput module is loaded
+	cmd := exec.Command("lsmod")
+	output, err := cmd.Output()
+	if err != nil {
+		return fmt.Errorf("uinput module check failed")
+	}
+
+	if !strings.Contains(string(output), "uinput") {
+		return fmt.Errorf("uinput module not loaded")
+	}
+
+	// Check if /dev/uinput exists
+	if _, err := os.Stat("/dev/uinput"); os.IsNotExist(err) {
+		return fmt.Errorf("/dev/uinput not found")
+	}
+
+	// Try to test access (but don't fail if no permission)
+	file, err := os.OpenFile("/dev/uinput", os.O_WRONLY, 0)
+	if err != nil {
+		if os.IsPermission(err) {
+			return fmt.Errorf("no write access to /dev/uinput (will use sudo when needed)")
+		}
+		return fmt.Errorf("failed to check /dev/uinput: %w", err)
+	}
+	file.Close()
+
+	return nil
+}
+
 // VerifyUinputSetup checks if uinput has been properly configured for Waymon
 func VerifyUinputSetup() error {
 	// Check if uinput module is loaded

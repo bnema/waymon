@@ -5,7 +5,6 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"os/user"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -17,16 +16,12 @@ import (
 	"github.com/bnema/waymon/internal/network"
 )
 
-// Server represents the main server with privilege separation
+// Server represents the main server
 type Server struct {
 	config       *config.Config
 	display      *display.Display
 	inputHandler input.Handler
 	sshServer    *network.SSHServer
-	
-	// Privilege separation
-	isPrivileged bool
-	actualUser   *user.User
 	
 	// Synchronization
 	wg     sync.WaitGroup
@@ -34,28 +29,21 @@ type Server struct {
 
 // New creates a new server instance
 func New(cfg *config.Config) (*Server, error) {
+	logger.Debug("Server.New: Creating server struct")
 	s := &Server{
-		config:       cfg,
-		isPrivileged: os.Geteuid() == 0,
+		config: cfg,
 	}
-	
-	// If running with sudo, get the actual user info
-	if s.isPrivileged {
-		if sudoUser := os.Getenv("SUDO_USER"); sudoUser != "" {
-			u, err := user.Lookup(sudoUser)
-			if err != nil {
-				return nil, fmt.Errorf("failed to lookup sudo user %s: %w", sudoUser, err)
-			}
-			s.actualUser = u
-		}
-	}
+	logger.Debug("Server.New: Server struct created")
 	
 	return s, nil
 }
 
 // Start starts the server with appropriate privilege separation
 func (s *Server) Start(ctx context.Context) error {
+	logger.Debug("Server.Start: Starting server initialization")
+	
 	// Initialize display detection (runs as normal user if possible)
+	logger.Debug("Server.Start: Initializing display")
 	if err := s.initDisplay(); err != nil {
 		return fmt.Errorf("failed to initialize display: %w", err)
 	}
@@ -65,12 +53,21 @@ func (s *Server) Start(ctx context.Context) error {
 		return fmt.Errorf("failed to initialize input: %w", err)
 	}
 	
-	// Start network server (can run as normal user but we keep it in main process)
+	// Initialize network (creates SSH server but doesn't start it yet)
 	if err := s.initNetwork(); err != nil {
 		return fmt.Errorf("failed to initialize network: %w", err)
 	}
 	
-	// Start all components
+	return nil
+}
+
+// StartNetworking starts the SSH server after auth handlers are set
+func (s *Server) StartNetworking(ctx context.Context) error {
+	if s.sshServer == nil {
+		return fmt.Errorf("SSH server not initialized")
+	}
+	
+	// Start network server
 	s.wg.Add(1)
 	go s.runNetworkServer(ctx)
 	
@@ -79,22 +76,22 @@ func (s *Server) Start(ctx context.Context) error {
 
 // initDisplay initializes display detection, running as normal user if possible
 func (s *Server) initDisplay() error {
+	logger.Debug("Server.initDisplay: Starting display detection")
 	// The display.New() function will automatically use the sudo backend
 	// when running with sudo, which handles privilege separation
 	disp, err := display.New()
 	if err != nil {
+		logger.Errorf("Server.initDisplay: Failed to create display: %v", err)
 		return err
 	}
+	logger.Debug("Server.initDisplay: Display created successfully")
 	s.display = disp
 	return nil
 }
 
-// initInput initializes the input handler (requires root)
+// initInput initializes the input handler
 func (s *Server) initInput() error {
-	if !s.isPrivileged {
-		return fmt.Errorf("input handler requires root privileges")
-	}
-	
+	// Input handler will use privileged helper if needed
 	handler, err := input.NewHandler()
 	if err != nil {
 		return err
@@ -200,14 +197,7 @@ func (s *Server) GetSSHAuthKeysPath() string {
 // expandPath expands ~ to home directory
 func expandPath(path string) string {
 	if strings.HasPrefix(path, "~/") {
-		// When running with sudo, use the actual user's home directory
-		if sudoUser := os.Getenv("SUDO_USER"); sudoUser != "" {
-			u, err := user.Lookup(sudoUser)
-			if err == nil {
-				return filepath.Join(u.HomeDir, path[2:])
-			}
-		}
-		// Fall back to regular home directory
+		// Use regular home directory
 		home, _ := os.UserHomeDir()
 		return filepath.Join(home, path[2:])
 	}
