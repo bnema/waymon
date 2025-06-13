@@ -4,11 +4,11 @@
 
 ## Features
 
-- **Wayland-native**: Works with Wayland compositors without X11 fallback
-- **Low latency**: Direct TCP connection for minimal input delay
+- **Wayland-native**: Works **ONLY** with Wayland compositors
+- **Secure by design**: Uses SSH for encrypted, authenticated connections
+- **Whitelist authentication**: Interactive approval for new SSH keys
 - **Edge detection**: Move mouse to screen edge to switch between computers
 - **Multi-monitor support**: Automatic detection of monitor configuration
-- **Secure**: Optional authentication and TLS encryption
 - **Simple TUI**: Clean terminal interface for monitoring connections
 
 ## Prerequisites
@@ -17,7 +17,7 @@
 
 - Linux system with Wayland compositor
 - uinput kernel module (usually available by default)
-- Root privileges for server mode (required for uinput access)
+- Sudo privileges on both server and client machines (required for uinput access)
 
 ### Dependencies
 
@@ -59,7 +59,7 @@ This command automatically:
 
 **Important**: 
 - Run `waymon setup` on both computers (server and client)
-- You must log out and back in after setup for group changes to take effect
+- You must log out and back in after setup for group changes to take effect (To be determined)
 - Both machines need uinput access since the client also handles mouse input capture
 
 ### 2. Configuration
@@ -179,6 +179,21 @@ sudo waymon test input
 
 This will draw circles with the mouse to verify input injection works.
 
+## SSH Authentication
+
+Waymon uses SSH key-based authentication with a whitelist system:
+
+1. **First Connection**: When a new client connects, the server will prompt you to approve the SSH key
+2. **Interactive Approval**: You'll see the client's address and SSH key fingerprint
+3. **Whitelist Storage**: Approved keys are saved to the configuration file
+4. **Future Connections**: Whitelisted keys connect automatically without prompts
+
+To disable whitelist-only mode (accept all SSH keys without approval):
+```toml
+[server]
+ssh_whitelist_only = false
+```
+
 ## Configuration
 
 Waymon looks for configuration files in the following order:
@@ -190,11 +205,12 @@ Waymon looks for configuration files in the following order:
 
 ```toml
 [server]
-port = 52525              # Port to listen on
-bind_address = "0.0.0.0"  # Bind address
-name = "my-desktop"       # Server name
-require_auth = false      # Require authentication
-max_clients = 1          # Maximum simultaneous clients
+port = 52525                        # Port to listen on
+bind_address = "0.0.0.0"            # Bind address
+name = "my-desktop"                 # Server name
+max_clients = 1                     # Maximum simultaneous clients
+ssh_whitelist_only = true           # Only allow whitelisted SSH keys
+ssh_whitelist = []                  # List of allowed SSH key fingerprints
 ```
 
 ### Client Configuration
