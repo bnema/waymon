@@ -33,12 +33,13 @@ type ServerConfig struct {
 	Port        int    `mapstructure:"port"`
 	BindAddress string `mapstructure:"bind_address"`
 	Name        string `mapstructure:"name"`
-	RequireAuth bool   `mapstructure:"require_auth"`
-	AuthToken   string `mapstructure:"auth_token"`
 	MaxClients  int    `mapstructure:"max_clients"`
-	EnableTLS   bool   `mapstructure:"enable_tls"`
-	TLSCert     string `mapstructure:"tls_cert"`
-	TLSKey      string `mapstructure:"tls_key"`
+	
+	// SSH configuration
+	SSHHostKeyPath  string   `mapstructure:"ssh_host_key_path"`
+	SSHAuthKeysPath string   `mapstructure:"ssh_authorized_keys_path"`
+	SSHWhitelist    []string `mapstructure:"ssh_whitelist"` // List of allowed SSH key fingerprints
+	SSHWhitelistOnly bool    `mapstructure:"ssh_whitelist_only"` // Only allow whitelisted keys
 }
 
 // ClientConfig contains client-specific settings
@@ -49,8 +50,9 @@ type ClientConfig struct {
 	EdgeThreshold  int    `mapstructure:"edge_threshold"`
 	HotkeyModifier string `mapstructure:"hotkey_modifier"`
 	HotkeyKey      string `mapstructure:"hotkey_key"`
-	EnableTLS      bool   `mapstructure:"enable_tls"`
-	TLSSkipVerify  bool   `mapstructure:"tls_skip_verify"`
+	
+	// SSH configuration
+	SSHPrivateKey  string `mapstructure:"ssh_private_key"`
 }
 
 // DisplayConfig contains display detection settings
@@ -83,12 +85,11 @@ var (
 			Port:        52525,
 			BindAddress: "0.0.0.0",
 			Name:        getHostname(),
-			RequireAuth: false,
-			AuthToken:   "",
 			MaxClients:  1,
-			EnableTLS:   false,
-			TLSCert:     "",
-			TLSKey:      "",
+			SSHHostKeyPath:  "~/.config/waymon/host_key",
+			SSHAuthKeysPath: "~/.config/waymon/authorized_keys",
+			SSHWhitelist:    []string{},
+			SSHWhitelistOnly: true,
 		},
 		Client: ClientConfig{
 			ServerAddress:  "",
@@ -97,8 +98,7 @@ var (
 			EdgeThreshold:  5,
 			HotkeyModifier: "ctrl+alt",
 			HotkeyKey:      "s",
-			EnableTLS:      false,
-			TLSSkipVerify:  false,
+			SSHPrivateKey:  "",
 		},
 		Display: DisplayConfig{
 			RefreshInterval: 5,
@@ -281,6 +281,52 @@ func UpdateClient(clientCfg ClientConfig) error {
 	viper.Set("client", clientCfg)
 	cfg.Client = clientCfg
 	return Save()
+}
+
+// AddSSHKeyToWhitelist adds an SSH key fingerprint to the whitelist
+func AddSSHKeyToWhitelist(fingerprint string) error {
+	cfg := Get()
+	
+	// Check if already whitelisted
+	for _, fp := range cfg.Server.SSHWhitelist {
+		if fp == fingerprint {
+			return fmt.Errorf("key already whitelisted")
+		}
+	}
+	
+	// Add to whitelist
+	cfg.Server.SSHWhitelist = append(cfg.Server.SSHWhitelist, fingerprint)
+	viper.Set("server.ssh_whitelist", cfg.Server.SSHWhitelist)
+	return Save()
+}
+
+// RemoveSSHKeyFromWhitelist removes an SSH key fingerprint from the whitelist
+func RemoveSSHKeyFromWhitelist(fingerprint string) error {
+	cfg := Get()
+	
+	// Find and remove
+	for i, fp := range cfg.Server.SSHWhitelist {
+		if fp == fingerprint {
+			cfg.Server.SSHWhitelist = append(cfg.Server.SSHWhitelist[:i], cfg.Server.SSHWhitelist[i+1:]...)
+			viper.Set("server.ssh_whitelist", cfg.Server.SSHWhitelist)
+			return Save()
+		}
+	}
+	
+	return fmt.Errorf("key not found in whitelist")
+}
+
+// IsSSHKeyWhitelisted checks if an SSH key fingerprint is whitelisted
+func IsSSHKeyWhitelisted(fingerprint string) bool {
+	cfg := Get()
+	
+	for _, fp := range cfg.Server.SSHWhitelist {
+		if fp == fingerprint {
+			return true
+		}
+	}
+	
+	return false
 }
 
 // Helper function to get hostname
