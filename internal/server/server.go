@@ -6,11 +6,14 @@ import (
 	"fmt"
 	"os"
 	"os/user"
+	"path/filepath"
+	"strings"
 	"sync"
 
 	"github.com/bnema/waymon/internal/config"
 	"github.com/bnema/waymon/internal/display"
 	"github.com/bnema/waymon/internal/input"
+	"github.com/bnema/waymon/internal/logger"
 	"github.com/bnema/waymon/internal/network"
 )
 
@@ -19,26 +22,20 @@ type Server struct {
 	config       *config.Config
 	display      *display.Display
 	inputHandler input.Handler
-	netServer    *network.Server
+	sshServer    *network.SSHServer
 	
 	// Privilege separation
 	isPrivileged bool
 	actualUser   *user.User
 	
 	// Synchronization
-	ctx    context.Context
-	cancel context.CancelFunc
 	wg     sync.WaitGroup
 }
 
 // New creates a new server instance
 func New(cfg *config.Config) (*Server, error) {
-	ctx, cancel := context.WithCancel(context.Background())
-	
 	s := &Server{
 		config:       cfg,
-		ctx:          ctx,
-		cancel:       cancel,
 		isPrivileged: os.Geteuid() == 0,
 	}
 	
@@ -57,7 +54,7 @@ func New(cfg *config.Config) (*Server, error) {
 }
 
 // Start starts the server with appropriate privilege separation
-func (s *Server) Start() error {
+func (s *Server) Start(ctx context.Context) error {
 	// Initialize display detection (runs as normal user if possible)
 	if err := s.initDisplay(); err != nil {
 		return fmt.Errorf("failed to initialize display: %w", err)
@@ -75,7 +72,7 @@ func (s *Server) Start() error {
 	
 	// Start all components
 	s.wg.Add(1)
-	go s.runNetworkServer()
+	go s.runNetworkServer(ctx)
 	
 	return nil
 }
@@ -106,28 +103,37 @@ func (s *Server) initInput() error {
 	return nil
 }
 
-// initNetwork initializes the network server
+// initNetwork initializes the SSH server
 func (s *Server) initNetwork() error {
-	port := s.config.Server.Port
-	if s.config.Server.BindAddress != "" {
-		port = s.config.Server.Port
+	// Set up SSH paths
+	hostKeyPath := expandPath(s.config.Server.SSHHostKeyPath)
+	authKeysPath := expandPath(s.config.Server.SSHAuthKeysPath)
+	
+	// Ensure directories exist
+	if err := os.MkdirAll(filepath.Dir(hostKeyPath), 0700); err != nil {
+		return fmt.Errorf("failed to create host key directory: %w", err)
+	}
+	if err := os.MkdirAll(filepath.Dir(authKeysPath), 0700); err != nil {
+		return fmt.Errorf("failed to create auth keys directory: %w", err)
 	}
 	
-	s.netServer = network.NewServer(port)
+	// Create SSH server
+	s.sshServer = network.NewSSHServer(s.config.Server.Port, hostKeyPath, authKeysPath)
+	s.sshServer.SetMaxClients(s.config.Server.MaxClients)
 	
 	// Set up event handler
-	s.netServer.OnMouseEvent = s.handleMouseEvent
+	s.sshServer.OnMouseEvent = s.handleMouseEvent
 	
 	return nil
 }
 
 
-// runNetworkServer runs the network server
-func (s *Server) runNetworkServer() {
+// runNetworkServer runs the SSH server
+func (s *Server) runNetworkServer(ctx context.Context) {
 	defer s.wg.Done()
 	
-	if err := s.netServer.Start(s.ctx); err != nil {
-		fmt.Printf("Network server error: %v\n", err)
+	if err := s.sshServer.Start(ctx); err != nil {
+		logger.Errorf("Network server error: %v", err)
 	}
 }
 
@@ -144,10 +150,8 @@ func (s *Server) handleMouseEvent(event *network.MouseEvent) error {
 
 // Stop stops the server
 func (s *Server) Stop() {
-	s.cancel()
-	
-	if s.netServer != nil {
-		s.netServer.Stop()
+	if s.sshServer != nil {
+		s.sshServer.Stop()
 	}
 	
 	if s.inputHandler != nil {
@@ -168,8 +172,8 @@ func (s *Server) GetDisplay() *display.Display {
 
 // GetPort returns the server port
 func (s *Server) GetPort() int {
-	if s.netServer != nil {
-		return s.netServer.Port()
+	if s.sshServer != nil {
+		return s.sshServer.Port()
 	}
 	return s.config.Server.Port
 }
@@ -177,4 +181,26 @@ func (s *Server) GetPort() int {
 // GetName returns the server name
 func (s *Server) GetName() string {
 	return s.config.Server.Name
+}
+
+// GetNetworkServer returns the SSH server instance
+func (s *Server) GetNetworkServer() *network.SSHServer {
+	return s.sshServer
+}
+
+// expandPath expands ~ to home directory
+func expandPath(path string) string {
+	if strings.HasPrefix(path, "~/") {
+		// When running with sudo, use the actual user's home directory
+		if sudoUser := os.Getenv("SUDO_USER"); sudoUser != "" {
+			u, err := user.Lookup(sudoUser)
+			if err == nil {
+				return filepath.Join(u.HomeDir, path[2:])
+			}
+		}
+		// Fall back to regular home directory
+		home, _ := os.UserHomeDir()
+		return filepath.Join(home, path[2:])
+	}
+	return path
 }
