@@ -2,81 +2,80 @@
 package main
 
 import (
-	"fmt"
-	"log"
-
 	"github.com/bnema/waymon/internal/display"
+	"github.com/bnema/waymon/internal/logger"
 )
 
 func main() {
-	fmt.Println("Waymon Display Detection Test")
-	fmt.Println("=============================")
-	fmt.Println()
+	logger.Info("Waymon Display Detection Test")
+	logger.Info("=============================")
+	logger.Info("")
 
 	// Create display manager
 	disp, err := display.New()
 	if err != nil {
-		log.Fatalf("Failed to create display manager: %v", err)
+		logger.Fatal("Failed to create display manager: %v", err)
 	}
 	defer disp.Close()
 
 	// Show monitors
 	monitors := disp.GetMonitors()
-	fmt.Printf("Detected %d monitor(s):\n\n", len(monitors))
+	logger.Infof("Detected %d monitor(s):", len(monitors))
+	logger.Info("")
 
 	for i, mon := range monitors {
-		fmt.Printf("Monitor %d: %s\n", i+1, mon.Name)
-		fmt.Printf("  ID:       %s\n", mon.ID)
-		fmt.Printf("  Position: %d,%d\n", mon.X, mon.Y)
-		fmt.Printf("  Size:     %dx%d\n", mon.Width, mon.Height)
-		fmt.Printf("  Primary:  %v\n", mon.Primary)
+		logger.Infof("Monitor %d: %s", i+1, mon.Name)
+		logger.Infof("  ID:       %s", mon.ID)
+		logger.Infof("  Position: %d,%d", mon.X, mon.Y)
+		logger.Infof("  Size:     %dx%d", mon.Width, mon.Height)
+		logger.Infof("  Primary:  %v", mon.Primary)
 		if mon.Scale != 0 && mon.Scale != 1 {
-			fmt.Printf("  Scale:    %.2f\n", mon.Scale)
+			logger.Infof("  Scale:    %.2f", mon.Scale)
 		}
-		fmt.Println()
+		logger.Info("")
 	}
 
 	// Try to get cursor position
 	x, y, monitor, err := disp.GetCursorPosition()
 	if err != nil {
-		fmt.Printf("Cursor position: unavailable (%v)\n", err)
-		fmt.Println("Note: Cursor tracking on Wayland requires special permissions")
-		fmt.Println("      We'll track position internally based on movements")
+		logger.Infof("Cursor position: unavailable (%v)", err)
+		logger.Info("Note: Cursor tracking on Wayland requires special permissions")
+		logger.Info("      We'll track position internally based on movements")
 	} else {
-		fmt.Printf("Cursor position: %d,%d", x, y)
 		if monitor != nil {
-			fmt.Printf(" (on %s)", monitor.Name)
+			logger.Infof("Cursor position: %d,%d (on %s)", x, y, monitor.Name)
+		} else {
+			logger.Infof("Cursor position: %d,%d", x, y)
 		}
-		fmt.Println()
 	}
 
 	// Show edge detection zones
-	fmt.Println("\nEdge detection zones:")
+	logger.Info("Edge detection zones:")
 	primary := disp.GetPrimaryMonitor()
 	if primary != nil {
 		x1, y1, x2, y2 := primary.Bounds()
 		threshold := int32(5)
-		fmt.Printf("  Left edge:   x < %d\n", x1+threshold)
-		fmt.Printf("  Right edge:  x > %d\n", x2-threshold)
-		fmt.Printf("  Top edge:    y < %d\n", y1+threshold)
-		fmt.Printf("  Bottom edge: y > %d\n", y2-threshold)
+		logger.Infof("  Left edge:   x < %d", x1+threshold)
+		logger.Infof("  Right edge:  x > %d", x2-threshold)
+		logger.Infof("  Top edge:    y < %d", y1+threshold)
+		logger.Infof("  Bottom edge: y > %d", y2-threshold)
 	}
 
 	// Test arrangement detection
-	fmt.Println("\nMonitor arrangement:")
+	logger.Info("Monitor arrangement:")
 	for _, mon := range monitors {
 		x, y := mon.X+mon.Width/2, mon.Y+mon.Height/2
 
 		// Check what's to the right
 		rightMon := disp.GetMonitorAt(x+mon.Width, y)
 		if rightMon != nil && rightMon != mon {
-			fmt.Printf("  %s -> %s (right)\n", mon.Name, rightMon.Name)
+			logger.Infof("  %s -> %s (right)", mon.Name, rightMon.Name)
 		}
 
 		// Check what's below
 		belowMon := disp.GetMonitorAt(x, y+mon.Height)
 		if belowMon != nil && belowMon != mon {
-			fmt.Printf("  %s -> %s (below)\n", mon.Name, belowMon.Name)
+			logger.Infof("  %s -> %s (below)", mon.Name, belowMon.Name)
 		}
 	}
 }

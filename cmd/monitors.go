@@ -6,6 +6,7 @@ import (
 	"os"
 
 	"github.com/bnema/waymon/internal/display"
+	"github.com/bnema/waymon/internal/logger"
 	"github.com/spf13/cobra"
 )
 
@@ -83,30 +84,30 @@ func runMonitors(cmd *cobra.Command, args []string) error {
 
 	// Human-readable format
 	if len(monitors) == 0 {
-		fmt.Println("No monitors detected")
+		logger.Info("No monitors detected")
 		return nil
 	}
 
-	fmt.Printf("Detected %d monitor(s):\n\n", len(monitors))
+	logger.Infof("Detected %d monitor(s):\n", len(monitors))
 	
 	for i, mon := range monitors {
-		fmt.Printf("Monitor %d:\n", i+1)
-		fmt.Printf("  Name:       %s\n", mon.Name)
+		logger.Infof("Monitor %d:", i+1)
+		logger.Infof("  Name:       %s", mon.Name)
 		if mon.ID != "" && mon.ID != mon.Name {
-			fmt.Printf("  ID:         %s\n", mon.ID)
+			logger.Infof("  ID:         %s", mon.ID)
 		}
-		fmt.Printf("  Resolution: %dx%d\n", mon.Width, mon.Height)
-		fmt.Printf("  Position:   (%d, %d)\n", mon.X, mon.Y)
+		logger.Infof("  Resolution: %dx%d", mon.Width, mon.Height)
+		logger.Infof("  Position:   (%d, %d)", mon.X, mon.Y)
 		
 		if mon.Primary {
-			fmt.Printf("  Primary:    Yes\n")
+			logger.Info("  Primary:    Yes")
 		}
 		
 		if mon.Scale != 1.0 {
-			fmt.Printf("  Scale:      %.1fx\n", mon.Scale)
+			logger.Infof("  Scale:      %.1fx", mon.Scale)
 		}
 		
-		fmt.Println()
+		logger.Info("")
 	}
 
 	// Show total virtual screen size
@@ -131,7 +132,7 @@ func runMonitors(cmd *cobra.Command, args []string) error {
 		
 		totalWidth := maxX - minX
 		totalHeight := maxY - minY
-		fmt.Printf("Total virtual screen: %dx%d\n", totalWidth, totalHeight)
+		logger.Infof("Total virtual screen: %dx%d", totalWidth, totalHeight)
 	}
 
 	return nil

@@ -1,10 +1,8 @@
 package cmd
 
 import (
-	"fmt"
-	"os"
-
 	"github.com/bnema/waymon/internal/config"
+	"github.com/bnema/waymon/internal/logger"
 	"github.com/spf13/cobra"
 )
 
@@ -41,15 +39,9 @@ func init() {
 	rootCmd.AddCommand(configCmd)
 }
 
-// Exit with error message
-func exitError(format string, args ...interface{}) {
-	fmt.Fprintf(os.Stderr, "Error: "+format+"\n", args...)
-	os.Exit(1)
-}
-
 // initConfig reads in config file
 func initConfig() {
 	if err := config.Init(); err != nil {
-		fmt.Fprintf(os.Stderr, "Warning: %v\n", err)
+		logger.Warnf("Warning: %v", err)
 	}
 }

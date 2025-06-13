@@ -1,12 +1,15 @@
 package cmd
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
 	"github.com/bnema/waymon/internal/config"
+	"github.com/bnema/waymon/internal/logger"
 	"github.com/bnema/waymon/internal/server"
 	"github.com/bnema/waymon/internal/ui"
 	tea "github.com/charmbracelet/bubbletea"
@@ -71,8 +74,46 @@ func runServer(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("failed to create server: %w", err)
 	}
 
-	// Start the server
-	if err := srv.Start(); err != nil {
+	// Create inline TUI first so we can reference it in callbacks
+	model := ui.NewInlineServerModel(serverPort, cfg.Server.Name)
+	p := tea.NewProgram(model)
+
+	// Set up client connection callbacks
+	if sshSrv := srv.GetNetworkServer(); sshSrv != nil {
+		sshSrv.OnClientConnected = func(addr, publicKey string) {
+			p.Send(ui.ClientConnectedMsg{ClientAddr: addr})
+		}
+		sshSrv.OnClientDisconnected = func(addr string) {
+			p.Send(ui.ClientDisconnectedMsg{ClientAddr: addr})
+		}
+		sshSrv.OnAuthRequest = func(addr, publicKey, fingerprint string) bool {
+			// Send auth request to UI
+			p.Send(ui.SSHAuthRequestMsg{
+				ClientAddr:  addr,
+				PublicKey:   publicKey,
+				Fingerprint: fingerprint,
+			})
+			
+			// Wait for approval from UI
+			if authChan := model.GetAuthChannel(); authChan != nil {
+				select {
+				case approved := <-authChan:
+					return approved
+				case <-time.After(30 * time.Second):
+					// Timeout after 30 seconds
+					return false
+				}
+			}
+			return false
+		}
+	}
+
+	// Create a context that we'll cancel on shutdown
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	// Start the server with context
+	if err := srv.Start(ctx); err != nil {
 		return fmt.Errorf("failed to start server: %w", err)
 	}
 	defer srv.Stop()
@@ -80,29 +121,23 @@ func runServer(cmd *cobra.Command, args []string) error {
 	// Show monitor configuration
 	if disp := srv.GetDisplay(); disp != nil {
 		monitors := disp.GetMonitors()
-		fmt.Printf("Detected %d monitor(s):\n", len(monitors))
+		logger.Infof("Detected %d monitor(s):", len(monitors))
 		for _, mon := range monitors {
-			fmt.Printf("  %s: %dx%d at (%d,%d)", mon.Name, mon.Width, mon.Height, mon.X, mon.Y)
+			monitorInfo := fmt.Sprintf("  %s: %dx%d at (%d,%d)", mon.Name, mon.Width, mon.Height, mon.X, mon.Y)
 			if mon.Primary {
-				fmt.Printf(" [PRIMARY]")
+				monitorInfo += " [PRIMARY]"
 			}
 			if mon.Scale != 1.0 {
-				fmt.Printf(" scale=%.1f", mon.Scale)
+				monitorInfo += fmt.Sprintf(" scale=%.1f", mon.Scale)
 			}
-			fmt.Println()
+			logger.Info(monitorInfo)
 		}
 	}
 
 	// Show server info
-	fmt.Printf("\nStarting Waymon server '%s' on %s:%d\n", cfg.Server.Name, bindAddress, serverPort)
-	if cfg.Server.RequireAuth {
-		fmt.Println("Authentication enabled")
-	}
-
-	// Create simple TUI
-	model := ui.NewSimpleServerModel(srv.GetPort(), srv.GetName())
-
-	p := tea.NewProgram(model, tea.WithAltScreen())
+	logger.Infof("\nStarting Waymon SSH server '%s' on %s:%d", cfg.Server.Name, bindAddress, serverPort)
+	logger.Infof("SSH Host Key: %s", cfg.Server.SSHHostKeyPath)
+	logger.Infof("SSH Authorized Keys: %s", cfg.Server.SSHAuthKeysPath)
 
 	// Handle graceful shutdown
 	sigCh := make(chan os.Signal, 1)
@@ -110,6 +145,9 @@ func runServer(cmd *cobra.Command, args []string) error {
 
 	go func() {
 		<-sigCh
+		// Cancel context first to start shutdown
+		cancel()
+		// Then tell TUI to quit
 		p.Send(tea.Quit())
 	}()
 
@@ -127,14 +165,14 @@ func ensureServerConfig() error {
 
 	// Check if config file exists
 	if _, err := os.Stat(configPath); os.IsNotExist(err) {
-		fmt.Printf("No config file found. Creating default config at %s\n", configPath)
+		logger.Infof("No config file found. Creating default config at %s", configPath)
 
 		// Save default config
 		if err := config.Save(); err != nil {
 			return err
 		}
 
-		fmt.Println("Default configuration created successfully")
+		logger.Info("Default configuration created successfully")
 	}
 
 	return nil

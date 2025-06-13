@@ -6,6 +6,7 @@ import (
 	"text/tabwriter"
 
 	"github.com/bnema/waymon/internal/config"
+	"github.com/bnema/waymon/internal/logger"
 	"github.com/spf13/cobra"
 )
 
@@ -21,37 +22,44 @@ var configShowCmd = &cobra.Command{
 	RunE: func(cmd *cobra.Command, args []string) error {
 		cfg := config.Get()
 
-		fmt.Println("Current Configuration:")
-		fmt.Printf("Config file: %s\n\n", config.GetConfigPath())
+		logger.Info("Current Configuration:")
+		logger.Infof("Config file: %s\n", config.GetConfigPath())
 
-		fmt.Println("[Server]")
-		fmt.Printf("  Port: %d\n", cfg.Server.Port)
-		fmt.Printf("  Bind Address: %s\n", cfg.Server.BindAddress)
-		fmt.Printf("  Name: %s\n", cfg.Server.Name)
-		fmt.Printf("  Require Auth: %v\n", cfg.Server.RequireAuth)
-		fmt.Printf("  Max Clients: %d\n", cfg.Server.MaxClients)
-		fmt.Printf("  TLS Enabled: %v\n", cfg.Server.EnableTLS)
+		logger.Info("[Server]")
+		logger.Infof("  Port: %d", cfg.Server.Port)
+		logger.Infof("  Bind Address: %s", cfg.Server.BindAddress)
+		logger.Infof("  Name: %s", cfg.Server.Name)
+		logger.Infof("  Max Clients: %d", cfg.Server.MaxClients)
+		logger.Infof("  SSH Host Key: %s", cfg.Server.SSHHostKeyPath)
+		logger.Infof("  SSH Authorized Keys: %s", cfg.Server.SSHAuthKeysPath)
+		logger.Infof("  SSH Whitelist Only: %v", cfg.Server.SSHWhitelistOnly)
+		if len(cfg.Server.SSHWhitelist) > 0 {
+			logger.Info("  SSH Whitelist:")
+			for _, fp := range cfg.Server.SSHWhitelist {
+				logger.Infof("    - %s", fp)
+			}
+		}
 
-		fmt.Println("\n[Client]")
-		fmt.Printf("  Server Address: %s\n", cfg.Client.ServerAddress)
-		fmt.Printf("  Auto Connect: %v\n", cfg.Client.AutoConnect)
-		fmt.Printf("  Reconnect Delay: %d seconds\n", cfg.Client.ReconnectDelay)
-		fmt.Printf("  Edge Threshold: %d pixels\n", cfg.Client.EdgeThreshold)
-		fmt.Printf("  Hotkey: %s+%s\n", cfg.Client.HotkeyModifier, cfg.Client.HotkeyKey)
+		logger.Info("\n[Client]")
+		logger.Infof("  Server Address: %s", cfg.Client.ServerAddress)
+		logger.Infof("  Auto Connect: %v", cfg.Client.AutoConnect)
+		logger.Infof("  Reconnect Delay: %d seconds", cfg.Client.ReconnectDelay)
+		logger.Infof("  Edge Threshold: %d pixels", cfg.Client.EdgeThreshold)
+		logger.Infof("  Hotkey: %s+%s", cfg.Client.HotkeyModifier, cfg.Client.HotkeyKey)
 
-		fmt.Println("\n[Display]")
-		fmt.Printf("  Refresh Interval: %d seconds\n", cfg.Display.RefreshInterval)
-		fmt.Printf("  Backend: %s\n", cfg.Display.Backend)
-		fmt.Printf("  Cursor Tracking: %v\n", cfg.Display.CursorTracking)
+		logger.Info("\n[Display]")
+		logger.Infof("  Refresh Interval: %d seconds", cfg.Display.RefreshInterval)
+		logger.Infof("  Backend: %s", cfg.Display.Backend)
+		logger.Infof("  Cursor Tracking: %v", cfg.Display.CursorTracking)
 
-		fmt.Println("\n[Input]")
-		fmt.Printf("  Mouse Sensitivity: %.2f\n", cfg.Input.MouseSensitivity)
-		fmt.Printf("  Scroll Speed: %.2f\n", cfg.Input.ScrollSpeed)
-		fmt.Printf("  Keyboard Enabled: %v\n", cfg.Input.EnableKeyboard)
-		fmt.Printf("  Keyboard Layout: %s\n", cfg.Input.KeyboardLayout)
+		logger.Info("\n[Input]")
+		logger.Infof("  Mouse Sensitivity: %.2f", cfg.Input.MouseSensitivity)
+		logger.Infof("  Scroll Speed: %.2f", cfg.Input.ScrollSpeed)
+		logger.Infof("  Keyboard Enabled: %v", cfg.Input.EnableKeyboard)
+		logger.Infof("  Keyboard Layout: %s", cfg.Input.KeyboardLayout)
 
 		if len(cfg.Hosts) > 0 {
-			fmt.Println("\n[Hosts]")
+			logger.Info("\n[Hosts]")
 			w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
 			fmt.Fprintln(w, "  Name\tAddress\tPosition\tAuth")
 			for _, host := range cfg.Hosts {
@@ -75,7 +83,7 @@ var configSaveCmd = &cobra.Command{
 		if err := config.Save(); err != nil {
 			return err
 		}
-		fmt.Printf("Configuration saved to: %s\n", config.GetConfigPath())
+		logger.Infof("Configuration saved to: %s", config.GetConfigPath())
 		return nil
 	},
 }
@@ -117,7 +125,7 @@ var configHostAddCmd = &cobra.Command{
 			return err
 		}
 
-		fmt.Printf("Added host '%s' at %s (%s)\n", name, address, position)
+		logger.Infof("Added host '%s' at %s (%s)", name, address, position)
 		return nil
 	},
 }
@@ -133,7 +141,7 @@ var configHostRemoveCmd = &cobra.Command{
 			return err
 		}
 
-		fmt.Printf("Removed host '%s'\n", name)
+		logger.Infof("Removed host '%s'", name)
 		return nil
 	},
 }
@@ -145,7 +153,7 @@ var configHostListCmd = &cobra.Command{
 		hosts := config.ListHosts()
 
 		if len(hosts) == 0 {
-			fmt.Println("No hosts configured")
+			logger.Info("No hosts configured")
 			return nil
 		}
 
@@ -172,8 +180,8 @@ var configInitCmd = &cobra.Command{
 		// Check if config already exists
 		configPath := config.GetConfigPath()
 		if _, err := os.Stat(configPath); err == nil {
-			fmt.Printf("Configuration file already exists at: %s\n", configPath)
-			fmt.Println("Use --force to overwrite")
+			logger.Infof("Configuration file already exists at: %s", configPath)
+			logger.Info("Use --force to overwrite")
 
 			force, _ := cmd.Flags().GetBool("force")
 			if !force {
@@ -186,12 +194,89 @@ var configInitCmd = &cobra.Command{
 			return err
 		}
 
-		fmt.Printf("Configuration initialized at: %s\n", configPath)
-		fmt.Println("\nYou can now:")
-		fmt.Println("  - Edit the configuration file directly")
-		fmt.Println("  - Use 'waymon config host add' to add hosts")
-		fmt.Println("  - Use 'waymon config show' to view current settings")
+		logger.Infof("Configuration initialized at: %s", configPath)
+		logger.Info("\nYou can now:")
+		logger.Info("  - Edit the configuration file directly")
+		logger.Info("  - Use 'waymon config host add' to add hosts")
+		logger.Info("  - Use 'waymon config show' to view current settings")
 
+		return nil
+	},
+}
+
+var configSSHCmd = &cobra.Command{
+	Use:   "ssh",
+	Short: "Manage SSH whitelist",
+}
+
+var configSSHListCmd = &cobra.Command{
+	Use:   "list",
+	Short: "List whitelisted SSH keys",
+	RunE: func(cmd *cobra.Command, args []string) error {
+		cfg := config.Get()
+		
+		if len(cfg.Server.SSHWhitelist) == 0 {
+			logger.Info("No SSH keys in whitelist")
+			if cfg.Server.SSHWhitelistOnly {
+				logger.Info("\nWhitelist-only mode is ENABLED")
+				logger.Info("New connections will require approval")
+			} else {
+				logger.Info("\nWhitelist-only mode is DISABLED")
+				logger.Info("All SSH keys are accepted")
+			}
+			return nil
+		}
+		
+		logger.Info("Whitelisted SSH Keys:")
+		for i, fp := range cfg.Server.SSHWhitelist {
+			logger.Infof("%d. %s", i+1, fp)
+		}
+		
+		if cfg.Server.SSHWhitelistOnly {
+			logger.Info("\nWhitelist-only mode is ENABLED")
+		} else {
+			logger.Info("\nWhitelist-only mode is DISABLED")
+		}
+		
+		return nil
+	},
+}
+
+var configSSHRemoveCmd = &cobra.Command{
+	Use:   "remove <fingerprint>",
+	Short: "Remove SSH key from whitelist",
+	Args:  cobra.ExactArgs(1),
+	RunE: func(cmd *cobra.Command, args []string) error {
+		fingerprint := args[0]
+		
+		if err := config.RemoveSSHKeyFromWhitelist(fingerprint); err != nil {
+			return err
+		}
+		
+		logger.Infof("Removed SSH key from whitelist: %s", fingerprint)
+		return nil
+	},
+}
+
+var configSSHClearCmd = &cobra.Command{
+	Use:   "clear",
+	Short: "Clear all SSH keys from whitelist",
+	RunE: func(cmd *cobra.Command, args []string) error {
+		cfg := config.Get()
+		count := len(cfg.Server.SSHWhitelist)
+		
+		if count == 0 {
+			logger.Info("Whitelist is already empty")
+			return nil
+		}
+		
+		// Clear whitelist
+		cfg.Server.SSHWhitelist = []string{}
+		if err := config.UpdateServer(cfg.Server); err != nil {
+			return err
+		}
+		
+		logger.Infof("Cleared %d SSH key(s) from whitelist", count)
 		return nil
 	},
 }
@@ -202,11 +287,17 @@ func init() {
 	configCmd.AddCommand(configSaveCmd)
 	configCmd.AddCommand(configHostCmd)
 	configCmd.AddCommand(configInitCmd)
+	configCmd.AddCommand(configSSHCmd)
 
 	// Add host subcommands
 	configHostCmd.AddCommand(configHostAddCmd)
 	configHostCmd.AddCommand(configHostRemoveCmd)
 	configHostCmd.AddCommand(configHostListCmd)
+	
+	// Add SSH subcommands
+	configSSHCmd.AddCommand(configSSHListCmd)
+	configSSHCmd.AddCommand(configSSHRemoveCmd)
+	configSSHCmd.AddCommand(configSSHClearCmd)
 
 	// Add flags
 	configHostAddCmd.Flags().String("auth-token", "", "Authentication token for the host")
