@@ -77,7 +77,6 @@ nfpms:
     formats:
       - deb
       - rpm
-      - apk
       - archlinux
     bindir: /usr/bin
     section: utils
