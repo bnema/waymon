@@ -2,29 +2,28 @@
 package main
 
 import (
-	"fmt"
-	"log"
 	"math"
 	"time"
 
 	"github.com/bnema/waymon/internal/input"
+	"github.com/bnema/waymon/internal/logger"
 	"github.com/bnema/waymon/internal/proto"
 )
 
 func main() {
-	fmt.Println("Waymon Visual Mouse Test")
-	fmt.Println("=======================")
-	fmt.Println()
-	fmt.Println("This will draw a circle with your mouse cursor")
-	fmt.Println("Press Ctrl+C to stop")
-	fmt.Println()
-	fmt.Println("Starting in 3 seconds...")
+	logger.Info("Waymon Visual Mouse Test")
+	logger.Info("=======================")
+	logger.Info("")
+	logger.Info("This will draw a circle with your mouse cursor")
+	logger.Info("Press Ctrl+C to stop")
+	logger.Info("")
+	logger.Info("Starting in 3 seconds...")
 	time.Sleep(3 * time.Second)
 
 	// Create handler
 	handler, err := input.NewHandler()
 	if err != nil {
-		log.Fatalf("Failed to create input handler: %v", err)
+		logger.Fatal("Failed to create input handler: %v", err)
 	}
 	defer handler.Close()
 
@@ -35,7 +34,7 @@ func main() {
 	radius := 200.0
 	steps := 60
 
-	fmt.Printf("Drawing circle at (%.0f, %.0f) with radius %.0f\n", centerX, centerY, radius)
+	logger.Infof("Drawing circle at (%.0f, %.0f) with radius %.0f", centerX, centerY, radius)
 
 	// Move to starting position
 	startEvent := &proto.MouseEvent{
@@ -45,7 +44,7 @@ func main() {
 		TimestampMs: time.Now().UnixMilli(),
 	}
 	if err := coord.ProcessEvent(startEvent); err != nil {
-		log.Fatalf("Error moving to start: %v", err)
+		logger.Fatal("Error moving to start: %v", err)
 	}
 	time.Sleep(500 * time.Millisecond)
 
@@ -64,7 +63,7 @@ func main() {
 			}
 
 			if err := coord.ProcessEvent(event); err != nil {
-				log.Printf("Error moving mouse: %v", err)
+				logger.Errorf("Error moving mouse: %v", err)
 			}
 
 			time.Sleep(20 * time.Millisecond) // 50 FPS

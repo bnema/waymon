@@ -7,6 +7,7 @@ import (
 	"os/user"
 	"strings"
 
+	"github.com/bnema/waymon/internal/logger"
 	"github.com/spf13/cobra"
 )
 
@@ -24,14 +25,14 @@ func init() {
 }
 
 func runSetup(cmd *cobra.Command, args []string) error {
-	fmt.Println("Waymon uinput Setup")
-	fmt.Println("==================")
-	fmt.Println()
+	logger.Info("Waymon uinput Setup")
+	logger.Info("==================")
+	logger.Info("")
 
 	// Check if running as root
 	if os.Geteuid() == 0 {
-		fmt.Println("Please run this command as a normal user (not root)")
-		fmt.Println("The setup will use sudo when needed")
+		logger.Info("Please run this command as a normal user (not root)")
+		logger.Info("The setup will use sudo when needed")
 		return fmt.Errorf("cannot run setup as root")
 	}
 
@@ -68,17 +69,17 @@ func checkAndLoadUinput() error {
 	}
 
 	if strings.Contains(string(output), "uinput") {
-		fmt.Println("✓ uinput module already loaded")
+		logger.Info("✓ uinput module already loaded")
 		return nil
 	}
 
-	fmt.Println("Loading uinput module...")
+	logger.Info("Loading uinput module...")
 	cmd = exec.Command("sudo", "modprobe", "uinput")
 	if err := cmd.Run(); err != nil {
 		return fmt.Errorf("failed to load uinput module: %w", err)
 	}
 
-	fmt.Println("✓ uinput module loaded")
+	logger.Info("✓ uinput module loaded")
 	return nil
 }
 
@@ -87,23 +88,25 @@ func checkUinputDevice() error {
 	info, err := os.Stat("/dev/uinput")
 	if err != nil {
 		if os.IsNotExist(err) {
-			return fmt.Errorf("✗ /dev/uinput not found - this might be a problem")
+			logger.Error("✗ /dev/uinput not found - this might be a problem")
+			return fmt.Errorf("/dev/uinput not found")
 		}
 		return fmt.Errorf("failed to check /dev/uinput: %w", err)
 	}
 
 	// Check if it's a character device
 	if info.Mode()&os.ModeCharDevice == 0 {
-		return fmt.Errorf("✗ /dev/uinput is not a character device")
+	logger.Error("✗ /dev/uinput is not a character device")
+	return fmt.Errorf("/dev/uinput is not a character device")
 	}
 
-	fmt.Println("✓ /dev/uinput exists")
+	logger.Info("✓ /dev/uinput exists")
 	return nil
 }
 
 func showCurrentPermissions() error {
-	fmt.Println()
-	fmt.Println("Current /dev/uinput permissions:")
+	logger.Info("")
+	logger.Info("Current /dev/uinput permissions:")
 	
 	cmd := exec.Command("ls", "-la", "/dev/uinput")
 	output, err := cmd.Output()
@@ -111,13 +114,13 @@ func showCurrentPermissions() error {
 		return fmt.Errorf("failed to check permissions: %w", err)
 	}
 
-	fmt.Print(string(output))
+	logger.Info(string(output))
 	return nil
 }
 
 func createSecureSetup() error {
-	fmt.Println()
-	fmt.Println("Setting up secure uinput access...")
+	logger.Info("")
+	logger.Info("Setting up secure uinput access...")
 	
 	// Get current user
 	currentUser, err := user.Current()
@@ -131,14 +134,14 @@ func createSecureSetup() error {
 	}
 
 	// Add current user to waymon group
-	fmt.Printf("Adding %s to waymon group...\n", currentUser.Username)
+	logger.Infof("Adding %s to waymon group...", currentUser.Username)
 	cmd := exec.Command("sudo", "usermod", "-a", "-G", "waymon", currentUser.Username)
 	if err := cmd.Run(); err != nil {
 		return fmt.Errorf("failed to add user to waymon group: %w", err)
 	}
 
 	// Create secure udev rule - only waymon group can access
-	fmt.Println("Creating secure udev rule...")
+	logger.Info("Creating secure udev rule...")
 	rule := `KERNEL=="uinput", GROUP="waymon", MODE="0660", TAG+="uaccess"`
 	
 	// Create the udev rule file
@@ -160,10 +163,10 @@ func createSecureSetup() error {
 		return fmt.Errorf("failed to trigger udev: %w", err)
 	}
 
-	fmt.Println("✓ Secure udev rule created at /etc/udev/rules.d/99-waymon-uinput.rules")
-	fmt.Printf("✓ User %s added to waymon group\n", currentUser.Username)
-	fmt.Println()
-	fmt.Println("IMPORTANT: You must log out and back in for the group changes to take effect!")
+	logger.Info("✓ Secure udev rule created at /etc/udev/rules.d/99-waymon-uinput.rules")
+	logger.Infof("✓ User %s added to waymon group", currentUser.Username)
+	logger.Info("")
+	logger.Info("IMPORTANT: You must log out and back in for the group changes to take effect!")
 	return nil
 }
 
@@ -171,41 +174,41 @@ func ensureWaymonGroup() error {
 	// Check if waymon group exists
 	cmd := exec.Command("getent", "group", "waymon")
 	if err := cmd.Run(); err == nil {
-		fmt.Println("✓ waymon group already exists")
+		logger.Info("✓ waymon group already exists")
 		return nil
 	}
 
 	// Create waymon group
-	fmt.Println("Creating waymon group...")
+	logger.Info("Creating waymon group...")
 	cmd = exec.Command("sudo", "groupadd", "waymon")
 	if err := cmd.Run(); err != nil {
 		return fmt.Errorf("failed to create waymon group: %w", err)
 	}
 
-	fmt.Println("✓ waymon group created")
+	logger.Info("✓ waymon group created")
 	return nil
 }
 
 func testUinputAccess() error {
-	fmt.Println()
-	fmt.Println("Testing access...")
+	logger.Info("")
+	logger.Info("Testing access...")
 
 	// Try to open /dev/uinput for writing
 	file, err := os.OpenFile("/dev/uinput", os.O_WRONLY, 0)
 	if err != nil {
 		if os.IsPermission(err) {
-			fmt.Println("✗ No write access to /dev/uinput")
-			fmt.Println()
-			fmt.Println("You may need to log out and back in for group changes to take effect")
+			logger.Error("✗ No write access to /dev/uinput")
+			logger.Info("")
+			logger.Info("You may need to log out and back in for group changes to take effect")
 			return nil
 		}
 		return fmt.Errorf("failed to test access: %w", err)
 	}
 	file.Close()
 
-	fmt.Println("✓ You have write access to /dev/uinput")
-	fmt.Println()
-	fmt.Println("Setup complete! You can now run: waymon server or waymon client")
+	logger.Info("✓ You have write access to /dev/uinput")
+	logger.Info("")
+	logger.Info("Setup complete! You can now run: waymon server or waymon client")
 	return nil
 }
 

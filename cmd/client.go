@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"os/signal"
@@ -9,6 +10,7 @@ import (
 	"github.com/bnema/waymon/internal/config"
 	"github.com/bnema/waymon/internal/display"
 	"github.com/bnema/waymon/internal/input"
+	"github.com/bnema/waymon/internal/logger"
 	"github.com/bnema/waymon/internal/network"
 	"github.com/bnema/waymon/internal/ui"
 	tea "github.com/charmbracelet/bubbletea"
@@ -81,21 +83,35 @@ func runClient(cmd *cobra.Command, args []string) error {
 
 	// Show monitor configuration
 	monitors := disp.GetMonitors()
-	fmt.Printf("Detected %d monitor(s):\n", len(monitors))
+	logger.Infof("Detected %d monitor(s):", len(monitors))
 	for _, mon := range monitors {
-		fmt.Printf("  %s: %dx%d at (%d,%d)\n", mon.Name, mon.Width, mon.Height, mon.X, mon.Y)
+		logger.Infof("  %s: %dx%d at (%d,%d)", mon.Name, mon.Width, mon.Height, mon.X, mon.Y)
 	}
 
-	// Create client (will connect later)
-	client := network.NewClient()
+	// Create SSH client (will connect later)
+	privateKeyPath := cfg.Client.SSHPrivateKey
+	client := network.NewSSHClient(privateKeyPath)
 	defer client.Disconnect()
 
 	// Create edge detector
 	edgeDetector := input.NewEdgeDetector(disp, client, int32(edgeSize))
 
-	// Create simple TUI model
-	model := ui.NewSimpleClientModel(serverAddr, hostName)
-	model.SetEdgeDetector(edgeDetector)
+	// Create inline TUI model
+	model := ui.NewInlineClientModel(serverAddr)
+
+	// Create the program first
+	p := tea.NewProgram(model)
+
+	// Connect to server in background
+	go func() {
+		ctx := context.Background()
+		if err := client.Connect(ctx, serverAddr); err != nil {
+			logger.Errorf("Failed to connect to server: %v", err)
+			p.Send(ui.DisconnectedMsg{})
+		} else {
+			p.Send(ui.ConnectedMsg{})
+		}
+	}()
 
 	// Set up edge callbacks
 	edgeDetector.SetCallbacks(
@@ -103,17 +119,15 @@ func runClient(cmd *cobra.Command, args []string) error {
 			// Edge entered - start capture
 			if client.IsConnected() {
 				edgeDetector.StartCapture(edge)
-				model.SetCapturing(true)
+				p.Send(ui.CaptureStartMsg{})
 			}
 		},
 		func() {
 			// Edge left - stop capture
 			edgeDetector.StopCapture()
-			model.SetCapturing(false)
+			p.Send(ui.CaptureStopMsg{})
 		},
 	)
-
-	p := tea.NewProgram(model, tea.WithAltScreen())
 
 	// Handle graceful shutdown
 	sigCh := make(chan os.Signal, 1)

@@ -3,10 +3,10 @@ package main
 
 import (
 	"fmt"
-	"log"
 	"time"
 
 	"github.com/bnema/waymon/internal/input"
+	"github.com/bnema/waymon/internal/logger"
 	"github.com/bnema/waymon/internal/proto"
 )
 
@@ -28,7 +28,7 @@ func main() {
 	// Create handler
 	handler, err := input.NewHandler()
 	if err != nil {
-		log.Fatalf("Failed to create input handler: %v", err)
+		logger.Fatalf("Failed to create input handler: %v", err)
 	}
 	defer handler.Close()
 
@@ -60,7 +60,7 @@ func main() {
 			TimestampMs: time.Now().UnixMilli(),
 		}
 		if err := coord.ProcessEvent(event); err != nil {
-			log.Printf("Error moving mouse: %v", err)
+			logger.Errorf("Error moving mouse: %v", err)
 		}
 		time.Sleep(500 * time.Millisecond)
 	}
@@ -89,7 +89,7 @@ func main() {
 			TimestampMs: time.Now().UnixMilli(),
 		}
 		if err := coord.ProcessEvent(pressEvent); err != nil {
-			log.Printf("Error pressing %s button: %v", btn.name, err)
+			logger.Errorf("Error pressing %s button: %v", btn.name, err)
 		}
 
 		time.Sleep(100 * time.Millisecond)
@@ -104,7 +104,7 @@ func main() {
 			TimestampMs: time.Now().UnixMilli(),
 		}
 		if err := coord.ProcessEvent(releaseEvent); err != nil {
-			log.Printf("Error releasing %s button: %v", btn.name, err)
+			logger.Errorf("Error releasing %s button: %v", btn.name, err)
 		}
 
 		time.Sleep(500 * time.Millisecond)
@@ -131,7 +131,7 @@ func main() {
 				TimestampMs: time.Now().UnixMilli(),
 			}
 			if err := coord.ProcessEvent(event); err != nil {
-				log.Printf("Error scrolling %s: %v", scroll.name, err)
+				logger.Errorf("Error scrolling %s: %v", scroll.name, err)
 			}
 			time.Sleep(200 * time.Millisecond)
 		}
