@@ -6,6 +6,8 @@ import (
 	"os"
 	"os/exec"
 	"strings"
+
+	"github.com/bnema/waymon/internal/logger"
 )
 
 // wlrRandrBackend uses wlr-randr for display detection
@@ -59,7 +61,7 @@ func (w *wlrRandrBackend) GetMonitors() ([]*Monitor, error) {
 	if err != nil {
 		// Log the error output for debugging
 		if len(output) > 0 {
-			fmt.Fprintf(os.Stderr, "wlr-randr error: %s\n", string(output))
+			logger.Errorf("wlr-randr error: %s", string(output))
 		}
 		// If JSON flag doesn't work, try parsing text output
 		return w.getMonitorsText()
@@ -129,13 +131,35 @@ func (w *wlrRandrBackend) GetMonitors() ([]*Monitor, error) {
 			Width:   int32(width),
 			Height:  int32(height),
 			Scale:   scale,
-			Primary: output.Primary || i == 0, // First monitor is primary if none specified
+			Primary: output.Primary,
 		}
 		monitors = append(monitors, monitor)
 	}
 
 	if len(monitors) == 0 {
 		return nil, fmt.Errorf("no active monitors found")
+	}
+
+	// If no monitor is explicitly marked as primary, use the one at position (0,0)
+	hasPrimary := false
+	for _, m := range monitors {
+		if m.Primary {
+			hasPrimary = true
+			break
+		}
+	}
+	
+	if !hasPrimary {
+		for _, m := range monitors {
+			if m.X == 0 && m.Y == 0 {
+				m.Primary = true
+				break
+			}
+		}
+		// If still no primary (no monitor at 0,0), fall back to first monitor
+		if !hasPrimary && len(monitors) > 0 {
+			monitors[0].Primary = true
+		}
 	}
 
 	return monitors, nil
@@ -179,7 +203,7 @@ func (w *wlrRandrBackend) getMonitorsText() ([]*Monitor, error) {
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		if len(output) > 0 {
-			fmt.Fprintf(os.Stderr, "wlr-randr error: %s\n", string(output))
+			logger.Errorf("wlr-randr error: %s", string(output))
 		}
 		return nil, fmt.Errorf("failed to run wlr-randr: %w", err)
 	}
@@ -277,9 +301,27 @@ func (w *wlrRandrBackend) getMonitorsText() ([]*Monitor, error) {
 		return nil, fmt.Errorf("no monitors detected from wlr-randr output")
 	}
 
-	// Set first monitor as primary if none specified
-	if len(monitors) > 0 {
-		monitors[0].Primary = true
+	// If no monitor is explicitly marked as primary, use the one at position (0,0)
+	hasPrimary := false
+	for _, m := range monitors {
+		if m.Primary {
+			hasPrimary = true
+			break
+		}
+	}
+	
+	if !hasPrimary {
+		for _, m := range monitors {
+			if m.X == 0 && m.Y == 0 {
+				m.Primary = true
+				hasPrimary = true
+				break
+			}
+		}
+		// If still no primary (no monitor at 0,0), fall back to first monitor
+		if !hasPrimary && len(monitors) > 0 {
+			monitors[0].Primary = true
+		}
 	}
 
 	return monitors, nil

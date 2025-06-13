@@ -13,7 +13,7 @@ import (
 // EdgeDetector monitors cursor position and triggers edge events
 type EdgeDetector struct {
 	display   *display.Display
-	client    *network.Client
+	client    network.Client
 	threshold int32
 
 	mu        sync.Mutex
@@ -32,7 +32,7 @@ type EdgeDetector struct {
 }
 
 // NewEdgeDetector creates a new edge detector
-func NewEdgeDetector(disp *display.Display, client *network.Client, threshold int32) *EdgeDetector {
+func NewEdgeDetector(disp *display.Display, client network.Client, threshold int32) *EdgeDetector {
 	if threshold <= 0 {
 		threshold = 5 // Default 5 pixels
 	}
@@ -162,14 +162,16 @@ func (e *EdgeDetector) StartCapture(edge display.Edge) error {
 
 	// Send MouseEnter event to server
 	if e.client != nil && e.client.IsConnected() {
-		event := &waymonProto.MouseEvent{
-			Type:        waymonProto.EventType_EVENT_TYPE_ENTER,
-			X:           float64(e.lastX),
-			Y:           float64(e.lastY),
-			TimestampMs: time.Now().UnixMilli(),
+		event := &network.MouseEvent{
+			MouseEvent: &waymonProto.MouseEvent{
+				Type:        waymonProto.EventType_EVENT_TYPE_ENTER,
+				X:           float64(e.lastX),
+				Y:           float64(e.lastY),
+				TimestampMs: time.Now().UnixMilli(),
+			},
 		}
 
-		return e.client.SendEvent(event)
+		return e.client.SendMouseEvent(event)
 	}
 
 	return nil
@@ -188,14 +190,16 @@ func (e *EdgeDetector) StopCapture() error {
 
 	// Send MouseLeave event to server
 	if e.client != nil && e.client.IsConnected() {
-		event := &waymonProto.MouseEvent{
-			Type:        waymonProto.EventType_EVENT_TYPE_LEAVE,
-			X:           float64(e.lastX),
-			Y:           float64(e.lastY),
-			TimestampMs: time.Now().UnixMilli(),
+		event := &network.MouseEvent{
+			MouseEvent: &waymonProto.MouseEvent{
+				Type:        waymonProto.EventType_EVENT_TYPE_LEAVE,
+				X:           float64(e.lastX),
+				Y:           float64(e.lastY),
+				TimestampMs: time.Now().UnixMilli(),
+			},
 		}
 
-		return e.client.SendEvent(event)
+		return e.client.SendMouseEvent(event)
 	}
 
 	return nil
@@ -227,14 +231,16 @@ func (e *EdgeDetector) HandleMouseMove(dx, dy int32) error {
 	e.lastY += dy
 
 	// Send relative movement to server
-	event := &waymonProto.MouseEvent{
-		Type:        waymonProto.EventType_EVENT_TYPE_MOVE,
-		X:           float64(dx), // Relative movement
-		Y:           float64(dy),
-		TimestampMs: time.Now().UnixMilli(),
+	event := &network.MouseEvent{
+		MouseEvent: &waymonProto.MouseEvent{
+			Type:        waymonProto.EventType_EVENT_TYPE_MOVE,
+			X:           float64(dx), // Relative movement
+			Y:           float64(dy),
+			TimestampMs: time.Now().UnixMilli(),
+		},
 	}
 
-	return e.client.SendEvent(event)
+	return e.client.SendMouseEvent(event)
 }
 
 // HandleMouseButton processes mouse button events when capturing
@@ -246,16 +252,18 @@ func (e *EdgeDetector) HandleMouseButton(button waymonProto.MouseButton, pressed
 		return nil
 	}
 
-	event := &waymonProto.MouseEvent{
-		Type:        waymonProto.EventType_EVENT_TYPE_CLICK,
-		Button:      button,
-		X:           float64(e.lastX),
-		Y:           float64(e.lastY),
-		IsPressed:   pressed,
-		TimestampMs: time.Now().UnixMilli(),
+	event := &network.MouseEvent{
+		MouseEvent: &waymonProto.MouseEvent{
+			Type:        waymonProto.EventType_EVENT_TYPE_CLICK,
+			Button:      button,
+			X:           float64(e.lastX),
+			Y:           float64(e.lastY),
+			IsPressed:   pressed,
+			TimestampMs: time.Now().UnixMilli(),
+		},
 	}
 
-	return e.client.SendEvent(event)
+	return e.client.SendMouseEvent(event)
 }
 
 // HandleMouseScroll processes mouse scroll events when capturing
@@ -267,13 +275,15 @@ func (e *EdgeDetector) HandleMouseScroll(direction waymonProto.ScrollDirection, 
 		return nil
 	}
 
-	event := &waymonProto.MouseEvent{
-		Type:        waymonProto.EventType_EVENT_TYPE_SCROLL,
-		Direction:   direction,
-		X:           float64(e.lastX),
-		Y:           float64(e.lastY),
-		TimestampMs: time.Now().UnixMilli(),
+	event := &network.MouseEvent{
+		MouseEvent: &waymonProto.MouseEvent{
+			Type:        waymonProto.EventType_EVENT_TYPE_SCROLL,
+			Direction:   direction,
+			X:           float64(e.lastX),
+			Y:           float64(e.lastY),
+			TimestampMs: time.Now().UnixMilli(),
+		},
 	}
 
-	return e.client.SendEvent(event)
+	return e.client.SendMouseEvent(event)
 }

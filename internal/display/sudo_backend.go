@@ -9,6 +9,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/bnema/waymon/internal/logger"
 )
 
 // sudoBackend runs display detection as the actual user when running with sudo
@@ -31,7 +33,7 @@ func (s *sudoBackend) GetMonitors() ([]*Monitor, error) {
 	sudoUID := os.Getenv("SUDO_UID")
 	
 	if os.Getenv("WAYMON_DISPLAY_HELPER") != "1" {
-		fmt.Printf("DEBUG: sudoBackend - SUDO_USER=%s, SUDO_UID=%s\n", sudoUser, sudoUID)
+		logger.Debugf("sudoBackend - SUDO_USER=%s, SUDO_UID=%s", sudoUser, sudoUID)
 	}
 	
 	if sudoUID == "" {
@@ -75,9 +77,9 @@ func (s *sudoBackend) GetMonitors() ([]*Monitor, error) {
 		fmt.Sprintf("WAYLAND_DISPLAY=%s", waylandDisplay))
 
 	if os.Getenv("WAYMON_DISPLAY_HELPER") != "1" {
-		fmt.Printf("DEBUG: Running command: %s\n", cmd.String())
-		fmt.Printf("DEBUG: With XDG_RUNTIME_DIR=/run/user/%s\n", sudoUID)
-		fmt.Printf("DEBUG: With WAYLAND_DISPLAY=%s\n", waylandDisplay)
+		logger.Debugf("Running command: %s", cmd.String())
+		logger.Debugf("With XDG_RUNTIME_DIR=/run/user/%s", sudoUID)
+		logger.Debugf("With WAYLAND_DISPLAY=%s", waylandDisplay)
 	}
 
 	// Create a context with timeout
