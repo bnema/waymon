@@ -79,10 +79,14 @@ func (h *uInputHandler) ProcessBatch(batch *proto.EventBatch) error {
 		return ErrInvalidEvent
 	}
 
-	for _, event := range batch.Events {
-		if err := h.ProcessEvent(event); err != nil {
-			return err
+	for _, inputEvent := range batch.Events {
+		// For now, only handle mouse events
+		if inputEvent.GetMouse() != nil {
+			if err := h.ProcessEvent(inputEvent.GetMouse()); err != nil {
+				return err
+			}
 		}
+		// TODO: Handle keyboard events when implemented
 	}
 
 	return nil

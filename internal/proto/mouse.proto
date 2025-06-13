@@ -4,7 +4,7 @@ package waymon;
 
 option go_package = "github.com/bnema/waymon/internal/proto";
 
-// EventType defines the type of mouse event
+// EventType defines the type of input event
 enum EventType {
   EVENT_TYPE_UNSPECIFIED = 0;
   EVENT_TYPE_MOVE = 1;
@@ -12,6 +12,7 @@ enum EventType {
   EVENT_TYPE_SCROLL = 3;
   EVENT_TYPE_ENTER = 4;
   EVENT_TYPE_LEAVE = 5;
+  EVENT_TYPE_KEY = 6;
 }
 
 // MouseButton defines mouse button values
@@ -44,7 +45,27 @@ message MouseEvent {
   bool is_pressed = 7; // For click events: true = press, false = release
 }
 
+// KeyEvent represents a keyboard event
+message KeyEvent {
+  uint32 keycode = 1;     // Linux event code (e.g., KEY_A = 30)
+  string key = 2;         // Human-readable key name (e.g., "a", "space", "ctrl")
+  bool is_pressed = 3;    // true = key down, false = key up
+  bool ctrl = 4;          // Modifier keys
+  bool alt = 5;
+  bool shift = 6;
+  bool meta = 7;          // Windows/Command key
+  int64 timestamp_ms = 8;
+}
+
+// InputEvent wraps both mouse and keyboard events
+message InputEvent {
+  oneof event {
+    MouseEvent mouse = 1;
+    KeyEvent key = 2;
+  }
+}
+
 // EventBatch allows sending multiple events at once for efficiency
 message EventBatch {
-  repeated MouseEvent events = 1;
+  repeated InputEvent events = 1;
 }

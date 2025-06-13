@@ -21,7 +21,7 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
-// EventType defines the type of mouse event
+// EventType defines the type of input event
 type EventType int32
 
 const (
@@ -31,6 +31,7 @@ const (
 	EventType_EVENT_TYPE_SCROLL      EventType = 3
 	EventType_EVENT_TYPE_ENTER       EventType = 4
 	EventType_EVENT_TYPE_LEAVE       EventType = 5
+	EventType_EVENT_TYPE_KEY         EventType = 6
 )
 
 // Enum value maps for EventType.
@@ -42,6 +43,7 @@ var (
 		3: "EVENT_TYPE_SCROLL",
 		4: "EVENT_TYPE_ENTER",
 		5: "EVENT_TYPE_LEAVE",
+		6: "EVENT_TYPE_KEY",
 	}
 	EventType_value = map[string]int32{
 		"EVENT_TYPE_UNSPECIFIED": 0,
@@ -50,6 +52,7 @@ var (
 		"EVENT_TYPE_SCROLL":      3,
 		"EVENT_TYPE_ENTER":       4,
 		"EVENT_TYPE_LEAVE":       5,
+		"EVENT_TYPE_KEY":         6,
 	}
 )
 
@@ -288,17 +291,201 @@ func (x *MouseEvent) GetIsPressed() bool {
 	return false
 }
 
+// KeyEvent represents a keyboard event
+type KeyEvent struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Keycode       uint32                 `protobuf:"varint,1,opt,name=keycode,proto3" json:"keycode,omitempty"`                      // Linux event code (e.g., KEY_A = 30)
+	Key           string                 `protobuf:"bytes,2,opt,name=key,proto3" json:"key,omitempty"`                               // Human-readable key name (e.g., "a", "space", "ctrl")
+	IsPressed     bool                   `protobuf:"varint,3,opt,name=is_pressed,json=isPressed,proto3" json:"is_pressed,omitempty"` // true = key down, false = key up
+	Ctrl          bool                   `protobuf:"varint,4,opt,name=ctrl,proto3" json:"ctrl,omitempty"`                            // Modifier keys
+	Alt           bool                   `protobuf:"varint,5,opt,name=alt,proto3" json:"alt,omitempty"`
+	Shift         bool                   `protobuf:"varint,6,opt,name=shift,proto3" json:"shift,omitempty"`
+	Meta          bool                   `protobuf:"varint,7,opt,name=meta,proto3" json:"meta,omitempty"` // Windows/Command key
+	TimestampMs   int64                  `protobuf:"varint,8,opt,name=timestamp_ms,json=timestampMs,proto3" json:"timestamp_ms,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *KeyEvent) Reset() {
+	*x = KeyEvent{}
+	mi := &file_internal_proto_mouse_proto_msgTypes[1]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *KeyEvent) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*KeyEvent) ProtoMessage() {}
+
+func (x *KeyEvent) ProtoReflect() protoreflect.Message {
+	mi := &file_internal_proto_mouse_proto_msgTypes[1]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use KeyEvent.ProtoReflect.Descriptor instead.
+func (*KeyEvent) Descriptor() ([]byte, []int) {
+	return file_internal_proto_mouse_proto_rawDescGZIP(), []int{1}
+}
+
+func (x *KeyEvent) GetKeycode() uint32 {
+	if x != nil {
+		return x.Keycode
+	}
+	return 0
+}
+
+func (x *KeyEvent) GetKey() string {
+	if x != nil {
+		return x.Key
+	}
+	return ""
+}
+
+func (x *KeyEvent) GetIsPressed() bool {
+	if x != nil {
+		return x.IsPressed
+	}
+	return false
+}
+
+func (x *KeyEvent) GetCtrl() bool {
+	if x != nil {
+		return x.Ctrl
+	}
+	return false
+}
+
+func (x *KeyEvent) GetAlt() bool {
+	if x != nil {
+		return x.Alt
+	}
+	return false
+}
+
+func (x *KeyEvent) GetShift() bool {
+	if x != nil {
+		return x.Shift
+	}
+	return false
+}
+
+func (x *KeyEvent) GetMeta() bool {
+	if x != nil {
+		return x.Meta
+	}
+	return false
+}
+
+func (x *KeyEvent) GetTimestampMs() int64 {
+	if x != nil {
+		return x.TimestampMs
+	}
+	return 0
+}
+
+// InputEvent wraps both mouse and keyboard events
+type InputEvent struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Types that are valid to be assigned to Event:
+	//
+	//	*InputEvent_Mouse
+	//	*InputEvent_Key
+	Event         isInputEvent_Event `protobuf_oneof:"event"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *InputEvent) Reset() {
+	*x = InputEvent{}
+	mi := &file_internal_proto_mouse_proto_msgTypes[2]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *InputEvent) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*InputEvent) ProtoMessage() {}
+
+func (x *InputEvent) ProtoReflect() protoreflect.Message {
+	mi := &file_internal_proto_mouse_proto_msgTypes[2]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use InputEvent.ProtoReflect.Descriptor instead.
+func (*InputEvent) Descriptor() ([]byte, []int) {
+	return file_internal_proto_mouse_proto_rawDescGZIP(), []int{2}
+}
+
+func (x *InputEvent) GetEvent() isInputEvent_Event {
+	if x != nil {
+		return x.Event
+	}
+	return nil
+}
+
+func (x *InputEvent) GetMouse() *MouseEvent {
+	if x != nil {
+		if x, ok := x.Event.(*InputEvent_Mouse); ok {
+			return x.Mouse
+		}
+	}
+	return nil
+}
+
+func (x *InputEvent) GetKey() *KeyEvent {
+	if x != nil {
+		if x, ok := x.Event.(*InputEvent_Key); ok {
+			return x.Key
+		}
+	}
+	return nil
+}
+
+type isInputEvent_Event interface {
+	isInputEvent_Event()
+}
+
+type InputEvent_Mouse struct {
+	Mouse *MouseEvent `protobuf:"bytes,1,opt,name=mouse,proto3,oneof"`
+}
+
+type InputEvent_Key struct {
+	Key *KeyEvent `protobuf:"bytes,2,opt,name=key,proto3,oneof"`
+}
+
+func (*InputEvent_Mouse) isInputEvent_Event() {}
+
+func (*InputEvent_Key) isInputEvent_Event() {}
+
 // EventBatch allows sending multiple events at once for efficiency
 type EventBatch struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	Events        []*MouseEvent          `protobuf:"bytes,1,rep,name=events,proto3" json:"events,omitempty"`
+	Events        []*InputEvent          `protobuf:"bytes,1,rep,name=events,proto3" json:"events,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *EventBatch) Reset() {
 	*x = EventBatch{}
-	mi := &file_internal_proto_mouse_proto_msgTypes[1]
+	mi := &file_internal_proto_mouse_proto_msgTypes[3]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -310,7 +497,7 @@ func (x *EventBatch) String() string {
 func (*EventBatch) ProtoMessage() {}
 
 func (x *EventBatch) ProtoReflect() protoreflect.Message {
-	mi := &file_internal_proto_mouse_proto_msgTypes[1]
+	mi := &file_internal_proto_mouse_proto_msgTypes[3]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -323,10 +510,10 @@ func (x *EventBatch) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use EventBatch.ProtoReflect.Descriptor instead.
 func (*EventBatch) Descriptor() ([]byte, []int) {
-	return file_internal_proto_mouse_proto_rawDescGZIP(), []int{1}
+	return file_internal_proto_mouse_proto_rawDescGZIP(), []int{3}
 }
 
-func (x *EventBatch) GetEvents() []*MouseEvent {
+func (x *EventBatch) GetEvents() []*InputEvent {
 	if x != nil {
 		return x.Events
 	}
@@ -347,17 +534,33 @@ const file_internal_proto_mouse_proto_rawDesc = "" +
 	"\tdirection\x18\x05 \x01(\x0e2\x17.waymon.ScrollDirectionR\tdirection\x12!\n" +
 	"\ftimestamp_ms\x18\x06 \x01(\x03R\vtimestampMs\x12\x1d\n" +
 	"\n" +
-	"is_pressed\x18\a \x01(\bR\tisPressed\"8\n" +
+	"is_pressed\x18\a \x01(\bR\tisPressed\"\xc8\x01\n" +
+	"\bKeyEvent\x12\x18\n" +
+	"\akeycode\x18\x01 \x01(\rR\akeycode\x12\x10\n" +
+	"\x03key\x18\x02 \x01(\tR\x03key\x12\x1d\n" +
+	"\n" +
+	"is_pressed\x18\x03 \x01(\bR\tisPressed\x12\x12\n" +
+	"\x04ctrl\x18\x04 \x01(\bR\x04ctrl\x12\x10\n" +
+	"\x03alt\x18\x05 \x01(\bR\x03alt\x12\x14\n" +
+	"\x05shift\x18\x06 \x01(\bR\x05shift\x12\x12\n" +
+	"\x04meta\x18\a \x01(\bR\x04meta\x12!\n" +
+	"\ftimestamp_ms\x18\b \x01(\x03R\vtimestampMs\"g\n" +
+	"\n" +
+	"InputEvent\x12*\n" +
+	"\x05mouse\x18\x01 \x01(\v2\x12.waymon.MouseEventH\x00R\x05mouse\x12$\n" +
+	"\x03key\x18\x02 \x01(\v2\x10.waymon.KeyEventH\x00R\x03keyB\a\n" +
+	"\x05event\"8\n" +
 	"\n" +
 	"EventBatch\x12*\n" +
-	"\x06events\x18\x01 \x03(\v2\x12.waymon.MouseEventR\x06events*\x95\x01\n" +
+	"\x06events\x18\x01 \x03(\v2\x12.waymon.InputEventR\x06events*\xa9\x01\n" +
 	"\tEventType\x12\x1a\n" +
 	"\x16EVENT_TYPE_UNSPECIFIED\x10\x00\x12\x13\n" +
 	"\x0fEVENT_TYPE_MOVE\x10\x01\x12\x14\n" +
 	"\x10EVENT_TYPE_CLICK\x10\x02\x12\x15\n" +
 	"\x11EVENT_TYPE_SCROLL\x10\x03\x12\x14\n" +
 	"\x10EVENT_TYPE_ENTER\x10\x04\x12\x14\n" +
-	"\x10EVENT_TYPE_LEAVE\x10\x05*\xa4\x01\n" +
+	"\x10EVENT_TYPE_LEAVE\x10\x05\x12\x12\n" +
+	"\x0eEVENT_TYPE_KEY\x10\x06*\xa4\x01\n" +
 	"\vMouseButton\x12\x1c\n" +
 	"\x18MOUSE_BUTTON_UNSPECIFIED\x10\x00\x12\x15\n" +
 	"\x11MOUSE_BUTTON_LEFT\x10\x01\x12\x16\n" +
@@ -385,24 +588,28 @@ func file_internal_proto_mouse_proto_rawDescGZIP() []byte {
 }
 
 var file_internal_proto_mouse_proto_enumTypes = make([]protoimpl.EnumInfo, 3)
-var file_internal_proto_mouse_proto_msgTypes = make([]protoimpl.MessageInfo, 2)
+var file_internal_proto_mouse_proto_msgTypes = make([]protoimpl.MessageInfo, 4)
 var file_internal_proto_mouse_proto_goTypes = []any{
 	(EventType)(0),       // 0: waymon.EventType
 	(MouseButton)(0),     // 1: waymon.MouseButton
 	(ScrollDirection)(0), // 2: waymon.ScrollDirection
 	(*MouseEvent)(nil),   // 3: waymon.MouseEvent
-	(*EventBatch)(nil),   // 4: waymon.EventBatch
+	(*KeyEvent)(nil),     // 4: waymon.KeyEvent
+	(*InputEvent)(nil),   // 5: waymon.InputEvent
+	(*EventBatch)(nil),   // 6: waymon.EventBatch
 }
 var file_internal_proto_mouse_proto_depIdxs = []int32{
 	0, // 0: waymon.MouseEvent.type:type_name -> waymon.EventType
 	1, // 1: waymon.MouseEvent.button:type_name -> waymon.MouseButton
 	2, // 2: waymon.MouseEvent.direction:type_name -> waymon.ScrollDirection
-	3, // 3: waymon.EventBatch.events:type_name -> waymon.MouseEvent
-	4, // [4:4] is the sub-list for method output_type
-	4, // [4:4] is the sub-list for method input_type
-	4, // [4:4] is the sub-list for extension type_name
-	4, // [4:4] is the sub-list for extension extendee
-	0, // [0:4] is the sub-list for field type_name
+	3, // 3: waymon.InputEvent.mouse:type_name -> waymon.MouseEvent
+	4, // 4: waymon.InputEvent.key:type_name -> waymon.KeyEvent
+	5, // 5: waymon.EventBatch.events:type_name -> waymon.InputEvent
+	6, // [6:6] is the sub-list for method output_type
+	6, // [6:6] is the sub-list for method input_type
+	6, // [6:6] is the sub-list for extension type_name
+	6, // [6:6] is the sub-list for extension extendee
+	0, // [0:6] is the sub-list for field type_name
 }
 
 func init() { file_internal_proto_mouse_proto_init() }
@@ -410,13 +617,17 @@ func file_internal_proto_mouse_proto_init() {
 	if File_internal_proto_mouse_proto != nil {
 		return
 	}
+	file_internal_proto_mouse_proto_msgTypes[2].OneofWrappers = []any{
+		(*InputEvent_Mouse)(nil),
+		(*InputEvent_Key)(nil),
+	}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_internal_proto_mouse_proto_rawDesc), len(file_internal_proto_mouse_proto_rawDesc)),
 			NumEnums:      3,
-			NumMessages:   2,
+			NumMessages:   4,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

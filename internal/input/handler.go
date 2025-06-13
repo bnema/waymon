@@ -80,10 +80,14 @@ func (c *Coordinator) ProcessBatch(batch *proto.EventBatch) error {
 		return ErrInvalidEvent
 	}
 
-	for _, event := range batch.Events {
-		if err := c.ProcessEvent(event); err != nil {
-			return fmt.Errorf("failed to process event: %w", err)
+	for _, inputEvent := range batch.Events {
+		// For now, only handle mouse events
+		if inputEvent.GetMouse() != nil {
+			if err := c.ProcessEvent(inputEvent.GetMouse()); err != nil {
+				return fmt.Errorf("failed to process mouse event: %w", err)
+			}
 		}
+		// TODO: Handle keyboard events when implemented
 	}
 
 	return nil

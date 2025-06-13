@@ -143,9 +143,8 @@ func (s *Server) handleMouseEvent(event *network.MouseEvent) error {
 		return fmt.Errorf("input handler not initialized")
 	}
 	
-	// Convert network event to input event and inject
-	// This is a placeholder - you'll need to implement the actual conversion
-	return nil
+	// The network.MouseEvent wraps proto.MouseEvent, so we can pass it directly
+	return s.inputHandler.ProcessEvent(event.MouseEvent)
 }
 
 // Stop stops the server
