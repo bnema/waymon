@@ -75,6 +75,35 @@ func TestInlineClientModel(t *testing.T) {
 		}
 	})
 
+	t.Run("handles waiting approval message", func(t *testing.T) {
+		model := NewInlineClientModel("192.168.1.100:52525")
+		
+		updatedModel, _ := model.Update(WaitingApprovalMsg{})
+		updated := updatedModel.(*InlineClientModel)
+
+		if !updated.waitingApproval {
+			t.Error("Should be waiting for approval after WaitingApprovalMsg")
+		}
+		if updated.message != "Waiting for server approval..." {
+			t.Errorf("Expected waiting message, got %q", updated.message)
+		}
+	})
+
+	t.Run("renders waiting for approval view", func(t *testing.T) {
+		model := NewInlineClientModel("192.168.1.100:52525")
+		model.waitingApproval = true
+		
+		view := model.View()
+
+		if !strings.Contains(view, "Waiting for approval") {
+			t.Error("Should show waiting for approval status")
+		}
+		// Should show spinner while waiting
+		if strings.Contains(view, "● Connected") {
+			t.Error("Should not show connected status when waiting for approval")
+		}
+	})
+
 	t.Run("toggles capture with space key", func(t *testing.T) {
 		model := NewInlineClientModel("192.168.1.100:52525")
 		model.connected = true
@@ -244,6 +273,111 @@ func TestInlineServerModel(t *testing.T) {
 		
 		if cmd == nil {
 			t.Error("Should return quit command")
+		}
+	})
+
+	t.Run("handles SSH auth request", func(t *testing.T) {
+		model := NewInlineServerModel(52525, "test-server")
+		responseChan := make(chan bool, 1)
+		
+		updatedModel, _ := model.Update(SSHAuthRequestMsg{
+			ClientAddr:   "192.168.1.100:12345",
+			PublicKey:    "ssh-ed25519 AAAAC...",
+			Fingerprint:  "SHA256:abc123",
+			ResponseChan: responseChan,
+		})
+		updated := updatedModel.(*InlineServerModel)
+
+		if updated.pendingAuth == nil {
+			t.Error("Should have pending auth after SSHAuthRequestMsg")
+		}
+		if updated.authChannel != responseChan {
+			t.Error("Should store response channel")
+		}
+	})
+
+	t.Run("renders auth prompt view", func(t *testing.T) {
+		model := NewInlineServerModel(52525, "test-server")
+		model.pendingAuth = &SSHAuthRequestMsg{
+			ClientAddr:  "192.168.1.100:12345",
+			Fingerprint: "SHA256:abc123",
+		}
+		
+		view := model.View()
+
+		if !strings.Contains(view, "⚠️  NEW CONNECTION:") {
+			t.Error("Should show new connection warning")
+		}
+		if !strings.Contains(view, "192.168.1.100:12345") {
+			t.Error("Should show client address")
+		}
+		if !strings.Contains(view, "SHA256:abc123") {
+			t.Error("Should show SSH key fingerprint")
+		}
+		if !strings.Contains(view, "Allow this connection? [Y/n]") {
+			t.Error("Should show approval prompt")
+		}
+	})
+
+	t.Run("approves auth with Y key", func(t *testing.T) {
+		model := NewInlineServerModel(52525, "test-server")
+		responseChan := make(chan bool, 1)
+		model.pendingAuth = &SSHAuthRequestMsg{
+			ClientAddr:   "192.168.1.100:12345",
+			Fingerprint:  "SHA256:abc123",
+			ResponseChan: responseChan,
+		}
+		model.authChannel = responseChan
+		
+		updatedModel, _ := model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'Y'}})
+		updated := updatedModel.(*InlineServerModel)
+
+		// Check approval was sent
+		select {
+		case approved := <-responseChan:
+			if !approved {
+				t.Error("Should have sent approval")
+			}
+		default:
+			t.Error("Should have sent approval to channel")
+		}
+
+		if updated.pendingAuth != nil {
+			t.Error("Should clear pending auth after approval")
+		}
+		if !strings.Contains(updated.message, "Approved connection") {
+			t.Errorf("Expected approval message, got %q", updated.message)
+		}
+	})
+
+	t.Run("denies auth with N key", func(t *testing.T) {
+		model := NewInlineServerModel(52525, "test-server")
+		responseChan := make(chan bool, 1)
+		model.pendingAuth = &SSHAuthRequestMsg{
+			ClientAddr:   "192.168.1.100:12345",
+			Fingerprint:  "SHA256:abc123",
+			ResponseChan: responseChan,
+		}
+		model.authChannel = responseChan
+		
+		updatedModel, _ := model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'n'}})
+		updated := updatedModel.(*InlineServerModel)
+
+		// Check denial was sent
+		select {
+		case approved := <-responseChan:
+			if approved {
+				t.Error("Should have sent denial")
+			}
+		default:
+			t.Error("Should have sent denial to channel")
+		}
+
+		if updated.pendingAuth != nil {
+			t.Error("Should clear pending auth after denial")
+		}
+		if !strings.Contains(updated.message, "Denied connection") {
+			t.Errorf("Expected denial message, got %q", updated.message)
 		}
 	})
 }

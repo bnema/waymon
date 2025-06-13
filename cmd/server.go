@@ -78,7 +78,7 @@ func runServer(cmd *cobra.Command, args []string) error {
 	model := ui.NewInlineServerModel(serverPort, cfg.Server.Name)
 	p := tea.NewProgram(model)
 
-	// Set up client connection callbacks
+	// Set up client connection callbacks BEFORE starting the server
 	if sshSrv := srv.GetNetworkServer(); sshSrv != nil {
 		sshSrv.OnClientConnected = func(addr, publicKey string) {
 			p.Send(ui.ClientConnectedMsg{ClientAddr: addr})
@@ -87,24 +87,25 @@ func runServer(cmd *cobra.Command, args []string) error {
 			p.Send(ui.ClientDisconnectedMsg{ClientAddr: addr})
 		}
 		sshSrv.OnAuthRequest = func(addr, publicKey, fingerprint string) bool {
-			// Send auth request to UI
+			// Create a channel for the response
+			responseChan := make(chan bool, 1)
+			
+			// Send auth request to UI with the response channel
 			p.Send(ui.SSHAuthRequestMsg{
-				ClientAddr:  addr,
-				PublicKey:   publicKey,
-				Fingerprint: fingerprint,
+				ClientAddr:    addr,
+				PublicKey:     publicKey,
+				Fingerprint:   fingerprint,
+				ResponseChan:  responseChan,
 			})
 			
 			// Wait for approval from UI
-			if authChan := model.GetAuthChannel(); authChan != nil {
-				select {
-				case approved := <-authChan:
-					return approved
-				case <-time.After(30 * time.Second):
-					// Timeout after 30 seconds
-					return false
-				}
+			select {
+			case approved := <-responseChan:
+				return approved
+			case <-time.After(30 * time.Second):
+				// Timeout after 30 seconds
+				return false
 			}
-			return false
 		}
 	}
 
@@ -112,7 +113,7 @@ func runServer(cmd *cobra.Command, args []string) error {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	// Start the server with context
+	// Start the server with context AFTER setting up callbacks
 	if err := srv.Start(ctx); err != nil {
 		return fmt.Errorf("failed to start server: %w", err)
 	}

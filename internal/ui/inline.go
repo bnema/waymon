@@ -12,14 +12,15 @@ import (
 
 // InlineClientModel represents the inline UI model for the client
 type InlineClientModel struct {
-	connected     bool
-	capturing     bool
-	serverAddr    string
-	lastUpdate    time.Time
-	spinner       spinner.Model
-	message       string
-	messageType   string // "info", "error", "success"
-	messageExpiry time.Time
+	connected      bool
+	waitingApproval bool
+	capturing      bool
+	serverAddr     string
+	lastUpdate     time.Time
+	spinner        spinner.Model
+	message        string
+	messageType    string // "info", "error", "success"
+	messageExpiry  time.Time
 }
 
 // NewInlineClientModel creates a new inline client UI model
@@ -66,7 +67,7 @@ func (m *InlineClientModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// Handle resize if needed
 
 	case spinner.TickMsg:
-		if !m.connected {
+		if !m.connected || m.waitingApproval {
 			var cmd tea.Cmd
 			m.spinner, cmd = m.spinner.Update(msg)
 			cmds = append(cmds, cmd)
@@ -74,12 +75,18 @@ func (m *InlineClientModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case ConnectedMsg:
 		m.connected = true
+		m.waitingApproval = false
 		m.SetMessage("success", "Connected to server")
 
 	case DisconnectedMsg:
 		m.connected = false
+		m.waitingApproval = false
 		m.capturing = false
 		m.SetMessage("error", "Disconnected from server")
+		
+	case WaitingApprovalMsg:
+		m.waitingApproval = true
+		m.SetMessage("info", "Waiting for server approval...")
 
 	case CaptureStartMsg:
 		m.capturing = true
@@ -113,6 +120,9 @@ func (m *InlineClientModel) View() string {
 	if m.connected {
 		connStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("42"))
 		parts = append(parts, connStyle.Render("● Connected"))
+	} else if m.waitingApproval {
+		connStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("214"))
+		parts = append(parts, connStyle.Render(m.spinner.View()+" Waiting for approval"))
 	} else {
 		connStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("196"))
 		parts = append(parts, connStyle.Render(m.spinner.View()+" Connecting"))
@@ -208,16 +218,20 @@ func (m *InlineServerModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			switch msg.String() {
 			case "y", "Y":
 				if m.authChannel != nil {
-					m.authChannel <- true
-					close(m.authChannel)
+					select {
+					case m.authChannel <- true:
+					default:
+					}
 				}
 				m.SetMessage("success", fmt.Sprintf("Approved connection from %s", m.pendingAuth.ClientAddr))
 				m.pendingAuth = nil
 				m.authChannel = nil
 			case "n", "N":
 				if m.authChannel != nil {
-					m.authChannel <- false
-					close(m.authChannel)
+					select {
+					case m.authChannel <- false:
+					default:
+					}
 				}
 				m.SetMessage("info", fmt.Sprintf("Denied connection from %s", m.pendingAuth.ClientAddr))
 				m.pendingAuth = nil
@@ -238,7 +252,7 @@ func (m *InlineServerModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case SSHAuthRequestMsg:
 		m.pendingAuth = &msg
-		m.authChannel = make(chan bool, 1)
+		m.authChannel = msg.ResponseChan
 		// Don't set a message, we'll show the prompt in the View
 
 	case ClientConnectedMsg:
@@ -272,14 +286,14 @@ func (m *InlineServerModel) View() string {
 		keyStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("247"))
 		promptStyle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("42"))
 		
-		// Clear the line and show auth prompt
-		return fmt.Sprintf("\r\033[K%s %s is trying to connect\n\r%s %s\n\r%s ",
-			warnStyle.Render("⚠️  NEW CONNECTION:"),
-			addrStyle.Render(m.pendingAuth.ClientAddr),
-			keyStyle.Render("SSH Key:"),
-			keyStyle.Render(m.pendingAuth.Fingerprint),
-			promptStyle.Render("Allow this connection? [Y/n]"),
-		)
+		// Build multi-line auth prompt with proper line clearing
+		lines := []string{
+			"\r\033[K" + warnStyle.Render("⚠️  NEW CONNECTION:") + " " + addrStyle.Render(m.pendingAuth.ClientAddr),
+			"\r\033[K" + keyStyle.Render("SSH Key:") + " " + keyStyle.Render(m.pendingAuth.Fingerprint),
+			"\r\033[K" + promptStyle.Render("Allow this connection? [Y/n]") + " ",
+		}
+		
+		return strings.Join(lines, "\n")
 	}
 
 	var parts []string
@@ -349,26 +363,21 @@ func pluralize(count int) string {
 	return "s"
 }
 
-func getIPFromAddress(addr string) string {
-	// Extract IP from "IP:port" format
-	if idx := strings.LastIndex(addr, ":"); idx != -1 {
-		return addr[:idx]
-	}
-	return addr
-}
 
 // Message types for reactive updates
 type (
 	ConnectedMsg          struct{}
 	DisconnectedMsg       struct{}
+	WaitingApprovalMsg    struct{}
 	CaptureStartMsg       struct{}
 	CaptureStopMsg        struct{}
 	ClientConnectedMsg    struct{ ClientAddr string }
 	ClientDisconnectedMsg struct{ ClientAddr string }
 	SSHAuthRequestMsg     struct{ 
-		ClientAddr string 
-		PublicKey  string
-		Fingerprint string
+		ClientAddr   string 
+		PublicKey    string
+		Fingerprint  string
+		ResponseChan chan bool
 	}
 	SSHAuthApprovedMsg    struct{ Fingerprint string }
 	SSHAuthDeniedMsg      struct{ Fingerprint string }

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 
 	"github.com/bnema/waymon/internal/config"
@@ -106,8 +107,13 @@ func runClient(cmd *cobra.Command, args []string) error {
 	go func() {
 		ctx := context.Background()
 		if err := client.Connect(ctx, serverAddr); err != nil {
-			logger.Errorf("Failed to connect to server: %v", err)
-			p.Send(ui.DisconnectedMsg{})
+			if strings.Contains(err.Error(), "waiting for server approval") {
+				logger.Info("Waiting for server approval...")
+				p.Send(ui.WaitingApprovalMsg{})
+			} else {
+				logger.Errorf("Failed to connect to server: %v", err)
+				p.Send(ui.DisconnectedMsg{})
+			}
 		} else {
 			p.Send(ui.ConnectedMsg{})
 		}
