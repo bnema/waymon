@@ -7,6 +7,7 @@ import (
 	"os/signal"
 	"strings"
 	"syscall"
+	"time"
 
 	"github.com/bnema/waymon/internal/config"
 	"github.com/bnema/waymon/internal/display"
@@ -44,6 +45,14 @@ func init() {
 }
 
 func runClient(cmd *cobra.Command, args []string) error {
+	// Set up file logging since Bubble Tea will hide terminal output
+	// This MUST be done before any log output to avoid TUI corruption
+	logFile, err := logger.SetupFileLogging("CLIENT")
+	if err != nil {
+		return fmt.Errorf("failed to setup file logging: %w", err)
+	}
+	defer logFile.Close()
+
 	// Verify uinput setup has been completed
 	if err := VerifyUinputSetup(); err != nil {
 		return fmt.Errorf("uinput setup verification failed: %w", err)
@@ -102,10 +111,22 @@ func runClient(cmd *cobra.Command, args []string) error {
 
 	// Create the program first
 	p := tea.NewProgram(model)
+	
+	// Set up logger to send log entries to UI
+	logger.SetUINotifier(func(level, message string) {
+		logEntry := ui.LogEntry{
+			Timestamp: time.Now(),
+			Level:     level,
+			Message:   message,
+		}
+		p.Send(ui.LogMsg{Entry: logEntry})
+	})
 
 	// Connect to server in background
 	go func() {
 		ctx := context.Background()
+		logger.Info("Attempting to connect to server", "addr", serverAddr)
+		
 		if err := client.Connect(ctx, serverAddr); err != nil {
 			if strings.Contains(err.Error(), "waiting for server approval") {
 				logger.Info("Waiting for server approval...")
@@ -115,6 +136,7 @@ func runClient(cmd *cobra.Command, args []string) error {
 				p.Send(ui.DisconnectedMsg{})
 			}
 		} else {
+			logger.Info("Successfully connected to server", "addr", serverAddr)
 			p.Send(ui.ConnectedMsg{})
 		}
 	}()

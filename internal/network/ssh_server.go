@@ -8,12 +8,11 @@ import (
 	"time"
 
 	"github.com/bnema/waymon/internal/config"
+	"github.com/bnema/waymon/internal/logger"
 	Proto "github.com/bnema/waymon/internal/proto"
-	"github.com/charmbracelet/log"
 	"github.com/charmbracelet/ssh"
 	"github.com/charmbracelet/wish"
 	"github.com/charmbracelet/wish/activeterm"
-	"github.com/charmbracelet/wish/logging"
 	gossh "golang.org/x/crypto/ssh"
 	"google.golang.org/protobuf/proto"
 )
@@ -66,6 +65,11 @@ func NewSSHServer(port int, hostKeyPath, authKeysPath string) *SSHServer {
 	}
 }
 
+// SetAuthHandlers sets the authentication callback handlers
+func (s *SSHServer) SetAuthHandlers(onAuthRequest func(addr, publicKey, fingerprint string) bool) {
+	s.OnAuthRequest = onAuthRequest
+}
+
 // Start begins listening for SSH connections
 func (s *SSHServer) Start(ctx context.Context) error {
 	// Create SSH server
@@ -74,7 +78,7 @@ func (s *SSHServer) Start(ctx context.Context) error {
 		wish.WithHostKeyPath(s.hostKeyPath),
 		wish.WithPublicKeyAuth(s.publicKeyAuth),
 		wish.WithMiddleware(
-			logging.Middleware(),
+			s.loggingMiddleware(),
 			activeterm.Middleware(),
 			s.sessionHandler(),
 		),
@@ -90,9 +94,9 @@ func (s *SSHServer) Start(ctx context.Context) error {
 	go func() {
 		defer s.wg.Done()
 		
-		log.Info("SSH server listening", "port", s.port)
+		logger.Infof("SSH server listening port=%d", s.port)
 		if err := server.ListenAndServe(); err != nil && err != ssh.ErrServerClosed {
-			log.Error("SSH server error", "error", err)
+			logger.Errorf("SSH server error: %v", err)
 		}
 	}()
 	
@@ -141,7 +145,7 @@ func (s *SSHServer) publicKeyAuth(ctx ssh.Context, key ssh.PublicKey) bool {
 		// Parse if needed
 		parsedKey, err := gossh.ParsePublicKey(key.Marshal())
 		if err != nil {
-			log.Error("Failed to parse public key", "error", err)
+			logger.Errorf("Failed to parse public key: %v", err)
 			return false
 		}
 		goKey = parsedKey
@@ -150,15 +154,11 @@ func (s *SSHServer) publicKeyAuth(ctx ssh.Context, key ssh.PublicKey) bool {
 	fingerprint := gossh.FingerprintSHA256(goKey)
 	addr := ctx.RemoteAddr().String()
 	
-	log.Info("SSH authentication attempt", 
-		"addr", addr,
-		"user", ctx.User(),
-		"key", fingerprint,
-	)
+	logger.Infof("SSH authentication attempt addr=%s user=%s key=%s", addr, ctx.User(), fingerprint)
 	
 	// Check if key is already whitelisted
 	if config.IsSSHKeyWhitelisted(fingerprint) {
-		log.Info("SSH key is whitelisted", "key", fingerprint)
+		logger.Infof("SSH key is whitelisted key=%s", fingerprint)
 		return true
 	}
 	
@@ -171,22 +171,39 @@ func (s *SSHServer) publicKeyAuth(ctx ssh.Context, key ssh.PublicKey) bool {
 	
 	// Key not whitelisted, request approval
 	if s.OnAuthRequest != nil {
+		logger.Infof("SSH auth handler available, requesting approval key=%s addr=%s", fingerprint, addr)
 		approved := s.OnAuthRequest(addr, string(gossh.MarshalAuthorizedKey(goKey)), fingerprint)
 		if approved {
 			// Add to whitelist
 			if err := config.AddSSHKeyToWhitelist(fingerprint); err != nil {
-				log.Error("Failed to add key to whitelist", "error", err)
+				logger.Errorf("Failed to add key to whitelist: %v", err)
 			}
-			log.Info("SSH key approved and added to whitelist", "key", fingerprint)
+			logger.Infof("SSH key approved and added to whitelist key=%s addr=%s", fingerprint, addr)
 			return true
 		}
-		log.Info("SSH key denied", "key", fingerprint)
+		logger.Infof("SSH key denied key=%s addr=%s", fingerprint, addr)
 		return false
 	}
 	
 	// No auth handler, deny by default in whitelist-only mode
-	log.Info("SSH key denied (no auth handler)", "key", fingerprint)
+	logger.Infof("SSH key denied (no auth handler) key=%s addr=%s", fingerprint, addr)
 	return false
+}
+
+// loggingMiddleware provides custom logging using our internal logger
+func (s *SSHServer) loggingMiddleware() wish.Middleware {
+	return func(h ssh.Handler) ssh.Handler {
+		return func(sess ssh.Session) {
+			// Log the connection details
+			logger.Debugf("SSH session started: user=%s addr=%s", sess.User(), sess.RemoteAddr())
+			
+			// Call the next handler
+			h(sess)
+			
+			// Log disconnection
+			logger.Debugf("SSH session ended: addr=%s", sess.RemoteAddr())
+		}
+	}
 }
 
 // sessionHandler handles SSH sessions
@@ -198,7 +215,7 @@ func (s *SSHServer) sessionHandler() wish.Middleware {
 			if s.maxClients > 0 && len(s.clients) >= s.maxClients {
 				s.mu.Unlock()
 				// Reject the session immediately
-				log.Info("Rejecting client - max clients reached", "addr", sess.RemoteAddr().String())
+				logger.Infof("Rejecting client - max clients reached addr=%s", sess.RemoteAddr().String())
 				fmt.Fprintf(sess, "Server already has maximum number of active clients\n")
 				sess.Exit(1)
 				sess.Close()
@@ -222,8 +239,12 @@ func (s *SSHServer) sessionHandler() wish.Middleware {
 			s.mu.Unlock()
 			
 			// Notify connection
+			logger.Debugf("Notifying client connection addr=%s publicKey=%s", addr, publicKey)
 			if s.OnClientConnected != nil {
+				logger.Debug("OnClientConnected callback is set, calling it")
 				s.OnClientConnected(addr, publicKey)
+			} else {
+				logger.Warn("OnClientConnected callback is not set")
 			}
 			
 			// Handle disconnection
