@@ -78,11 +78,14 @@ nfpms:
       - deb
       - rpm
       - apk
+      - archlinux
     bindir: /usr/bin
     section: utils
     priority: optional
     recommends:
       - uinput-tools
+    dependencies:
+      - openssh
     contents:
       - src: ./README.md
         dst: /usr/share/doc/waymon/README.md
