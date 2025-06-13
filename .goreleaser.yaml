@@ -82,9 +82,6 @@ nfpms:
     bindir: /usr/bin
     section: utils
     priority: optional
-    architectures:
-      - amd64
-      - arm64
     recommends:
       - uinput-tools
     contents:

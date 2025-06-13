@@ -75,14 +75,18 @@ func (h *toolHandler) ProcessBatch(batch *proto.EventBatch) error {
 
 	// For tools, it's more efficient to batch commands
 	var cmds []string
-	for _, event := range batch.Events {
-		cmd, err := h.eventToCommand(event)
-		if err != nil {
-			return err
+	for _, inputEvent := range batch.Events {
+		// For now, only handle mouse events
+		if inputEvent.GetMouse() != nil {
+			cmd, err := h.eventToCommand(inputEvent.GetMouse())
+			if err != nil {
+				return err
+			}
+			if cmd != "" {
+				cmds = append(cmds, cmd)
+			}
 		}
-		if cmd != "" {
-			cmds = append(cmds, cmd)
-		}
+		// TODO: Handle keyboard events when implemented
 	}
 
 	if len(cmds) == 0 {
