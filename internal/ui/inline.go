@@ -272,7 +272,8 @@ func (m *InlineServerModel) View() string {
 		keyStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("247"))
 		promptStyle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("42"))
 		
-		return fmt.Sprintf("%s %s is trying to connect\n%s %s\n%s",
+		// Clear the line and show auth prompt
+		return fmt.Sprintf("\r\033[K%s %s is trying to connect\n\r%s %s\n\r%s ",
 			warnStyle.Render("⚠️  NEW CONNECTION:"),
 			addrStyle.Render(m.pendingAuth.ClientAddr),
 			keyStyle.Render("SSH Key:"),

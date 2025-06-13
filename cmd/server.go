@@ -136,8 +136,11 @@ func runServer(cmd *cobra.Command, args []string) error {
 
 	// Show server info
 	logger.Infof("\nStarting Waymon SSH server '%s' on %s:%d", cfg.Server.Name, bindAddress, serverPort)
-	logger.Infof("SSH Host Key: %s", cfg.Server.SSHHostKeyPath)
-	logger.Infof("SSH Authorized Keys: %s", cfg.Server.SSHAuthKeysPath)
+	// Get the actual expanded paths from the server
+	if sshSrv := srv.GetNetworkServer(); sshSrv != nil {
+		logger.Infof("SSH Host Key: %s", srv.GetSSHHostKeyPath())
+		logger.Infof("SSH Authorized Keys: %s", srv.GetSSHAuthKeysPath())
+	}
 
 	// Handle graceful shutdown
 	sigCh := make(chan os.Signal, 1)

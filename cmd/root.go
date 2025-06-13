@@ -7,6 +7,8 @@ import (
 )
 
 var (
+	logLevel string
+	
 	rootCmd = &cobra.Command{
 		Use:   "waymon",
 		Short: "Waymon - Wayland mouse sharing",
@@ -31,6 +33,7 @@ func init() {
 
 	// Add global flags
 	rootCmd.PersistentFlags().String("config", "", "config file (default is $HOME/.config/waymon/waymon.toml)")
+	rootCmd.PersistentFlags().StringVar(&logLevel, "log-level", "", "set log level (debug, info, warn, error, fatal)")
 
 	// Add commands
 	rootCmd.AddCommand(serverCmd)
@@ -41,6 +44,11 @@ func init() {
 
 // initConfig reads in config file
 func initConfig() {
+	// Set log level from flag if provided
+	if logLevel != "" {
+		logger.SetLevel(logLevel)
+	}
+	
 	if err := config.Init(); err != nil {
 		logger.Warnf("Warning: %v", err)
 	}

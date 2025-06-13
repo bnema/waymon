@@ -12,6 +12,12 @@ var Logger *log.Logger
 func init() {
 	Logger = log.New(os.Stderr)
 
+	// Suppress all logs when used as a display helper
+	if os.Getenv("WAYMON_DISPLAY_HELPER") == "1" {
+		Logger.SetLevel(log.FatalLevel + 1) // Suppress everything
+		return
+	}
+
 	// Set log level from environment variable
 	logLevel := strings.ToUpper(os.Getenv("LOG_LEVEL"))
 	switch logLevel {
@@ -70,4 +76,20 @@ func Errorf(format string, args ...interface{}) {
 
 func Fatalf(format string, args ...interface{}) {
 	Logger.Fatalf(format, args...)
+}
+
+// SetLevel sets the log level from a string
+func SetLevel(level string) {
+	switch strings.ToUpper(level) {
+	case "DEBUG":
+		Logger.SetLevel(log.DebugLevel)
+	case "INFO":
+		Logger.SetLevel(log.InfoLevel)
+	case "WARN", "WARNING":
+		Logger.SetLevel(log.WarnLevel)
+	case "ERROR":
+		Logger.SetLevel(log.ErrorLevel)
+	case "FATAL":
+		Logger.SetLevel(log.FatalLevel)
+	}
 }
