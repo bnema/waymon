@@ -187,6 +187,16 @@ func (s *Server) GetNetworkServer() *network.SSHServer {
 	return s.sshServer
 }
 
+// GetSSHHostKeyPath returns the expanded SSH host key path
+func (s *Server) GetSSHHostKeyPath() string {
+	return expandPath(s.config.Server.SSHHostKeyPath)
+}
+
+// GetSSHAuthKeysPath returns the expanded SSH authorized keys path
+func (s *Server) GetSSHAuthKeysPath() string {
+	return expandPath(s.config.Server.SSHAuthKeysPath)
+}
+
 // expandPath expands ~ to home directory
 func expandPath(path string) string {
 	if strings.HasPrefix(path, "~/") {

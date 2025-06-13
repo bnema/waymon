@@ -138,11 +138,33 @@ func Init() error {
 
 	viper.AddConfigPath(".") // Current directory (lowest priority)
 
-	// Set defaults
-	viper.SetDefault("server", DefaultConfig.Server)
-	viper.SetDefault("client", DefaultConfig.Client)
-	viper.SetDefault("display", DefaultConfig.Display)
-	viper.SetDefault("input", DefaultConfig.Input)
+	// Set defaults - need to set individual fields for proper merging
+	viper.SetDefault("server.port", DefaultConfig.Server.Port)
+	viper.SetDefault("server.bind_address", DefaultConfig.Server.BindAddress)
+	viper.SetDefault("server.name", DefaultConfig.Server.Name)
+	viper.SetDefault("server.max_clients", DefaultConfig.Server.MaxClients)
+	viper.SetDefault("server.ssh_host_key_path", DefaultConfig.Server.SSHHostKeyPath)
+	viper.SetDefault("server.ssh_authorized_keys_path", DefaultConfig.Server.SSHAuthKeysPath)
+	viper.SetDefault("server.ssh_whitelist", DefaultConfig.Server.SSHWhitelist)
+	viper.SetDefault("server.ssh_whitelist_only", DefaultConfig.Server.SSHWhitelistOnly)
+	
+	viper.SetDefault("client.server_address", DefaultConfig.Client.ServerAddress)
+	viper.SetDefault("client.auto_connect", DefaultConfig.Client.AutoConnect)
+	viper.SetDefault("client.reconnect_delay", DefaultConfig.Client.ReconnectDelay)
+	viper.SetDefault("client.edge_threshold", DefaultConfig.Client.EdgeThreshold)
+	viper.SetDefault("client.hotkey_modifier", DefaultConfig.Client.HotkeyModifier)
+	viper.SetDefault("client.hotkey_key", DefaultConfig.Client.HotkeyKey)
+	viper.SetDefault("client.ssh_private_key", DefaultConfig.Client.SSHPrivateKey)
+	
+	viper.SetDefault("display.refresh_interval", DefaultConfig.Display.RefreshInterval)
+	viper.SetDefault("display.backend", DefaultConfig.Display.Backend)
+	viper.SetDefault("display.cursor_tracking", DefaultConfig.Display.CursorTracking)
+	
+	viper.SetDefault("input.mouse_sensitivity", DefaultConfig.Input.MouseSensitivity)
+	viper.SetDefault("input.scroll_speed", DefaultConfig.Input.ScrollSpeed)
+	viper.SetDefault("input.enable_keyboard", DefaultConfig.Input.EnableKeyboard)
+	viper.SetDefault("input.keyboard_layout", DefaultConfig.Input.KeyboardLayout)
+	
 	viper.SetDefault("hosts", DefaultConfig.Hosts)
 
 	// Read config file if it exists

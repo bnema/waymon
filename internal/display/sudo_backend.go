@@ -112,6 +112,11 @@ func (s *sudoBackend) GetMonitors() ([]*Monitor, error) {
 		return nil, fmt.Errorf("monitors command failed: %w\nOutput: %s", err, output)
 	}
 
+	// Debug output
+	if os.Getenv("WAYMON_DISPLAY_HELPER") != "1" {
+		logger.Debugf("Monitors command output: %s", string(output))
+	}
+
 	// Parse JSON output
 	var info struct {
 		Monitors []struct {
