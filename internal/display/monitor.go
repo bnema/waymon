@@ -4,6 +4,8 @@ package display
 import (
 	"fmt"
 	"os"
+
+	"github.com/bnema/waymon/internal/logger"
 )
 
 // Monitor represents a physical display
@@ -61,12 +63,12 @@ func New() (*Display, error) {
 		// Only show debug if not running as monitors --json
 		if os.Getenv("WAYMON_DISPLAY_HELPER") != "1" {
 			backendNames := []string{"sudoBackend", "wlrOutputManagementBackend", "wlrCgoBackend", "wlrRandrBackend", "portalBackend", "randrBackend"}
-			fmt.Printf("DEBUG: Trying backend %d: %s\n", i, backendNames[i])
+			logger.Debugf("Trying backend %d: %s", i, backendNames[i])
 			if err == nil {
-				fmt.Printf("DEBUG: Successfully created backend: %s\n", backendNames[i])
+				logger.Debugf("Successfully created backend: %s", backendNames[i])
 				break
 			}
-			fmt.Printf("DEBUG: Backend %s failed: %v\n", backendNames[i], err)
+			logger.Debugf("Backend %s failed: %v", backendNames[i], err)
 		} else if err == nil {
 			break
 		}
