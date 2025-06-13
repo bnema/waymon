@@ -5,6 +5,7 @@ import (
 	"sync"
 
 	"github.com/ThomasT75/uinput"
+	"github.com/bnema/waymon/internal/logger"
 	"github.com/bnema/waymon/internal/proto"
 )
 
@@ -73,12 +74,14 @@ func (h *uInputHandler) ProcessEvent(event *proto.MouseEvent) error {
 		// Handle screen enter - set position and move there
 		h.currentX = event.X
 		h.currentY = event.Y
+		logger.Infof("Mouse entered: position set to (%.0f, %.0f)", event.X, event.Y)
 		// TODO: May need to warp cursor to entry point
 		return nil
 	case proto.EventType_EVENT_TYPE_LEAVE:
 		// Handle screen leave - update position
 		h.currentX = event.X
 		h.currentY = event.Y
+		logger.Infof("Mouse left: last position (%.0f, %.0f)", event.X, event.Y)
 		return nil
 	default:
 		return fmt.Errorf("%w: unknown event type %v", ErrInvalidEvent, event.Type)
@@ -129,16 +132,17 @@ func (h *uInputHandler) Close() error {
 }
 
 func (h *uInputHandler) handleMove(event *proto.MouseEvent) error {
-	// Calculate relative movement
-	deltaX := int32(event.X - h.currentX)
-	deltaY := int32(event.Y - h.currentY)
+	// For relative movement, X and Y contain the delta values directly
+	deltaX := int32(event.X)
+	deltaY := int32(event.Y)
 
 	// Update tracked position
-	h.currentX = event.X
-	h.currentY = event.Y
+	h.currentX += event.X
+	h.currentY += event.Y
 
 	// Apply relative movement
 	if deltaX != 0 || deltaY != 0 {
+		logger.Debugf("Injecting mouse move: dx=%d, dy=%d", deltaX, deltaY)
 		return h.mouse.Move(deltaX, deltaY)
 	}
 

@@ -48,6 +48,8 @@ type ClientConfig struct {
 	AutoConnect    bool   `mapstructure:"auto_connect"`
 	ReconnectDelay int    `mapstructure:"reconnect_delay"`
 	EdgeThreshold  int    `mapstructure:"edge_threshold"`
+	ScreenPosition string `mapstructure:"screen_position"` // Deprecated: use EdgeMappings instead
+	EdgeMappings   []EdgeMapping `mapstructure:"edge_mappings"` // Monitor-specific edge mappings
 	HotkeyModifier string `mapstructure:"hotkey_modifier"`
 	HotkeyKey      string `mapstructure:"hotkey_key"`
 	
@@ -78,6 +80,14 @@ type HostConfig struct {
 	AuthToken string `mapstructure:"auth_token"`
 }
 
+// EdgeMapping defines which monitor edge connects to which host
+type EdgeMapping struct {
+	MonitorID   string `mapstructure:"monitor_id"`   // Monitor ID/name or "primary" for primary monitor, "*" for any
+	Edge        string `mapstructure:"edge"`         // "left", "right", "top", "bottom"
+	Host        string `mapstructure:"host"`         // Host name or address to connect to
+	Description string `mapstructure:"description"`  // Optional description
+}
+
 var (
 	// DefaultConfig provides sensible defaults
 	DefaultConfig = Config{
@@ -96,6 +106,7 @@ var (
 			AutoConnect:    false,
 			ReconnectDelay: 5,
 			EdgeThreshold:  5,
+			ScreenPosition: "right", // Default: client is on the right of server
 			HotkeyModifier: "ctrl+alt",
 			HotkeyKey:      "s",
 			SSHPrivateKey:  "",
@@ -152,6 +163,8 @@ func Init() error {
 	viper.SetDefault("client.auto_connect", DefaultConfig.Client.AutoConnect)
 	viper.SetDefault("client.reconnect_delay", DefaultConfig.Client.ReconnectDelay)
 	viper.SetDefault("client.edge_threshold", DefaultConfig.Client.EdgeThreshold)
+	viper.SetDefault("client.screen_position", DefaultConfig.Client.ScreenPosition)
+	viper.SetDefault("client.edge_mappings", DefaultConfig.Client.EdgeMappings)
 	viper.SetDefault("client.hotkey_modifier", DefaultConfig.Client.HotkeyModifier)
 	viper.SetDefault("client.hotkey_key", DefaultConfig.Client.HotkeyKey)
 	viper.SetDefault("client.ssh_private_key", DefaultConfig.Client.SSHPrivateKey)

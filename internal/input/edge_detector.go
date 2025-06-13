@@ -5,16 +5,19 @@ import (
 	"sync"
 	"time"
 
+	"github.com/bnema/waymon/internal/config"
 	"github.com/bnema/waymon/internal/display"
+	"github.com/bnema/waymon/internal/logger"
 	"github.com/bnema/waymon/internal/network"
 	waymonProto "github.com/bnema/waymon/internal/proto"
 )
 
 // EdgeDetector monitors cursor position and triggers edge events
 type EdgeDetector struct {
-	display   *display.Display
-	client    network.Client
-	threshold int32
+	display      *display.Display
+	client       network.Client
+	threshold    int32
+	edgeMappings []config.EdgeMapping
 
 	mu        sync.Mutex
 	active    bool
@@ -22,6 +25,7 @@ type EdgeDetector struct {
 	lastX     int32
 	lastY     int32
 	lastEdge  display.Edge
+	activeHost string // Currently connected host
 
 	cancel context.CancelFunc
 	wg     sync.WaitGroup
@@ -37,11 +41,19 @@ func NewEdgeDetector(disp *display.Display, client network.Client, threshold int
 		threshold = 5 // Default 5 pixels
 	}
 
+	cfg := config.Get()
+	logger.Infof("EdgeDetector: Created with %d edge mappings", len(cfg.Client.EdgeMappings))
+	for _, mapping := range cfg.Client.EdgeMappings {
+		logger.Debugf("  Edge mapping: %s edge of monitor '%s' -> host '%s'", 
+			mapping.Edge, mapping.MonitorID, mapping.Host)
+	}
+
 	return &EdgeDetector{
-		display:   disp,
-		client:    client,
-		threshold: threshold,
-		lastEdge:  display.EdgeNone,
+		display:      disp,
+		client:       client,
+		threshold:    threshold,
+		edgeMappings: cfg.Client.EdgeMappings,
+		lastEdge:     display.EdgeNone,
 	}
 }
 
@@ -105,15 +117,15 @@ func (e *EdgeDetector) monitorLoop(ctx context.Context) {
 	ticker := time.NewTicker(16 * time.Millisecond)
 	defer ticker.Stop()
 
-	// Track cursor internally since most compositors don't expose it
-	var cursorX, cursorY int32
+	// Since we track cursor internally, we poll our last known position
 
 	for {
 		select {
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
-			e.checkCursorPosition(cursorX, cursorY)
+			// Use our tracked position
+			e.checkCursorPosition(e.lastX, e.lastY)
 		}
 	}
 }
@@ -137,13 +149,28 @@ func (e *EdgeDetector) checkCursorPosition(x, y int32) {
 	// Check if we've entered a new edge
 	if edge != display.EdgeNone && edge != e.lastEdge {
 		e.lastEdge = edge
-		if e.onEdgeEnter != nil && !e.capturing {
-			e.onEdgeEnter(edge, x, y)
+		
+		// Find which host this edge should connect to
+		monitor := e.display.GetMonitorAt(x, y)
+		if monitor != nil && !e.capturing {
+			host := e.getHostForEdge(monitor, edge)
+			if host != "" {
+				logger.Infof("Edge detected: %s edge of monitor '%s' -> connecting to host '%s'", 
+					edge.String(), monitor.Name, host)
+				e.activeHost = host
+				if e.onEdgeEnter != nil {
+					e.onEdgeEnter(edge, x, y)
+				}
+			} else {
+				logger.Debugf("Edge detected: %s edge of monitor '%s' but no mapping found", 
+					edge.String(), monitor.Name)
+			}
 		}
 	} else if edge == display.EdgeNone && e.lastEdge != display.EdgeNone {
 		// We've left the edge
 		e.lastEdge = edge
 		if e.onEdgeLeave != nil && e.capturing {
+			logger.Info("Left screen edge, stopping capture")
 			e.onEdgeLeave()
 		}
 	}
@@ -155,10 +182,12 @@ func (e *EdgeDetector) StartCapture(edge display.Edge) error {
 	defer e.mu.Unlock()
 
 	if e.capturing {
+		logger.Debug("Already capturing, ignoring StartCapture")
 		return nil
 	}
 
 	e.capturing = true
+	logger.Infof("Starting mouse capture mode - sending events to host '%s'", e.activeHost)
 
 	// Send MouseEnter event to server
 	if e.client != nil && e.client.IsConnected() {
@@ -171,6 +200,7 @@ func (e *EdgeDetector) StartCapture(edge display.Edge) error {
 			},
 		}
 
+		logger.Debugf("Sending MouseEnter event: pos=(%d,%d)", e.lastX, e.lastY)
 		return e.client.SendMouseEvent(event)
 	}
 
@@ -183,10 +213,12 @@ func (e *EdgeDetector) StopCapture() error {
 	defer e.mu.Unlock()
 
 	if !e.capturing {
+		logger.Debug("Not capturing, ignoring StopCapture")
 		return nil
 	}
 
 	e.capturing = false
+	logger.Info("Stopping mouse capture mode")
 
 	// Send MouseLeave event to server
 	if e.client != nil && e.client.IsConnected() {
@@ -199,6 +231,7 @@ func (e *EdgeDetector) StopCapture() error {
 			},
 		}
 
+		logger.Debugf("Sending MouseLeave event: pos=(%d,%d)", e.lastX, e.lastY)
 		return e.client.SendMouseEvent(event)
 	}
 
@@ -229,6 +262,8 @@ func (e *EdgeDetector) HandleMouseMove(dx, dy int32) error {
 	// Update internal position
 	e.lastX += dx
 	e.lastY += dy
+
+	logger.Debugf("Mouse move: dx=%d, dy=%d, pos=(%d,%d)", dx, dy, e.lastX, e.lastY)
 
 	// Send relative movement to server
 	event := &network.MouseEvent{
@@ -275,6 +310,8 @@ func (e *EdgeDetector) HandleMouseScroll(direction waymonProto.ScrollDirection, 
 		return nil
 	}
 
+	logger.Debugf("Mouse scroll: direction=%s, delta=%d", direction.String(), delta)
+
 	event := &network.MouseEvent{
 		MouseEvent: &waymonProto.MouseEvent{
 			Type:        waymonProto.EventType_EVENT_TYPE_SCROLL,
@@ -286,4 +323,33 @@ func (e *EdgeDetector) HandleMouseScroll(direction waymonProto.ScrollDirection, 
 	}
 
 	return e.client.SendMouseEvent(event)
+}
+
+// getHostForEdge finds which host to connect to based on monitor and edge
+func (e *EdgeDetector) getHostForEdge(monitor *display.Monitor, edge display.Edge) string {
+	edgeStr := edge.String()
+	
+	// Look for exact monitor match
+	for _, mapping := range e.edgeMappings {
+		if mapping.Edge == edgeStr {
+			// Check monitor match
+			if mapping.MonitorID == monitor.ID || 
+			   mapping.MonitorID == monitor.Name ||
+			   (mapping.MonitorID == "primary" && monitor.Primary) ||
+			   mapping.MonitorID == "*" {
+				return mapping.Host
+			}
+		}
+	}
+	
+	// Fallback to legacy screen_position if no mappings configured
+	cfg := config.Get()
+	if len(e.edgeMappings) == 0 && cfg.Client.ScreenPosition != "" && cfg.Client.ServerAddress != "" {
+		// Only use legacy config if edge matches screen position
+		if cfg.Client.ScreenPosition == edgeStr {
+			return cfg.Client.ServerAddress
+		}
+	}
+	
+	return ""
 }
