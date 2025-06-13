@@ -135,8 +135,7 @@ func TestServerModel(t *testing.T) {
 		model := NewServerModel(cfg)
 
 		msg := ClientConnectedMsg{
-			Name:    "laptop",
-			Address: "192.168.1.100",
+			ClientAddr: "192.168.1.100:12345",
 		}
 
 		model.Update(msg)
@@ -154,10 +153,10 @@ func TestServerModel(t *testing.T) {
 		model := NewServerModel(cfg)
 
 		// First add a connection
-		model.AddConnection("laptop", "192.168.1.100")
+		model.AddConnection("192.168.1.100", "192.168.1.100:12345")
 
 		// Then disconnect
-		msg := ClientDisconnectedMsg{Name: "laptop"}
+		msg := ClientDisconnectedMsg{ClientAddr: "192.168.1.100:12345"}
 		model.Update(msg)
 
 		if len(model.connections.Connections) != 0 {

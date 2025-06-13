@@ -85,12 +85,22 @@ func (m *ServerModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.controls.Width = msg.Width
 
 	case ClientConnectedMsg:
-		m.AddConnection(msg.Name, msg.Address)
-		m.AddMessage(MessageSuccess, fmt.Sprintf("Client '%s' connected from %s", msg.Name, msg.Address))
+		// Extract name from address (e.g., "192.168.1.100:12345" -> "192.168.1.100")
+		name := msg.ClientAddr
+		if idx := strings.LastIndex(name, ":"); idx != -1 {
+			name = name[:idx]
+		}
+		m.AddConnection(name, msg.ClientAddr)
+		m.AddMessage(MessageSuccess, fmt.Sprintf("Client connected from %s", msg.ClientAddr))
 
 	case ClientDisconnectedMsg:
-		m.RemoveConnection(msg.Name)
-		m.AddMessage(MessageInfo, fmt.Sprintf("Client '%s' disconnected", msg.Name))
+		// Extract name from address
+		name := msg.ClientAddr
+		if idx := strings.LastIndex(name, ":"); idx != -1 {
+			name = name[:idx]
+		}
+		m.RemoveConnection(name)
+		m.AddMessage(MessageInfo, fmt.Sprintf("Client disconnected from %s", msg.ClientAddr))
 	}
 
 	// Update status bar
@@ -181,12 +191,3 @@ func (m *ServerModel) AddMessage(msgType MessageType, content string) {
 	})
 }
 
-// Custom messages for server events
-type ClientConnectedMsg struct {
-	Name    string
-	Address string
-}
-
-type ClientDisconnectedMsg struct {
-	Name string
-}

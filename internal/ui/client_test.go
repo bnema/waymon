@@ -23,8 +23,8 @@ func TestClientModel(t *testing.T) {
 		if model.serverName != "desktop" {
 			t.Errorf("Expected server name 'desktop', got %q", model.serverName)
 		}
-		if !model.connected {
-			t.Error("Should be connected initially")
+		if model.connected {
+			t.Error("Should not be connected initially")
 		}
 		if model.capturing {
 			t.Error("Should not be capturing initially")
@@ -62,6 +62,9 @@ func TestClientModel(t *testing.T) {
 	t.Run("toggles mouse capture", func(t *testing.T) {
 		cfg := ClientConfig{ServerAddress: "192.168.1.50:52525"}
 		model := NewClientModel(cfg)
+		
+		// Connect first so we can toggle capture
+		model.connected = true
 
 		// Toggle on
 		model.ToggleCapture()
@@ -123,11 +126,11 @@ func TestClientModel(t *testing.T) {
 			t.Error("Should return quit command")
 		}
 
-		// Test space (toggle capture)
+		// Test space (toggle capture) - should not work when disconnected
 		model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{' '}})
 
-		if !model.capturing {
-			t.Error("Should toggle capture with space key")
+		if model.capturing {
+			t.Error("Should not toggle capture when not connected")
 		}
 
 		// Test edge hint toggle
@@ -141,6 +144,7 @@ func TestClientModel(t *testing.T) {
 	t.Run("handles server disconnect", func(t *testing.T) {
 		cfg := ClientConfig{ServerAddress: "192.168.1.50:52525"}
 		model := NewClientModel(cfg)
+		model.connected = true // Need to be connected first
 		model.capturing = true
 
 		model.Update(ServerDisconnectedMsg{})
