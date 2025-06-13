@@ -27,6 +27,54 @@ The following system packages may be required:
 
 ## Installation
 
+### Binary Releases
+
+Download the latest release from [GitHub Releases](https://github.com/bnema/waymon/releases).
+
+#### Arch Linux
+
+```bash
+# Download the package
+wget https://github.com/bnema/waymon/releases/download/v0.1.1-dev/waymon_0.1.1-dev_linux_amd64.pkg.tar.zst
+
+# Install with pacman
+sudo pacman -U waymon_0.1.1-dev_linux_amd64.pkg.tar.zst
+```
+
+#### Debian/Ubuntu
+
+```bash
+# Download the package
+wget https://github.com/bnema/waymon/releases/download/v0.1.0-dev/waymon_0.1.0-dev_linux_amd64.deb
+
+# Install with dpkg
+sudo dpkg -i waymon_0.1.0-dev_linux_amd64.deb
+```
+
+#### Fedora/RHEL/CentOS
+
+```bash
+# Download the package
+wget https://github.com/bnema/waymon/releases/download/v0.1.0-dev/waymon_0.1.0-dev_linux_amd64.rpm
+
+# Install with rpm
+sudo rpm -i waymon_0.1.0-dev_linux_amd64.rpm
+```
+
+
+#### Generic Linux (Tarball)
+
+```bash
+# Download the tarball
+wget https://github.com/bnema/waymon/releases/download/v0.1.0-dev/waymon_Linux_x86_64.tar.gz
+
+# Extract
+tar -xzf waymon_Linux_x86_64.tar.gz
+
+# Move to PATH
+sudo mv waymon /usr/local/bin/
+```
+
 ### From Source
 
 ```bash
@@ -40,6 +88,21 @@ go build -o waymon .
 ```bash
 go install github.com/bnema/waymon@latest
 ```
+
+## Quick Start
+
+1. Install Waymon on both computers using one of the methods above
+2. On the server (computer to be controlled):
+   ```bash
+   waymon setup              # Set up uinput permissions
+   sudo waymon server        # Start server
+   ```
+3. On the client (computer you're controlling from):
+   ```bash
+   waymon setup              # Set up uinput permissions
+   waymon client --host SERVER_IP:52525
+   ```
+4. Move your mouse to the edge of the screen to switch between computers!
 
 ## Setup
 
