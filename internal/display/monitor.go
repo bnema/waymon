@@ -45,9 +45,10 @@ type Backend interface {
 
 // New creates a new display manager
 func New() (*Display, error) {
+	logger.Debug("Display.New: Starting display manager creation")
+	
 	// Try different backends in order of preference
 	backends := []func() (Backend, error){
-		newSudoBackend,                // Sudo privilege separation (when running with sudo)
 		newWlrOutputManagementBackend, // Native wlr-output-management protocol
 		newWlrCgoBackend,              // Basic Wayland via CGO (limited info)
 		newWlrRandrBackend,            // wlr-randr command (fallback)
@@ -58,17 +59,22 @@ func New() (*Display, error) {
 	var backend Backend
 	var err error
 
+	backendNames := []string{"wlrOutputManagementBackend", "wlrCgoBackend", "wlrRandrBackend", "portalBackend", "randrBackend"}
+	
 	for i, createBackend := range backends {
-		backend, err = createBackend()
 		// Only show debug if not running as monitors --json
 		if os.Getenv("WAYMON_DISPLAY_HELPER") != "1" {
-			backendNames := []string{"sudoBackend", "wlrOutputManagementBackend", "wlrCgoBackend", "wlrRandrBackend", "portalBackend", "randrBackend"}
-			logger.Debugf("Trying backend %d: %s", i, backendNames[i])
+			logger.Debugf("Display.New: Trying backend %d: %s", i, backendNames[i])
+		}
+		
+		backend, err = createBackend()
+		
+		if os.Getenv("WAYMON_DISPLAY_HELPER") != "1" {
 			if err == nil {
-				logger.Debugf("Successfully created backend: %s", backendNames[i])
+				logger.Debugf("Display.New: Successfully created backend: %s", backendNames[i])
 				break
 			}
-			logger.Debugf("Backend %s failed: %v", backendNames[i], err)
+			logger.Debugf("Display.New: Backend %s failed: %v", backendNames[i], err)
 		} else if err == nil {
 			break
 		}

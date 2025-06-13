@@ -14,6 +14,7 @@ type uInputHandler struct {
 	keyboard uinput.Keyboard // TODO: For hotkey switching
 	mu       sync.Mutex
 	closed   bool
+	helper   *PrivilegedHelper
 	// Track current position for relative movements
 	currentX float64
 	currentY float64
@@ -21,9 +22,19 @@ type uInputHandler struct {
 
 // newUInputHandler creates a new uinput-based handler
 func newUInputHandler() (*uInputHandler, error) {
-	// Create virtual mouse for all mouse operations
+	// Create privileged helper
+	helper, err := NewPrivilegedHelper()
+	if err != nil {
+		return nil, fmt.Errorf("failed to create privileged helper: %w", err)
+	}
+
+	// Try to create virtual mouse
+	// For now, we'll use the direct approach and let it fail if no permissions
+	// In the future, we'll use the privileged helper for this
 	mouse, err := uinput.CreateMouse("/dev/uinput", []byte("Waymon Virtual Mouse"))
 	if err != nil {
+		// If we don't have direct access, we need to use a different approach
+		// For now, return the error
 		return nil, fmt.Errorf("failed to create virtual mouse: %w", err)
 	}
 
@@ -32,6 +43,7 @@ func newUInputHandler() (*uInputHandler, error) {
 
 	return &uInputHandler{
 		mouse:    mouse,
+		helper:   helper,
 		currentX: 0,
 		currentY: 0,
 	}, nil
