@@ -25,20 +25,20 @@ type SSHServer struct {
 	maxClients   int
 	sshServer    *ssh.Server
 	ctx          context.Context
-	
+
 	// Active connections
 	mu      sync.Mutex
 	clients map[string]*sshClient // sessionID -> client
-	
+
 	// Authentication
 	pendingAuth map[string]chan bool // fingerprint -> approval channel
 	authMu      sync.Mutex
-	
+
 	// Lifecycle
 	stop     chan struct{}
 	stopOnce sync.Once
 	wg       sync.WaitGroup
-	
+
 	// Event handlers
 	OnMouseEvent         EventHandler
 	OnClientConnected    func(addr string, publicKey string)
@@ -86,29 +86,29 @@ func (s *SSHServer) Start(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("failed to create SSH server: %w", err)
 	}
-	
+
 	s.sshServer = server
-	
+
 	// Start listening
 	s.wg.Add(1)
 	go func() {
 		defer s.wg.Done()
-		
+
 		logger.Infof("SSH server listening on port %d (address: ':%d')", s.port, s.port)
 		if err := server.ListenAndServe(); err != nil && err != ssh.ErrServerClosed {
 			logger.Errorf("SSH server error: %v", err)
 		}
 	}()
-	
+
 	// Handle context cancellation
 	go func() {
 		<-ctx.Done()
 		s.Stop()
 	}()
-	
+
 	// Store context for use in session handlers
 	s.ctx = ctx
-	
+
 	return nil
 }
 
@@ -116,13 +116,13 @@ func (s *SSHServer) Start(ctx context.Context) error {
 func (s *SSHServer) Stop() {
 	s.stopOnce.Do(func() {
 		close(s.stop)
-		
+
 		if s.sshServer != nil {
 			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 			defer cancel()
 			_ = s.sshServer.Shutdown(ctx)
 		}
-		
+
 		// Close all active sessions
 		s.mu.Lock()
 		for _, client := range s.clients {
@@ -130,14 +130,13 @@ func (s *SSHServer) Stop() {
 		}
 		s.clients = make(map[string]*sshClient)
 		s.mu.Unlock()
-		
+
 		s.wg.Wait()
 	})
 }
 
 // publicKeyAuth handles SSH public key authentication
 func (s *SSHServer) publicKeyAuth(ctx ssh.Context, key ssh.PublicKey) bool {
-	logger.Debugf("publicKeyAuth called from addr=%s user=%s", ctx.RemoteAddr(), ctx.User())
 	// Convert Wish SSH public key to golang.org/x/crypto/ssh public key
 	var goKey gossh.PublicKey
 	if wishKey, ok := key.(gossh.PublicKey); ok {
@@ -151,28 +150,29 @@ func (s *SSHServer) publicKeyAuth(ctx ssh.Context, key ssh.PublicKey) bool {
 		}
 		goKey = parsedKey
 	}
-	
+
 	fingerprint := gossh.FingerprintSHA256(goKey)
 	addr := ctx.RemoteAddr().String()
-	
+
 	logger.Infof("SSH authentication attempt addr=%s user=%s key=%s", addr, ctx.User(), fingerprint)
-	
+
 	// Check if key is already whitelisted
 	if config.IsSSHKeyWhitelisted(fingerprint) {
 		logger.Infof("SSH key is whitelisted key=%s", fingerprint)
 		return true
 	}
-	
+
 	// Check if whitelist-only mode is enabled
 	cfg := config.Get()
 	if !cfg.Server.SSHWhitelistOnly {
 		// If not whitelist-only, accept all keys
+		logger.Info("Accepting SSH key (whitelist-only mode disabled)")
 		return true
 	}
-	
+
 	// Key not whitelisted, request approval
 	if s.OnAuthRequest != nil {
-		logger.Infof("SSH auth handler available, requesting approval key=%s addr=%s", fingerprint, addr)
+		logger.Infof("Requesting approval for SSH key=%s addr=%s", fingerprint, addr)
 		approved := s.OnAuthRequest(addr, string(gossh.MarshalAuthorizedKey(goKey)), fingerprint)
 		if approved {
 			// Add to whitelist
@@ -185,7 +185,7 @@ func (s *SSHServer) publicKeyAuth(ctx ssh.Context, key ssh.PublicKey) bool {
 		logger.Infof("SSH key denied key=%s addr=%s", fingerprint, addr)
 		return false
 	}
-	
+
 	// No auth handler, deny by default in whitelist-only mode
 	logger.Infof("SSH key denied (no auth handler) key=%s addr=%s", fingerprint, addr)
 	return false
@@ -197,10 +197,10 @@ func (s *SSHServer) loggingMiddleware() wish.Middleware {
 		return func(sess ssh.Session) {
 			// Log the connection details
 			logger.Debugf("SSH session started: user=%s addr=%s", sess.User(), sess.RemoteAddr())
-			
+
 			// Call the next handler
 			h(sess)
-			
+
 			// Log disconnection
 			logger.Debugf("SSH session ended: addr=%s", sess.RemoteAddr())
 		}
@@ -222,14 +222,14 @@ func (s *SSHServer) sessionHandler() wish.Middleware {
 				sess.Close()
 				return
 			}
-			
+
 			// Get client info
 			addr := sess.RemoteAddr().String()
 			var publicKey string
 			if sess.PublicKey() != nil {
 				publicKey = gossh.FingerprintSHA256(sess.PublicKey())
 			}
-			
+
 			// Create and register client entry
 			client := &sshClient{
 				session:   sess,
@@ -238,31 +238,27 @@ func (s *SSHServer) sessionHandler() wish.Middleware {
 			}
 			s.clients[sess.Context().SessionID()] = client
 			s.mu.Unlock()
-			
+
 			// Notify connection
-			logger.Debugf("Notifying client connection addr=%s publicKey=%s", addr, publicKey)
 			if s.OnClientConnected != nil {
-				logger.Debug("OnClientConnected callback is set, calling it")
 				s.OnClientConnected(addr, publicKey)
-			} else {
-				logger.Warn("OnClientConnected callback is not set")
 			}
-			
+
 			// Handle disconnection
 			defer func() {
 				s.mu.Lock()
 				delete(s.clients, sess.Context().SessionID())
 				s.mu.Unlock()
-				
+
 				if s.OnClientDisconnected != nil {
 					s.OnClientDisconnected(addr)
 				}
 			}()
-			
+
 			// Send welcome message
 			fmt.Fprintf(sess, "Waymon SSH connection established\n")
 			fmt.Fprintf(sess, "Public key: %s\n", publicKey)
-			
+
 			// Handle mouse events with context
 			s.handleMouseEvents(s.ctx, sess)
 		}
@@ -274,14 +270,14 @@ func (s *SSHServer) handleMouseEvents(ctx context.Context, sess ssh.Session) {
 	// Create channels for coordinating shutdown
 	done := make(chan struct{})
 	defer close(done)
-	
+
 	// Channel to receive read results
 	type readResult struct {
 		data []byte
 		err  error
 	}
 	readCh := make(chan readResult, 1)
-	
+
 	// Start a goroutine to monitor for shutdown
 	go func() {
 		select {
@@ -295,7 +291,7 @@ func (s *SSHServer) handleMouseEvents(ctx context.Context, sess ssh.Session) {
 			// Reading finished normally
 		}
 	}()
-	
+
 	for {
 		// Check if we should stop
 		select {
@@ -305,7 +301,7 @@ func (s *SSHServer) handleMouseEvents(ctx context.Context, sess ssh.Session) {
 			return
 		default:
 		}
-		
+
 		// Start async read for length prefix
 		go func() {
 			lengthBuf := make([]byte, 4)
@@ -315,7 +311,7 @@ func (s *SSHServer) handleMouseEvents(ctx context.Context, sess ssh.Session) {
 			case <-ctx.Done():
 			}
 		}()
-		
+
 		// Wait for read or cancellation
 		select {
 		case <-ctx.Done():
@@ -331,27 +327,27 @@ func (s *SSHServer) handleMouseEvents(ctx context.Context, sess ssh.Session) {
 				// Other error
 				return
 			}
-			
+
 			// Decode length
 			lengthBuf := result.data
 			length := int(lengthBuf[0])<<24 | int(lengthBuf[1])<<16 | int(lengthBuf[2])<<8 | int(lengthBuf[3])
 			if length <= 0 || length > 4096 {
 				return
 			}
-			
+
 			// Read event data
 			eventBuf := make([]byte, length)
 			_, err := io.ReadFull(sess, eventBuf)
 			if err != nil {
 				return
 			}
-			
+
 			// Unmarshal protobuf event
 			var protoEvent Proto.MouseEvent
 			if err := proto.Unmarshal(eventBuf, &protoEvent); err != nil {
 				continue
 			}
-			
+
 			// Call event handler
 			if s.OnMouseEvent != nil {
 				event := &MouseEvent{MouseEvent: &protoEvent}

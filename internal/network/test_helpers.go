@@ -18,28 +18,28 @@ func GenerateTestSSHKey() (gossh.Signer, error) {
 	if err != nil {
 		return nil, err
 	}
-	
+
 	signer, err := gossh.NewSignerFromKey(privateKey)
 	if err != nil {
 		return nil, err
 	}
-	
+
 	return signer, nil
 }
 
 // GenerateTestSSHKeyFiles generates test SSH key files and returns paths
 func GenerateTestSSHKeyFiles(t *testing.T) (privateKeyPath, publicKeyPath string) {
 	t.Helper()
-	
+
 	// Create temp directory
 	tempDir := t.TempDir()
-	
+
 	// Generate key pair
 	privateKey, err := rsa.GenerateKey(rand.Reader, 2048)
 	if err != nil {
 		t.Fatal(err)
 	}
-	
+
 	// Write private key
 	privateKeyPath = filepath.Join(tempDir, "id_rsa")
 	privateKeyFile, err := os.Create(privateKeyPath)
@@ -47,7 +47,7 @@ func GenerateTestSSHKeyFiles(t *testing.T) (privateKeyPath, publicKeyPath string
 		t.Fatal(err)
 	}
 	defer privateKeyFile.Close()
-	
+
 	privateKeyPEM := &pem.Block{
 		Type:  "RSA PRIVATE KEY",
 		Bytes: x509.MarshalPKCS1PrivateKey(privateKey),
@@ -55,36 +55,36 @@ func GenerateTestSSHKeyFiles(t *testing.T) (privateKeyPath, publicKeyPath string
 	if err := pem.Encode(privateKeyFile, privateKeyPEM); err != nil {
 		t.Fatal(err)
 	}
-	
+
 	// Generate public key
 	publicKey, err := gossh.NewPublicKey(&privateKey.PublicKey)
 	if err != nil {
 		t.Fatal(err)
 	}
-	
+
 	// Write public key
 	publicKeyPath = filepath.Join(tempDir, "id_rsa.pub")
 	publicKeyData := gossh.MarshalAuthorizedKey(publicKey)
 	if err := os.WriteFile(publicKeyPath, publicKeyData, 0644); err != nil {
 		t.Fatal(err)
 	}
-	
+
 	return privateKeyPath, publicKeyPath
 }
 
 // GenerateTestHostKey generates a test host key file and returns the path
 func GenerateTestHostKey(t *testing.T) string {
 	t.Helper()
-	
+
 	// Create temp directory
 	tempDir := t.TempDir()
-	
+
 	// Generate key
 	privateKey, err := rsa.GenerateKey(rand.Reader, 2048)
 	if err != nil {
 		t.Fatal(err)
 	}
-	
+
 	// Write host key
 	hostKeyPath := filepath.Join(tempDir, "host_key")
 	hostKeyFile, err := os.Create(hostKeyPath)
@@ -92,7 +92,7 @@ func GenerateTestHostKey(t *testing.T) string {
 		t.Fatal(err)
 	}
 	defer hostKeyFile.Close()
-	
+
 	privateKeyPEM := &pem.Block{
 		Type:  "RSA PRIVATE KEY",
 		Bytes: x509.MarshalPKCS1PrivateKey(privateKey),
@@ -100,6 +100,6 @@ func GenerateTestHostKey(t *testing.T) string {
 	if err := pem.Encode(hostKeyFile, privateKeyPEM); err != nil {
 		t.Fatal(err)
 	}
-	
+
 	return hostKeyPath
 }
