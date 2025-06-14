@@ -55,6 +55,15 @@ func initializeServer(ctx context.Context, srv *server.Server, cfg *config.Confi
 	if sshSrv := srv.GetNetworkServer(); sshSrv != nil {
 		logger.Debug("Setting up SSH server callbacks")
 		sshSrv.OnClientConnected = func(addr, publicKey string) {
+			// Register client with ClientManager
+			if cm := srv.GetClientManager(); cm != nil {
+				// Generate client ID from address (simple for now)
+				clientID := addr
+				clientName := addr // Use address as name for now
+				cm.RegisterClient(clientID, clientName, addr)
+			}
+			
+			// Send UI notification
 			if p != nil {
 				p.Send(ui.ClientConnectedMsg{ClientAddr: addr})
 			} else {
@@ -62,6 +71,13 @@ func initializeServer(ctx context.Context, srv *server.Server, cfg *config.Confi
 			}
 		}
 		sshSrv.OnClientDisconnected = func(addr string) {
+			// Unregister client from ClientManager
+			if cm := srv.GetClientManager(); cm != nil {
+				clientID := addr
+				cm.UnregisterClient(clientID)
+			}
+			
+			// Send UI notification
 			if p != nil {
 				p.Send(ui.ClientDisconnectedMsg{ClientAddr: addr})
 			} else {
@@ -102,6 +118,29 @@ func initializeServer(ctx context.Context, srv *server.Server, cfg *config.Confi
 	}
 
 	logger.Info("Server components started successfully")
+
+	// Connect ClientManager to UI if it's the redesigned model
+	if cm := srv.GetClientManager(); cm != nil && p != nil {
+		// Send a message to set the client manager
+		p.Send(ui.SetClientManagerMsg{ClientManager: cm})
+		
+		// Set up activity callback to send logs to UI
+		cm.SetOnActivity(func(level, message string) {
+			if p != nil {
+				logEntry := ui.LogEntry{
+					Timestamp: time.Now(),
+					Level:     level,
+					Message:   message,
+				}
+				p.Send(ui.LogMsg{Entry: logEntry})
+			}
+		})
+		
+		// Set SSH server for sending events to clients
+		if sshSrv := srv.GetNetworkServer(); sshSrv != nil {
+			cm.SetSSHServer(sshSrv)
+		}
+	}
 
 	// Show monitor configuration
 	if disp := srv.GetDisplay(); disp != nil {
@@ -184,8 +223,8 @@ func runServer(cmd *cobra.Command, args []string) error {
 			debugModel := ui.NewDebugServerModel()
 			p = tea.NewProgram(debugModel)
 		} else {
-			// Create full-screen TUI model
-			model := ui.NewFullscreenServerModel(serverPort, cfg.Server.Name)
+			// Create redesigned full-screen TUI model
+			model := ui.NewServerModelRedesigned(serverPort, cfg.Server.Name, Version)
 			p = tea.NewProgram(model, tea.WithAltScreen())
 		}
 
