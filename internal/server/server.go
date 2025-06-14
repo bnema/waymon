@@ -19,10 +19,11 @@ import (
 
 // Server represents the main server
 type Server struct {
-	config       *config.Config
-	display      *display.Display
-	inputHandler input.Handler
-	sshServer    *network.SSHServer
+	config        *config.Config
+	display       *display.Display
+	inputHandler  input.Handler
+	sshServer     *network.SSHServer
+	clientManager *ClientManager
 
 	// Synchronization
 	wg sync.WaitGroup
@@ -54,6 +55,12 @@ func (s *Server) Start(ctx context.Context) error {
 		return fmt.Errorf("failed to initialize input: %w", err)
 	}
 
+	// Initialize client manager (new redesigned architecture)
+	logger.Debug("Server.Start: Initializing client manager")
+	if err := s.initClientManager(); err != nil {
+		return fmt.Errorf("failed to initialize client manager: %w", err)
+	}
+
 	// Initialize network (creates SSH server but doesn't start it yet)
 	if err := s.initNetwork(); err != nil {
 		return fmt.Errorf("failed to initialize network: %w", err)
@@ -72,6 +79,19 @@ func (s *Server) StartNetworking(ctx context.Context) error {
 	s.wg.Add(1)
 	go s.runNetworkServer(ctx)
 
+	return nil
+}
+
+// initClientManager initializes the client manager for the redesigned architecture
+func (s *Server) initClientManager() error {
+	logger.Debug("Server.initClientManager: Creating client manager")
+	clientManager, err := NewClientManager()
+	if err != nil {
+		logger.Errorf("Server.initClientManager: Failed to create client manager: %v", err)
+		return err
+	}
+	logger.Debug("Server.initClientManager: Client manager created successfully")
+	s.clientManager = clientManager
 	return nil
 }
 
@@ -200,6 +220,11 @@ func (s *Server) GetName() string {
 // GetNetworkServer returns the SSH server instance
 func (s *Server) GetNetworkServer() *network.SSHServer {
 	return s.sshServer
+}
+
+// GetClientManager returns the client manager instance
+func (s *Server) GetClientManager() *ClientManager {
+	return s.clientManager
 }
 
 // GetSSHHostKeyPath returns the expanded SSH host key path
