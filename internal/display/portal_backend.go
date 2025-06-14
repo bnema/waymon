@@ -37,7 +37,6 @@ func (p *portalBackend) GetMonitors() ([]*Monitor, error) {
 	return nil, fmt.Errorf("no monitor detection method available")
 }
 
-
 func (p *portalBackend) getMonitorsXRandr() ([]*Monitor, error) {
 	cmd := exec.Command("xrandr")
 	output, err := cmd.Output()

@@ -1,3 +1,4 @@
+//go:build cgo
 // +build cgo
 
 package display
@@ -76,7 +77,7 @@ static void head_physical_size(void *data, struct zwlr_output_head_v1 *head, int
 static void head_mode(void *data, struct zwlr_output_head_v1 *head, struct zwlr_output_mode_v1 *mode) {
     wlr_output_data *out = (wlr_output_data *)data;
     // fprintf(stderr, "DEBUG: head_mode called for output %d, mode=%p\n", out->index, mode);
-    
+
     // Create a mode entry and add to list
     mode_data *md = malloc(sizeof(mode_data));
     md->mode = mode;
@@ -85,7 +86,7 @@ static void head_mode(void *data, struct zwlr_output_head_v1 *head, struct zwlr_
     md->refresh = 0;
     md->next = out->modes;
     out->modes = md;
-    
+
     // Add listener to get mode details
     zwlr_output_mode_v1_add_listener(mode, &mode_listener, md);
 }
@@ -187,9 +188,9 @@ static void manager_head(void *data, struct zwlr_output_manager_v1 *manager, str
         wlr_outputs[wlr_output_count].head = head;
         wlr_outputs[wlr_output_count].index = wlr_output_count;
         wlr_outputs[wlr_output_count].info.scale = 1.0; // Default
-        
+
         zwlr_output_head_v1_add_listener(head, &head_listener, &wlr_outputs[wlr_output_count]);
-        
+
         wlr_output_count++;
     }
 }
@@ -237,29 +238,29 @@ int get_wlr_outputs(wlr_output_info **out_outputs) {
     if (!display) {
         return -1;
     }
-    
+
     wlr_output_count = 0;
     wlr_done = 0;
     memset(wlr_outputs, 0, sizeof(wlr_outputs));
-    
+
     registry = wl_display_get_registry(display);
     wl_registry_add_listener(registry, &registry_listener, NULL);
-    
+
     wl_display_roundtrip(display);
-    
+
     if (!output_manager) {
         wl_display_disconnect(display);
         return -2; // Protocol not supported
     }
-    
+
     // Wait for initial events
     while (!wlr_done && wl_display_dispatch(display) != -1) {
         // Keep processing events
     }
-    
-    // Process all pending events to get mode information  
+
+    // Process all pending events to get mode information
     wl_display_roundtrip(display);
-    
+
     // Find the current mode data and copy its info
     for (int i = 0; i < wlr_output_count; i++) {
         if (wlr_outputs[i].current_mode) {
@@ -270,21 +271,21 @@ int get_wlr_outputs(wlr_output_info **out_outputs) {
                     wlr_outputs[i].info.width = md->width;
                     wlr_outputs[i].info.height = md->height;
                     wlr_outputs[i].info.refresh = md->refresh;
-                    // fprintf(stderr, "DEBUG: Found current mode: %dx%d @ %dmHz\n", 
+                    // fprintf(stderr, "DEBUG: Found current mode: %dx%d @ %dmHz\n",
                     //         md->width, md->height, md->refresh);
                     break;
                 }
             }
         }
     }
-    
+
     // Copy output info
     static wlr_output_info static_wlr_outputs[32];
     for (int i = 0; i < wlr_output_count; i++) {
         static_wlr_outputs[i] = wlr_outputs[i].info;
     }
     *out_outputs = static_wlr_outputs;
-    
+
     // Cleanup mode lists
     for (int i = 0; i < wlr_output_count; i++) {
         mode_data *md = wlr_outputs[i].modes;
@@ -294,14 +295,14 @@ int get_wlr_outputs(wlr_output_info **out_outputs) {
             md = next;
         }
     }
-    
+
     // Cleanup
     if (output_manager) {
         zwlr_output_manager_v1_destroy(output_manager);
     }
     wl_registry_destroy(registry);
     wl_display_disconnect(display);
-    
+
     return wlr_output_count;
 }
 */
@@ -319,14 +320,14 @@ func newWlrOutputManagementBackend() (Backend, error) {
 	if os.Getenv("SUDO_USER") != "" {
 		return nil, fmt.Errorf("cannot use wlr-output-management backend with sudo")
 	}
-	
+
 	return &wlrOutputManagementBackend{}, nil
 }
 
 func (w *wlrOutputManagementBackend) GetMonitors() ([]*Monitor, error) {
 	var cOutputs *C.wlr_output_info
 	count := C.get_wlr_outputs(&cOutputs)
-	
+
 	if count < 0 {
 		if count == -1 {
 			return nil, fmt.Errorf("failed to connect to Wayland display")
@@ -335,30 +336,30 @@ func (w *wlrOutputManagementBackend) GetMonitors() ([]*Monitor, error) {
 		}
 		return nil, fmt.Errorf("failed to get outputs: error %d", count)
 	}
-	
+
 	if count == 0 {
 		return nil, fmt.Errorf("no outputs found")
 	}
-	
+
 	// Convert C array to Go slice
 	outputs := (*[32]C.wlr_output_info)(unsafe.Pointer(cOutputs))[:count:count]
-	
+
 	monitors := make([]*Monitor, 0, count)
 	for i := 0; i < int(count); i++ {
 		output := &outputs[i]
-		
+
 		// Only include enabled outputs
 		if output.enabled == 0 {
 			continue
 		}
-		
+
 		name := C.GoString(&output.name[0])
 		if name == "" {
 			name = fmt.Sprintf("Unknown-%d", i)
 		}
-		
+
 		description := C.GoString(&output.description[0])
-		
+
 		monitor := &Monitor{
 			ID:      fmt.Sprintf("%d", i),
 			Name:    name,
@@ -369,18 +370,18 @@ func (w *wlrOutputManagementBackend) GetMonitors() ([]*Monitor, error) {
 			Scale:   float64(output.scale),
 			Primary: false, // Will be set after all monitors are processed
 		}
-		
+
 		// Use description as name if it's more descriptive
 		if description != "" && len(description) > len(name) {
 			monitor.Name = description
 		}
-		
+
 		monitors = append(monitors, monitor)
 	}
-	
+
 	// Determine which monitor should be primary
 	determinePrimaryMonitor(monitors)
-	
+
 	return monitors, nil
 }
 
