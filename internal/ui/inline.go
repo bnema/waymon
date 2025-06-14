@@ -441,14 +441,31 @@ func (m *InlineServerModel) View() string {
 	output.WriteString(statusBar)
 	output.WriteString("\n")
 	
-	// 2. If there's a pending auth request, show it
+	// 2. Render temporary message if active
+	if !m.messageExpiry.IsZero() && time.Now().Before(m.messageExpiry) {
+		messageStyle := lipgloss.NewStyle()
+		switch m.messageType {
+		case "error":
+			messageStyle = messageStyle.Foreground(lipgloss.Color("196")).Bold(true)
+		case "success":
+			messageStyle = messageStyle.Foreground(lipgloss.Color("46")).Bold(true)
+		case "warning":
+			messageStyle = messageStyle.Foreground(lipgloss.Color("214")).Bold(true)
+		default:
+			messageStyle = messageStyle.Foreground(lipgloss.Color("246"))
+		}
+		output.WriteString(messageStyle.Render(m.message))
+		output.WriteString("\n")
+	}
+	
+	// 3. If there's a pending auth request, show it
 	if m.pendingAuth != nil {
 		authPrompt := m.renderAuthPrompt()
 		output.WriteString(authPrompt)
 		output.WriteString("\n")
 	}
 	
-	// 3. Render recent logs
+	// 4. Render recent logs
 	logView := m.renderLogs(availableHeight)
 	output.WriteString(logView)
 	

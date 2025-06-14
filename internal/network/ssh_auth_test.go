@@ -23,9 +23,15 @@ func TestSSHAuthHandlerRaceCondition(t *testing.T) {
 	
 	// Reset viper and config
 	viper.Reset()
-	config.Init()
+	// Set test-specific values before Init to ensure they take precedence
 	viper.Set("server.ssh_whitelist_only", true)
 	viper.Set("server.ssh_whitelist", []string{})
+	config.Init()
+	
+	// Verify config is set correctly
+	cfg := config.Get()
+	require.True(t, cfg.Server.SSHWhitelistOnly, "SSHWhitelistOnly should be true")
+	require.Empty(t, cfg.Server.SSHWhitelist, "SSHWhitelist should be empty")
 	
 	// Create test host key
 	hostKeyPath := GenerateTestHostKey(t)
@@ -59,7 +65,7 @@ func TestSSHAuthHandlerRaceCondition(t *testing.T) {
 	require.NotZero(t, port, "server port should be assigned")
 	
 	// Try to connect immediately (before auth handler is set)
-	_, err = gossh.Dial("tcp", fmt.Sprintf("localhost:%d", port), &gossh.ClientConfig{
+	conn1, err := gossh.Dial("tcp", fmt.Sprintf("localhost:%d", port), &gossh.ClientConfig{
 		User: "test",
 		Auth: []gossh.AuthMethod{
 			gossh.PublicKeys(clientKey),
@@ -68,8 +74,18 @@ func TestSSHAuthHandlerRaceCondition(t *testing.T) {
 		Timeout:        2 * time.Second,
 	})
 	
+	// Debug: log the current config state
+	currentCfg := config.Get()
+	t.Logf("Config state: SSHWhitelistOnly=%v, SSHWhitelist=%v", currentCfg.Server.SSHWhitelistOnly, currentCfg.Server.SSHWhitelist)
+	t.Logf("Generated key fingerprint: %s", fingerprint)
+	t.Logf("Connection result: err=%v, authHandlerCalled=%v", err, authHandlerCalled)
+	
+	if conn1 != nil {
+		conn1.Close()
+	}
+	
 	// Should fail because auth handler wasn't ready
-	assert.Error(t, err)
+	require.Error(t, err, "Connection should fail when no auth handler is set")
 	assert.Contains(t, err.Error(), "unable to authenticate")
 	assert.False(t, authHandlerCalled, "auth handler should not have been called")
 	

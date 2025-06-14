@@ -195,3 +195,28 @@ func (e Edge) String() string {
 		return "none"
 	}
 }
+
+// determinePrimaryMonitor sets the primary monitor based on position
+// The monitor at position (0,0) is considered primary, with fallback to first monitor
+func determinePrimaryMonitor(monitors []*Monitor) {
+	// Reset all monitors to non-primary
+	for _, monitor := range monitors {
+		monitor.Primary = false
+	}
+	
+	// Determine primary monitor - the one at position (0,0) should be primary
+	// If no monitor is at (0,0), use the first monitor as fallback
+	primarySet := false
+	for _, monitor := range monitors {
+		if monitor.X == 0 && monitor.Y == 0 {
+			monitor.Primary = true
+			primarySet = true
+			break
+		}
+	}
+	
+	// Fallback to first monitor if no monitor is at (0,0)
+	if !primarySet && len(monitors) > 0 {
+		monitors[0].Primary = true
+	}
+}
