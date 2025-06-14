@@ -6,6 +6,8 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/bnema/waymon/internal/ipc"
+	"github.com/bnema/waymon/internal/logger"
 )
 
 // ServerModel is the Bubble Tea model for server UI
@@ -20,6 +22,7 @@ type ServerModel struct {
 	port        int
 	name        string
 	quitting    bool
+	ipcClient   *ipc.Client
 }
 
 // ServerConfig holds configuration for the server UI
@@ -35,7 +38,13 @@ func NewServerModel(cfg ServerConfig) *ServerModel {
 	statusBar.Status = fmt.Sprintf("Listening on port %d", cfg.Port)
 	statusBar.Connected = true
 
-	return &ServerModel{
+	// Create IPC client for switch commands
+	ipcClient, err := ipc.NewClient()
+	if err != nil {
+		logger.Warnf("Failed to create IPC client: %v", err)
+	}
+
+	model := &ServerModel{
 		statusBar: statusBar,
 		port:      cfg.Port,
 		name:      cfg.Name,
@@ -53,8 +62,12 @@ func NewServerModel(cfg ServerConfig) *ServerModel {
 				{Key: "r", Desc: "Refresh display"},
 			},
 		},
-		messages: []Message{},
+		messages:  []Message{},
+		ipcClient: ipcClient,
 	}
+	
+	model.updateControls()
+	return model
 }
 
 // Init implements tea.Model
@@ -74,6 +87,8 @@ func (m *ServerModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.messages = []Message{}
 		case "r":
 			m.AddMessage(MessageInfo, "Display refreshed")
+		case "s":
+			m.handleSwitchKey()
 		}
 
 	case tea.WindowSizeMsg:
@@ -92,6 +107,7 @@ func (m *ServerModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		m.AddConnection(name, msg.ClientAddr)
 		m.AddMessage(MessageSuccess, fmt.Sprintf("Client connected from %s", msg.ClientAddr))
+		m.updateControls() // Update controls to show switch hint
 
 	case ClientDisconnectedMsg:
 		// Extract name from address
@@ -101,6 +117,7 @@ func (m *ServerModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		m.RemoveConnection(name)
 		m.AddMessage(MessageInfo, fmt.Sprintf("Client disconnected from %s", msg.ClientAddr))
+		m.updateControls() // Update controls to hide switch hint if no clients
 	}
 
 	// Update status bar
@@ -189,5 +206,57 @@ func (m *ServerModel) AddMessage(msgType MessageType, content string) {
 		Type:    msgType,
 		Content: content,
 	})
+}
+
+// updateControls updates the controls help based on current state
+func (m *ServerModel) updateControls() {
+	baseControls := []Control{
+		{Key: "q", Desc: "Quit server"},
+		{Key: "c", Desc: "Clear messages"},
+		{Key: "r", Desc: "Refresh display"},
+	}
+	
+	// Add switch control if clients are connected
+	if len(m.connections.Connections) > 0 {
+		baseControls = append(baseControls, Control{Key: "s", Desc: "Switch computers"})
+	}
+	
+	m.controls.Controls = baseControls
+}
+
+// handleSwitchKey handles the switch key press
+func (m *ServerModel) handleSwitchKey() {
+	if len(m.connections.Connections) == 0 {
+		m.AddMessage(MessageWarning, "No clients connected - cannot switch")
+		return
+	}
+	
+	if m.ipcClient == nil {
+		m.AddMessage(MessageError, "IPC client not available")
+		return
+	}
+	
+	// Send switch command via IPC
+	resp, err := m.ipcClient.SendSwitchNext()
+	if err != nil {
+		m.AddMessage(MessageError, fmt.Sprintf("Failed to switch: %v", err))
+		return
+	}
+	
+	// Show success message with rotation info
+	if resp.TotalComputers > 1 {
+		currentName := "unknown"
+		if int(resp.CurrentComputer) < len(resp.ComputerNames) {
+			currentName = resp.ComputerNames[resp.CurrentComputer]
+		}
+		m.AddMessage(MessageSuccess, fmt.Sprintf("Switched to %s (%d/%d)", 
+			currentName, resp.CurrentComputer+1, resp.TotalComputers))
+	} else {
+		if resp.Active {
+			m.AddMessage(MessageSuccess, "Mouse sharing enabled")
+		} else {
+			m.AddMessage(MessageSuccess, "Mouse sharing disabled")
+		}
+	}
 }
 
