@@ -103,15 +103,32 @@ func (h *HotkeyCapture) Stop() {
 
 // findKeyboardDevices finds available keyboard input devices
 func (h *HotkeyCapture) findKeyboardDevices() error {
-	// Similar to mouse capture, but look for keyboard devices
+	var permissionErrors int
+	var totalDevices int
+
+	// Method 1: Use /dev/input/by-id symlinks to find keyboards (most reliable)
+	detector := NewDeviceDetector(DeviceTypeKeyboard)
+	if files, err := detector.FindDevicesBySymlinks(); err == nil && len(files) > 0 {
+		h.eventFiles = files
+		logger.Infof("Found %d keyboard devices using symlinks", len(h.eventFiles))
+		return nil
+	}
+
+	// Method 2: Fallback to scanning all /dev/input/event* devices with capability detection
+	logger.Debug("Symlink detection failed, falling back to capability scanning")
+	if files, err := detector.FindDevicesByCapabilities(); err == nil && len(files) > 0 {
+		h.eventFiles = files
+		logger.Infof("Found %d keyboard devices using capability detection", len(h.eventFiles))
+		return nil
+	}
+
+	// Method 3: Last resort - use ALL input devices (for situations where detection fails)
+	logger.Warn("Keyboard-specific detection failed, using all input devices as fallback")
 	eventDir := "/dev/input"
 	entries, err := os.ReadDir(eventDir)
 	if err != nil {
 		return fmt.Errorf("failed to read /dev/input: %w", err)
 	}
-
-	var permissionErrors int
-	var totalDevices int
 
 	for _, entry := range entries {
 		if !entry.IsDir() && len(entry.Name()) > 5 && entry.Name()[:5] == "event" {
@@ -129,13 +146,12 @@ func (h *HotkeyCapture) findKeyboardDevices() error {
 				continue
 			}
 
-			// Check if this is actually a keyboard device
-			if isKeyboardDevice(file) {
+			// In fallback mode, accept any device that supports EV_KEY events
+			if SupportsEventType(file, EV_KEY) {
 				h.eventFiles = append(h.eventFiles, file)
-				logger.Debugf("Found keyboard device: %s", path)
+				logger.Debugf("Using input device in fallback mode: %s", path)
 			} else {
 				file.Close()
-				logger.Debugf("Skipping non-keyboard device: %s", path)
 			}
 		}
 	}
@@ -143,6 +159,10 @@ func (h *HotkeyCapture) findKeyboardDevices() error {
 	// If we found devices but couldn't access any due to permissions, provide helpful error
 	if len(h.eventFiles) == 0 && permissionErrors > 0 {
 		return fmt.Errorf("found %d input devices but cannot access them due to permission denied. Run 'waymon setup' or ensure user is in 'input' group", totalDevices)
+	}
+
+	if len(h.eventFiles) > 0 {
+		logger.Warnf("Using %d input devices in fallback mode - this may include non-keyboard devices", len(h.eventFiles))
 	}
 
 	return nil
@@ -159,9 +179,6 @@ type keyInputEvent struct {
 // Linux input event types and constants
 const (
 	EV_KEY_EVENT = 0x01
-
-	// ioctl constants for device capabilities
-	EVIOCGBIT = 0x80004520
 )
 
 // Key codes for modifiers
@@ -173,13 +190,13 @@ const (
 	KEY_S         = 31  // Default hotkey
 )
 
-// isKeyboardDevice checks if a device has keyboard capabilities
+// isKeyboardDevice checks if a device has keyboard capabilities (evtest-style detection)
 func isKeyboardDevice(file *os.File) bool {
 	// Get supported event types
 	eventTypes := make([]byte, 32) // EV_MAX/8 + 1
 	if _, _, errno := syscall.Syscall(syscall.SYS_IOCTL,
 		file.Fd(),
-		uintptr(EVIOCGBIT),
+		EVIOCGBIT(0, len(eventTypes)),
 		uintptr(unsafe.Pointer(&eventTypes[0]))); errno != 0 {
 		return false
 	}
@@ -194,13 +211,14 @@ func isKeyboardDevice(file *os.File) bool {
 	keyBits := make([]byte, 96) // KEY_MAX/8 + 1 (assuming KEY_MAX < 768)
 	if _, _, errno := syscall.Syscall(syscall.SYS_IOCTL,
 		file.Fd(),
-		uintptr(EVIOCGBIT|(1<<8)), // EV_KEY = 1
+		EVIOCGBIT(1, len(keyBits)), // EV_KEY = 1
 		uintptr(unsafe.Pointer(&keyBits[0]))); errno != 0 {
 		return false
 	}
 
-	// Check for common keyboard keys to distinguish from mice/other devices
-	// Look for letter keys (A-Z range: 30-50) or number keys (2-11)
+	// Enhanced keyboard detection: check for multiple key ranges like evtest does
+
+	// Check for letter keys (QWERTY layout)
 	hasLetterKeys := false
 	for keyCode := 16; keyCode <= 50; keyCode++ { // Q to P, A to L, Z to M
 		if (keyBits[keyCode/8] & (1 << (keyCode % 8))) != 0 {
@@ -209,7 +227,66 @@ func isKeyboardDevice(file *os.File) bool {
 		}
 	}
 
-	return hasLetterKeys
+	// Check for number keys (1-9, 0)
+	hasNumberKeys := false
+	for keyCode := 2; keyCode <= 11; keyCode++ { // 1-9, 0
+		if (keyBits[keyCode/8] & (1 << (keyCode % 8))) != 0 {
+			hasNumberKeys = true
+			break
+		}
+	}
+
+	// Check for common modifier keys
+	hasModifierKeys := false
+	modifierKeys := []int{29, 42, 54, 56, 125} // CTRL, SHIFT, ALT, SUPER
+	for _, keyCode := range modifierKeys {
+		if (keyBits[keyCode/8] & (1 << (uint(keyCode) % 8))) != 0 {
+			hasModifierKeys = true
+			break
+		}
+	}
+
+	// Check for function keys (F1-F12)
+	hasFunctionKeys := false
+	for keyCode := 59; keyCode <= 70; keyCode++ { // F1-F12
+		if (keyBits[keyCode/8] & (1 << (uint(keyCode) % 8))) != 0 {
+			hasFunctionKeys = true
+			break
+		}
+	}
+
+	// Check for space, enter, backspace (essential keys)
+	hasEssentialKeys := false
+	essentialKeys := []int{57, 28, 14} // SPACE, ENTER, BACKSPACE
+	for _, keyCode := range essentialKeys {
+		if (keyBits[keyCode/8] & (1 << (uint(keyCode) % 8))) != 0 {
+			hasEssentialKeys = true
+			break
+		}
+	}
+
+	// A device is considered a keyboard if it has:
+	// 1. Letter keys (most important), OR
+	// 2. At least 2 of: number keys, modifier keys, function keys, essential keys
+	if hasLetterKeys {
+		return true
+	}
+
+	keyTypeCount := 0
+	if hasNumberKeys {
+		keyTypeCount++
+	}
+	if hasModifierKeys {
+		keyTypeCount++
+	}
+	if hasFunctionKeys {
+		keyTypeCount++
+	}
+	if hasEssentialKeys {
+		keyTypeCount++
+	}
+
+	return keyTypeCount >= 2
 }
 
 // captureEvents captures events from a single device

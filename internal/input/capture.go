@@ -91,7 +91,27 @@ func (m *MouseCapture) Stop() {
 
 // findMouseDevices finds available mouse input devices
 func (m *MouseCapture) findMouseDevices() error {
-	// Look for event devices
+	var permissionErrors int
+	var totalDevices int
+
+	// Method 1: Use /dev/input/by-id symlinks to find mice (most reliable)
+	detector := NewDeviceDetector(DeviceTypeMouse)
+	if files, err := detector.FindDevicesBySymlinks(); err == nil && len(files) > 0 {
+		m.eventFiles = files
+		logger.Infof("Found %d mouse devices using symlinks", len(m.eventFiles))
+		return nil
+	}
+
+	// Method 2: Fallback to scanning all /dev/input/event* devices with capability detection
+	logger.Debug("Symlink detection failed, falling back to capability scanning")
+	if files, err := detector.FindDevicesByCapabilities(); err == nil && len(files) > 0 {
+		m.eventFiles = files
+		logger.Infof("Found %d mouse devices using capability detection", len(m.eventFiles))
+		return nil
+	}
+
+	// Method 3: Last resort - use ALL input devices (for situations where detection fails)
+	logger.Warn("Mouse-specific detection failed, using all input devices as fallback")
 	eventDir := "/dev/input"
 	entries, err := os.ReadDir(eventDir)
 	if err != nil {
@@ -100,38 +120,93 @@ func (m *MouseCapture) findMouseDevices() error {
 
 	for _, entry := range entries {
 		if !entry.IsDir() && len(entry.Name()) > 5 && entry.Name()[:5] == "event" {
+			totalDevices++
 			path := filepath.Join(eventDir, entry.Name())
 
-			// Try to open the device (read-only is sufficient for capture)
 			file, err := os.OpenFile(path, os.O_RDONLY, 0)
 			if err != nil {
-				// Skip devices we can't access
-				logger.Debugf("Cannot access %s: %v", path, err)
+				if os.IsPermission(err) {
+					permissionErrors++
+					logger.Debugf("Cannot access %s: %v", path, err)
+				} else {
+					logger.Debugf("Cannot open %s: %v", path, err)
+				}
 				continue
 			}
 
-			// Check if this is a mouse device using ioctl
-			if m.isMouseDevice(file) {
+			// In fallback mode, accept any device with relative movement or button capabilities
+			if SupportsEventType(file, EV_REL) || SupportsEventType(file, EV_KEY) {
 				m.eventFiles = append(m.eventFiles, file)
-				logger.Debugf("Found mouse device: %s", path)
+				logger.Debugf("Using input device in fallback mode: %s", path)
 			} else {
 				file.Close()
 			}
 		}
 	}
 
+	// If we found devices but couldn't access any due to permissions, provide helpful error
+	if len(m.eventFiles) == 0 && permissionErrors > 0 {
+		return fmt.Errorf("found %d input devices but cannot access them due to permission denied. Run 'waymon setup' or ensure user is in 'input' group", totalDevices)
+	}
+
+	if len(m.eventFiles) > 0 {
+		logger.Warnf("Using %d input devices in fallback mode - this may include non-mouse devices", len(m.eventFiles))
+	}
+
 	return nil
 }
 
-// isMouseDevice checks if a device is a mouse using ioctl
-func (m *MouseCapture) isMouseDevice(file *os.File) bool {
-	// Get device capabilities
-	// This is a simplified check - in production, you'd want to use proper ioctl calls
-	// to check EV_REL (relative movement) and EV_KEY (buttons) capabilities
+// isMouseDevice checks if a device has mouse capabilities (evtest-style detection)
+func isMouseDevice(file *os.File) bool {
+	// Get supported event types
+	eventTypes := make([]byte, 32) // EV_MAX/8 + 1
+	if _, _, errno := syscall.Syscall(syscall.SYS_IOCTL,
+		file.Fd(),
+		EVIOCGBIT(0, len(eventTypes)),
+		uintptr(unsafe.Pointer(&eventTypes[0]))); errno != 0 {
+		return false
+	}
 
-	// For now, we'll accept any device that might be a mouse
-	// In a real implementation, you'd check the device capabilities properly
-	return true
+	// Check if device supports EV_REL (relative movement) - primary mouse indicator
+	supportsRel := (eventTypes[EV_REL/8] & (1 << (EV_REL % 8))) != 0
+	supportsKey := (eventTypes[EV_KEY/8] & (1 << (EV_KEY % 8))) != 0
+
+	// If device doesn't support relative movement or keys, it's not a mouse
+	if !supportsRel && !supportsKey {
+		return false
+	}
+
+	// If it supports relative movement, check for X/Y axes
+	if supportsRel {
+		relBits := make([]byte, 12) // REL_MAX/8 + 1
+		if _, _, errno := syscall.Syscall(syscall.SYS_IOCTL,
+			file.Fd(),
+			EVIOCGBIT(uint(EV_REL), len(relBits)),
+			uintptr(unsafe.Pointer(&relBits[0]))); errno != 0 {
+			return false
+		}
+
+		// Check for X and Y relative movement
+		hasRelX := (relBits[REL_X/8] & (1 << (REL_X % 8))) != 0
+		hasRelY := (relBits[REL_Y/8] & (1 << (REL_Y % 8))) != 0
+
+		if hasRelX && hasRelY {
+			// This is likely a mouse - check for mouse buttons to be sure
+			if supportsKey {
+				detector := NewDeviceDetector(DeviceTypeMouse)
+				return detector.HasMouseButtons(file)
+			}
+			return true // Relative X/Y movement is a strong indicator
+		}
+	}
+
+	// If it only supports keys, check if they're mouse buttons
+	if supportsKey && !supportsRel {
+		detector := NewDeviceDetector(DeviceTypeMouse)
+		return detector.HasMouseButtons(file)
+	}
+
+	return false
 }
 
 // Linux input event structure
@@ -141,30 +216,6 @@ type inputEvent struct {
 	Code  uint16
 	Value int32
 }
-
-// Event types
-const (
-	EV_SYN = 0x00
-	EV_KEY = 0x01
-	EV_REL = 0x02
-	EV_ABS = 0x03
-)
-
-// Relative axes
-const (
-	REL_X     = 0x00
-	REL_Y     = 0x01
-	REL_WHEEL = 0x08
-)
-
-// Mouse buttons
-const (
-	BTN_LEFT   = 0x110
-	BTN_RIGHT  = 0x111
-	BTN_MIDDLE = 0x112
-	BTN_SIDE   = 0x113
-	BTN_EXTRA  = 0x114
-)
 
 // captureEvents captures events from a single device
 func (m *MouseCapture) captureEvents(ctx context.Context, file *os.File) {
