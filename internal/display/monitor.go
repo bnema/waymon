@@ -46,7 +46,7 @@ type Backend interface {
 // New creates a new display manager
 func New() (*Display, error) {
 	logger.Debug("Display.New: Starting display manager creation")
-	
+
 	// Try different backends in order of preference
 	backends := []func() (Backend, error){
 		newWlrOutputManagementBackend, // Native wlr-output-management protocol
@@ -60,15 +60,15 @@ func New() (*Display, error) {
 	var err error
 
 	backendNames := []string{"wlrOutputManagementBackend", "wlrCgoBackend", "wlrRandrBackend", "portalBackend", "randrBackend"}
-	
+
 	for i, createBackend := range backends {
 		// Only show debug if not running as monitors --json
 		if os.Getenv("WAYMON_DISPLAY_HELPER") != "1" {
 			logger.Debugf("Display.New: Trying backend %d: %s", i, backendNames[i])
 		}
-		
+
 		backend, err = createBackend()
-		
+
 		if os.Getenv("WAYMON_DISPLAY_HELPER") != "1" {
 			if err == nil {
 				logger.Debugf("Display.New: Successfully created backend: %s", backendNames[i])
@@ -203,7 +203,7 @@ func determinePrimaryMonitor(monitors []*Monitor) {
 	for _, monitor := range monitors {
 		monitor.Primary = false
 	}
-	
+
 	// Determine primary monitor - the one at position (0,0) should be primary
 	// If no monitor is at (0,0), use the first monitor as fallback
 	primarySet := false
@@ -214,7 +214,7 @@ func determinePrimaryMonitor(monitors []*Monitor) {
 			break
 		}
 	}
-	
+
 	// Fallback to first monitor if no monitor is at (0,0)
 	if !primarySet && len(monitors) > 0 {
 		monitors[0].Primary = true

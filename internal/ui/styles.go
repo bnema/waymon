@@ -3,8 +3,8 @@ package ui
 
 import (
 	"fmt"
-	"strings"
 	"github.com/charmbracelet/lipgloss"
+	"strings"
 )
 
 // Color palette - consistent across the application
@@ -186,7 +186,7 @@ var (
 	IconProcessing = "~"
 	IconCheck      = "✓"
 	IconCross      = "✗"
-	
+
 	// Application icons
 	IconSetup   = "»"
 	IconServer  = "S"
@@ -196,7 +196,7 @@ var (
 	IconSummary = "="
 	IconSteps   = "→"
 	IconPhase   = "·"
-	
+
 	// Progress icons
 	IconProgress = "..."
 	IconDone     = "✓"
@@ -211,15 +211,15 @@ var (
 				Foreground(ColorPrimary)
 
 	SetupPhaseStyle = lipgloss.NewStyle().
-				Bold(true).
-				Foreground(ColorInfo)
+			Bold(true).
+			Foreground(ColorInfo)
 
 	// Setup result styles
 	SetupSuccessStyle = lipgloss.NewStyle().
 				Foreground(ColorSuccess)
 
 	SetupErrorStyle = lipgloss.NewStyle().
-				Foreground(ColorError)
+			Foreground(ColorError)
 
 	SetupWarningStyle = lipgloss.NewStyle().
 				Foreground(ColorWarning)
@@ -243,8 +243,8 @@ var (
 
 	// Action item styles
 	ActionItemStyle = lipgloss.NewStyle().
-				Foreground(ColorText).
-				MarginLeft(1)
+			Foreground(ColorText).
+			MarginLeft(1)
 )
 
 // Setup formatting functions
@@ -262,7 +262,7 @@ func FormatSetupPhase(phase string) string {
 func FormatSetupResult(success bool, step, message string) string {
 	var coloredIcon string
 	var style lipgloss.Style
-	
+
 	if success {
 		coloredIcon = SuccessStyle.Render(IconSuccess)
 		style = SetupSuccessStyle
@@ -270,7 +270,7 @@ func FormatSetupResult(success bool, step, message string) string {
 		coloredIcon = ErrorStyle.Render(IconError)
 		style = SetupErrorStyle
 	}
-	
+
 	result := "   " + coloredIcon + " " + step
 	if message != "" {
 		result += " - " + style.Render(message)
@@ -319,12 +319,12 @@ func CreateSeparator(width int, char string) string {
 	if width <= 0 {
 		width = 50 // Default width
 	}
-	
+
 	// For all separator types, just repeat the character
 	if char == "" {
 		char = "─" // Default to horizontal line
 	}
-	
+
 	return lipgloss.NewStyle().
 		Foreground(ColorSubtle).
 		Render(strings.Repeat(char, width))

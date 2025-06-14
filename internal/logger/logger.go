@@ -12,9 +12,9 @@ import (
 )
 
 var (
-	Logger       *log.Logger
-	currentWriter io.Writer = os.Stderr
-	uiNotifier   func(level, message string) // Callback to notify UI of new log entries
+	Logger        *log.Logger
+	currentWriter io.Writer                   = os.Stderr
+	uiNotifier    func(level, message string) // Callback to notify UI of new log entries
 )
 
 func init() {
@@ -129,7 +129,7 @@ func SetOutput(w io.Writer) {
 	currentWriter = w
 	Logger = log.NewWithOptions(w, log.Options{
 		ReportTimestamp: true,
-		TimeFormat:     "15:04:05",
+		TimeFormat:      "15:04:05",
 	})
 	// Restore the current log level
 	currentLevel := strings.ToUpper(os.Getenv("LOG_LEVEL"))
@@ -143,8 +143,8 @@ func SetOutput(w io.Writer) {
 func SetPrefix(prefix string) {
 	Logger = log.NewWithOptions(currentWriter, log.Options{
 		ReportTimestamp: true,
-		TimeFormat:     "15:04:05",
-		Prefix:         prefix,
+		TimeFormat:      "15:04:05",
+		Prefix:          prefix,
 	})
 	// Restore the current log level
 	currentLevel := strings.ToUpper(os.Getenv("LOG_LEVEL"))
@@ -163,7 +163,7 @@ func SetupFileLogging(prefix string) (*os.File, error) {
 		// Fallback to current directory if home dir not available
 		homeDir = "."
 	}
-	
+
 	// Create logs directory in user's home
 	logDir := filepath.Join(homeDir, ".local", "share", "waymon")
 	if err := os.MkdirAll(logDir, 0755); err != nil {
@@ -173,43 +173,43 @@ func SetupFileLogging(prefix string) (*os.File, error) {
 			return nil, fmt.Errorf("failed to create log directory: %v", err)
 		}
 	}
-	
+
 	logPath := filepath.Join(logDir, "waymon.log")
-	
+
 	// Open or create the log file with user-only permissions
 	logFile, err := os.OpenFile(logPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
 	if err != nil {
 		return nil, fmt.Errorf("failed to open log file %s: %v", logPath, err)
 	}
-	
+
 	// Log where we're writing
-	fmt.Fprintf(logFile, "\n%s %s: === New session started === (log: %s)\n", 
+	fmt.Fprintf(logFile, "\n%s %s: === New session started === (log: %s)\n",
 		time.Now().Format("15:04:05"), prefix, logPath)
-	
+
 	// Create file logger for charmbracelet/log
 	fileLogger := log.NewWithOptions(logFile, log.Options{
 		ReportTimestamp: true,
-		TimeFormat:     "15:04:05",
-		Prefix:         prefix,
+		TimeFormat:      "15:04:05",
+		Prefix:          prefix,
 	})
-	
+
 	// Set the default logger to write to file
 	log.SetDefault(fileLogger)
-	
+
 	// Configure the internal logger to use the file with prefix
 	// IMPORTANT: Preserve any existing UI notifier
 	savedNotifier := uiNotifier
-	
+
 	currentWriter = logFile
 	Logger = log.NewWithOptions(logFile, log.Options{
 		ReportTimestamp: true,
-		TimeFormat:     "15:04:05",
-		Prefix:         prefix,
+		TimeFormat:      "15:04:05",
+		Prefix:          prefix,
 	})
-	
+
 	// Restore the UI notifier
 	uiNotifier = savedNotifier
-	
+
 	// Set log level
 	currentLevel := strings.ToUpper(os.Getenv("LOG_LEVEL"))
 	if currentLevel == "" {
@@ -218,10 +218,10 @@ func SetupFileLogging(prefix string) (*os.File, error) {
 	// Debug: Print what level we're setting (this will go to file)
 	Logger.Infof("Setting log level to: %s (from env: %s)", currentLevel, os.Getenv("LOG_LEVEL"))
 	SetLevel(currentLevel)
-	
+
 	// Test that file logging is working
 	Info(prefix + ": File logging initialized")
-	
+
 	return logFile, nil
 }
 
