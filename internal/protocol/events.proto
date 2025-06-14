@@ -1,0 +1,127 @@
+syntax = "proto3";
+
+package waymon.protocol;
+
+option go_package = "github.com/bnema/waymon/internal/protocol";
+
+// InputEvent is the main event message sent between server and clients
+message InputEvent {
+  oneof event {
+    MouseMoveEvent mouse_move = 1;
+    MouseButtonEvent mouse_button = 2;
+    MouseScrollEvent mouse_scroll = 3;
+    KeyboardEvent keyboard = 4;
+    ControlEvent control = 5;
+  }
+  int64 timestamp = 6;
+  string source_id = 7;  // Which server sent this
+}
+
+// Mouse movement with relative coordinates
+message MouseMoveEvent {
+  double dx = 1;
+  double dy = 2;
+}
+
+// Mouse button press/release
+message MouseButtonEvent {
+  uint32 button = 1;     // Button number (1=left, 2=middle, 3=right, etc.)
+  bool pressed = 2;      // true=press, false=release
+}
+
+// Mouse scroll/wheel events
+message MouseScrollEvent {
+  double dx = 1;         // Horizontal scroll
+  double dy = 2;         // Vertical scroll
+  ScrollType type = 3;
+}
+
+enum ScrollType {
+  SCROLL_WHEEL = 0;
+  SCROLL_FINGER = 1;
+  SCROLL_CONTINUOUS = 2;
+}
+
+// Keyboard key press/release
+message KeyboardEvent {
+  uint32 key = 1;        // Key code
+  bool pressed = 2;      // true=press, false=release
+  uint32 modifiers = 3;  // Modifier mask (Ctrl, Alt, Shift, etc.)
+}
+
+// Control messages for switching targets, etc.
+message ControlEvent {
+  Type type = 1;
+  string target_id = 2;  // For SWITCH_TO_CLIENT
+  ClientConfig client_config = 3;  // For CLIENT_CONFIG
+  
+  enum Type {
+    SWITCH_TO_LOCAL = 0;
+    SWITCH_TO_CLIENT = 1;
+    REQUEST_CONTROL = 2;
+    RELEASE_CONTROL = 3;
+    CLIENT_LIST_REQUEST = 4;
+    CLIENT_LIST_RESPONSE = 5;
+    CLIENT_CONFIG = 6;  // Client sends its configuration
+  }
+}
+
+// Client information for server management
+message ClientInfo {
+  string id = 1;
+  string name = 2;
+  string address = 3;
+  ClientStatus status = 4;
+  int64 connected_at = 5;
+}
+
+enum ClientStatus {
+  CLIENT_IDLE = 0;
+  CLIENT_BEING_CONTROLLED = 1;
+  CLIENT_DISCONNECTED = 2;
+}
+
+// Server information and capabilities
+message ServerInfo {
+  string id = 1;
+  string name = 2;
+  repeated ClientInfo connected_clients = 3;
+  string currently_controlling = 4;  // Client ID currently being controlled
+  ServerCapabilities capabilities = 5;
+}
+
+message ServerCapabilities {
+  bool supports_keyboard = 1;
+  bool supports_mouse = 2;
+  bool supports_scroll = 3;
+  bool supports_hotkeys = 4;
+}
+
+// Client configuration sent on connect
+message ClientConfig {
+  string client_id = 1;
+  string client_name = 2;
+  repeated Monitor monitors = 3;
+  ClientCapabilities capabilities = 4;
+}
+
+// Monitor/display information
+message Monitor {
+  string name = 1;
+  int32 x = 2;           // Position X
+  int32 y = 3;           // Position Y  
+  int32 width = 4;       // Resolution width
+  int32 height = 5;      // Resolution height
+  bool primary = 6;      // Is primary monitor
+  double scale = 7;      // DPI scale factor
+  int32 refresh_rate = 8; // Refresh rate in Hz
+}
+
+// Client capabilities
+message ClientCapabilities {
+  bool can_receive_keyboard = 1;
+  bool can_receive_mouse = 2;
+  bool can_receive_scroll = 3;
+  string wayland_compositor = 4; // Wayland compositor type
+  string uinput_version = 5;     // uinput library version
+}
