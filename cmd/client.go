@@ -53,9 +53,9 @@ func runClient(cmd *cobra.Command, args []string) error {
 	}
 	defer logFile.Close()
 
-	// Verify uinput setup has been completed
-	if err := VerifyUinputSetup(); err != nil {
-		return fmt.Errorf("uinput setup verification failed: %w", err)
+	// Verify waymon setup has been completed
+	if err := VerifyWaymonSetup(); err != nil {
+		return fmt.Errorf("waymon setup verification failed: %w", err)
 	}
 
 	// Get configuration
