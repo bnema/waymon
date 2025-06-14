@@ -47,8 +47,8 @@ func TestUInputHandler_Integration(t *testing.T) {
 			},
 			{
 				Type:        proto.EventType_EVENT_TYPE_MOVE,
-				X:           50,  // Delta: move 50 more pixels right
-				Y:           20,  // Delta: move 20 more pixels down
+				X:           50, // Delta: move 50 more pixels right
+				Y:           20, // Delta: move 20 more pixels down
 				TimestampMs: time.Now().UnixMilli(),
 			},
 		}

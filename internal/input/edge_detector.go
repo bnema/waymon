@@ -2,6 +2,7 @@ package input
 
 import (
 	"context"
+	"fmt"
 	"sync"
 	"time"
 
@@ -19,12 +20,12 @@ type EdgeDetector struct {
 	threshold    int32
 	edgeMappings []config.EdgeMapping
 
-	mu        sync.Mutex
-	active    bool
-	capturing bool
-	lastX     int32
-	lastY     int32
-	lastEdge  display.Edge
+	mu         sync.Mutex
+	active     bool
+	capturing  bool
+	lastX      int32
+	lastY      int32
+	lastEdge   display.Edge
 	activeHost string // Currently connected host
 
 	cancel context.CancelFunc
@@ -44,7 +45,7 @@ func NewEdgeDetector(disp *display.Display, client network.Client, threshold int
 	cfg := config.Get()
 	logger.Infof("EdgeDetector: Created with %d edge mappings", len(cfg.Client.EdgeMappings))
 	for _, mapping := range cfg.Client.EdgeMappings {
-		logger.Debugf("  Edge mapping: %s edge of monitor '%s' -> host '%s'", 
+		logger.Debugf("  Edge mapping: %s edge of monitor '%s' -> host '%s'",
 			mapping.Edge, mapping.MonitorID, mapping.Host)
 	}
 
@@ -149,20 +150,20 @@ func (e *EdgeDetector) checkCursorPosition(x, y int32) {
 	// Check if we've entered a new edge
 	if edge != display.EdgeNone && edge != e.lastEdge {
 		e.lastEdge = edge
-		
+
 		// Find which host this edge should connect to
 		monitor := e.display.GetMonitorAt(x, y)
 		if monitor != nil && !e.capturing {
 			host := e.getHostForEdge(monitor, edge)
 			if host != "" {
-				logger.Infof("Edge detected: %s edge of monitor '%s' -> connecting to host '%s'", 
+				logger.Infof("Edge detected: %s edge of monitor '%s' -> connecting to host '%s'",
 					edge.String(), monitor.Name, host)
 				e.activeHost = host
 				if e.onEdgeEnter != nil {
 					e.onEdgeEnter(edge, x, y)
 				}
 			} else {
-				logger.Debugf("Edge detected: %s edge of monitor '%s' but no mapping found", 
+				logger.Debugf("Edge detected: %s edge of monitor '%s' but no mapping found",
 					edge.String(), monitor.Name)
 			}
 		}
@@ -176,8 +177,8 @@ func (e *EdgeDetector) checkCursorPosition(x, y int32) {
 	}
 }
 
-// StartCapture begins capturing mouse events
-func (e *EdgeDetector) StartCapture(edge display.Edge) error {
+// StartCapture begins capturing mouse events for a specific edge/monitor
+func (e *EdgeDetector) StartCapture(edge display.Edge, monitor *display.Monitor) error {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 
@@ -186,8 +187,16 @@ func (e *EdgeDetector) StartCapture(edge display.Edge) error {
 		return nil
 	}
 
+	// Find the host for this edge/monitor combination
+	host := e.getHostForEdge(monitor, edge)
+	if host == "" {
+		return fmt.Errorf("no host configured for %s edge of monitor %s", edge.String(), monitor.Name)
+	}
+
 	e.capturing = true
-	logger.Infof("Starting mouse capture mode - sending events to host '%s'", e.activeHost)
+	e.activeHost = host
+	e.lastEdge = edge
+	logger.Infof("Starting mouse capture mode - %s edge of %s -> host '%s'", edge.String(), monitor.Name, host)
 
 	// Send MouseEnter event to server
 	if e.client != nil && e.client.IsConnected() {
@@ -328,20 +337,20 @@ func (e *EdgeDetector) HandleMouseScroll(direction waymonProto.ScrollDirection, 
 // getHostForEdge finds which host to connect to based on monitor and edge
 func (e *EdgeDetector) getHostForEdge(monitor *display.Monitor, edge display.Edge) string {
 	edgeStr := edge.String()
-	
+
 	// Look for exact monitor match
 	for _, mapping := range e.edgeMappings {
 		if mapping.Edge == edgeStr {
 			// Check monitor match
-			if mapping.MonitorID == monitor.ID || 
-			   mapping.MonitorID == monitor.Name ||
-			   (mapping.MonitorID == "primary" && monitor.Primary) ||
-			   mapping.MonitorID == "*" {
+			if mapping.MonitorID == monitor.ID ||
+				mapping.MonitorID == monitor.Name ||
+				(mapping.MonitorID == "primary" && monitor.Primary) ||
+				mapping.MonitorID == "*" {
 				return mapping.Host
 			}
 		}
 	}
-	
+
 	// Fallback to legacy screen_position if no mappings configured
 	cfg := config.Get()
 	if len(e.edgeMappings) == 0 && cfg.Client.ScreenPosition != "" && cfg.Client.ServerAddress != "" {
@@ -350,6 +359,6 @@ func (e *EdgeDetector) getHostForEdge(monitor *display.Monitor, edge display.Edg
 			return cfg.Client.ServerAddress
 		}
 	}
-	
+
 	return ""
 }
