@@ -110,13 +110,22 @@ func (h *HotkeyCapture) findKeyboardDevices() error {
 		return fmt.Errorf("failed to read /dev/input: %w", err)
 	}
 	
+	var permissionErrors int
+	var totalDevices int
+	
 	for _, entry := range entries {
 		if !entry.IsDir() && len(entry.Name()) > 5 && entry.Name()[:5] == "event" {
+			totalDevices++
 			path := fmt.Sprintf("%s/%s", eventDir, entry.Name())
 			
 			file, err := os.OpenFile(path, os.O_RDONLY, 0)
 			if err != nil {
-				logger.Debugf("Cannot access %s: %v", path, err)
+				if os.IsPermission(err) {
+					permissionErrors++
+					logger.Debugf("Cannot access %s: %v", path, err)
+				} else {
+					logger.Debugf("Cannot open %s: %v", path, err)
+				}
 				continue
 			}
 			
@@ -124,6 +133,11 @@ func (h *HotkeyCapture) findKeyboardDevices() error {
 			h.eventFiles = append(h.eventFiles, file)
 			logger.Debugf("Found input device: %s", path)
 		}
+	}
+	
+	// If we found devices but couldn't access any due to permissions, provide helpful error
+	if len(h.eventFiles) == 0 && permissionErrors > 0 {
+		return fmt.Errorf("found %d input devices but cannot access them due to permission denied. Run 'waymon setup' or ensure user is in 'input' group", totalDevices)
 	}
 	
 	return nil
