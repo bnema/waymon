@@ -427,12 +427,6 @@ func testInputAccess() error {
 	return nil
 }
 
-func testBothAccess() error {
-	// This function is replaced by testBothAccessStructured
-	// which returns the test results for structured output
-	return nil
-}
-
 func testBothAccessStructured() (bool, bool) {
 	// Test uinput access (server mode)
 	uinputOk := true
