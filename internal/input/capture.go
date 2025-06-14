@@ -15,12 +15,12 @@ import (
 
 // MouseCapture handles capturing mouse events from the system
 type MouseCapture struct {
-	mu            sync.Mutex
-	capturing     bool
-	eventFiles    []*os.File
-	edgeDetector  *EdgeDetector
-	wg            sync.WaitGroup
-	cancel        context.CancelFunc
+	mu           sync.Mutex
+	capturing    bool
+	eventFiles   []*os.File
+	edgeDetector *EdgeDetector
+	wg           sync.WaitGroup
+	cancel       context.CancelFunc
 }
 
 // NewMouseCapture creates a new mouse capture instance
@@ -101,7 +101,7 @@ func (m *MouseCapture) findMouseDevices() error {
 	for _, entry := range entries {
 		if !entry.IsDir() && len(entry.Name()) > 5 && entry.Name()[:5] == "event" {
 			path := filepath.Join(eventDir, entry.Name())
-			
+
 			// Try to open the device (read-only is sufficient for capture)
 			file, err := os.OpenFile(path, os.O_RDONLY, 0)
 			if err != nil {
@@ -128,7 +128,7 @@ func (m *MouseCapture) isMouseDevice(file *os.File) bool {
 	// Get device capabilities
 	// This is a simplified check - in production, you'd want to use proper ioctl calls
 	// to check EV_REL (relative movement) and EV_KEY (buttons) capabilities
-	
+
 	// For now, we'll accept any device that might be a mouse
 	// In a real implementation, you'd check the device capabilities properly
 	return true
@@ -191,7 +191,7 @@ func (m *MouseCapture) captureEvents(ctx context.Context, file *os.File) {
 
 			// Parse event
 			event := (*inputEvent)(unsafe.Pointer(&buffer[0]))
-			
+
 			// Only process events when edge detector is capturing
 			if m.edgeDetector.IsCapturing() {
 				m.processEvent(event)
