@@ -11,7 +11,7 @@ func NewSwitchMessage(action pb.SwitchAction) (*pb.IPCMessage, error) {
 	cmd := &pb.SwitchCommand{
 		Action: action,
 	}
-	
+
 	return &pb.IPCMessage{
 		Type: pb.IPCMessageType_IPC_MESSAGE_TYPE_SWITCH,
 		Payload: &pb.IPCMessage_SwitchCommand{
@@ -34,7 +34,7 @@ func NewSwitchMessageLegacy(enable *bool) (*pb.IPCMessage, error) {
 		// Default to "next" for toggle behavior
 		cmd.Action = pb.SwitchAction_SWITCH_ACTION_NEXT
 	}
-	
+
 	return &pb.IPCMessage{
 		Type: pb.IPCMessageType_IPC_MESSAGE_TYPE_SWITCH,
 		Payload: &pb.IPCMessage_SwitchCommand{
@@ -92,12 +92,12 @@ func GetSwitchCommand(msg *pb.IPCMessage) (*pb.SwitchCommand, error) {
 	if msg.Type != pb.IPCMessageType_IPC_MESSAGE_TYPE_SWITCH {
 		return nil, fmt.Errorf("message is not a switch command")
 	}
-	
+
 	cmd, ok := msg.Payload.(*pb.IPCMessage_SwitchCommand)
 	if !ok {
 		return nil, fmt.Errorf("invalid switch command payload")
 	}
-	
+
 	return cmd.SwitchCommand, nil
 }
 
@@ -106,12 +106,12 @@ func GetStatusQuery(msg *pb.IPCMessage) (*pb.StatusQuery, error) {
 	if msg.Type != pb.IPCMessageType_IPC_MESSAGE_TYPE_STATUS {
 		return nil, fmt.Errorf("message is not a status query")
 	}
-	
+
 	query, ok := msg.Payload.(*pb.IPCMessage_StatusQuery)
 	if !ok {
 		return nil, fmt.Errorf("invalid status query payload")
 	}
-	
+
 	return query.StatusQuery, nil
 }
 
@@ -120,12 +120,12 @@ func GetStatusResponse(msg *pb.IPCMessage) (*pb.StatusResponse, error) {
 	if msg.Type != pb.IPCMessageType_IPC_MESSAGE_TYPE_STATUS_RESPONSE {
 		return nil, fmt.Errorf("message is not a status response")
 	}
-	
+
 	resp, ok := msg.Payload.(*pb.IPCMessage_StatusResponse)
 	if !ok {
 		return nil, fmt.Errorf("invalid status response payload")
 	}
-	
+
 	return resp.StatusResponse, nil
 }
 
@@ -134,11 +134,11 @@ func GetErrorResponse(msg *pb.IPCMessage) (*pb.ErrorResponse, error) {
 	if msg.Type != pb.IPCMessageType_IPC_MESSAGE_TYPE_ERROR {
 		return nil, fmt.Errorf("message is not an error response")
 	}
-	
+
 	errResp, ok := msg.Payload.(*pb.IPCMessage_ErrorResponse)
 	if !ok {
 		return nil, fmt.Errorf("invalid error response payload")
 	}
-	
+
 	return errResp.ErrorResponse, nil
 }

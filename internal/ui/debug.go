@@ -11,11 +11,11 @@ import (
 
 // DebugServerModel is a minimal TUI for debugging
 type DebugServerModel struct {
-	logs       []string
-	maxLogs    int
-	height     int
-	width      int
-	startTime  time.Time
+	logs      []string
+	maxLogs   int
+	height    int
+	width     int
+	startTime time.Time
 }
 
 // NewDebugServerModel creates a debug server UI
@@ -41,15 +41,15 @@ func (m *DebugServerModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.WindowSizeMsg:
 		m.height = msg.Height
 		m.width = msg.Width
-		
+
 	case tea.KeyMsg:
 		switch msg.String() {
 		case "q", "ctrl+c":
 			return m, tea.Quit
 		}
-		
+
 	case LogMsg:
-		entry := fmt.Sprintf("[%s] %s: %s", 
+		entry := fmt.Sprintf("[%s] %s: %s",
 			msg.Entry.Timestamp.Format("15:04:05"),
 			msg.Entry.Level,
 			msg.Entry.Message,
@@ -58,20 +58,20 @@ func (m *DebugServerModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if len(m.logs) > m.maxLogs {
 			m.logs = m.logs[1:]
 		}
-		
+
 	case TickMsg:
 		// Continue ticking
 		return m, tea.Every(time.Second, func(t time.Time) tea.Msg {
 			return TickMsg(t)
 		})
 	}
-	
+
 	return m, nil
 }
 
 func (m *DebugServerModel) View() string {
 	var b strings.Builder
-	
+
 	// Header
 	elapsed := time.Since(m.startTime).Round(time.Second)
 	header := lipgloss.NewStyle().
@@ -80,7 +80,7 @@ func (m *DebugServerModel) View() string {
 		Render(fmt.Sprintf("WAYMON DEBUG UI - Running for %s", elapsed))
 	b.WriteString(header)
 	b.WriteString("\n\n")
-	
+
 	// Logs
 	if len(m.logs) == 0 {
 		b.WriteString("No logs yet...\n")
@@ -90,12 +90,12 @@ func (m *DebugServerModel) View() string {
 			b.WriteString("\n")
 		}
 	}
-	
+
 	// Footer
 	b.WriteString("\n")
 	b.WriteString(lipgloss.NewStyle().
 		Foreground(lipgloss.Color("240")).
 		Render("[q] quit"))
-	
+
 	return b.String()
 }

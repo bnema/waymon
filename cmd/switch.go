@@ -42,12 +42,12 @@ func init() {
 	switchCmd.Flags().BoolVar(&switchPrevious, "prev", false, "Switch to previous computer instead of next")
 	switchCmd.Flags().BoolVar(&switchEnable, "enable", false, "Enable mouse sharing (legacy)")
 	switchCmd.Flags().BoolVar(&switchDisable, "disable", false, "Disable mouse sharing (legacy)")
-	
+
 	// Make enable and disable mutually exclusive
 	switchCmd.MarkFlagsMutuallyExclusive("enable", "disable")
 	switchCmd.MarkFlagsMutuallyExclusive("prev", "enable")
 	switchCmd.MarkFlagsMutuallyExclusive("prev", "disable")
-	
+
 	rootCmd.AddCommand(switchCmd)
 }
 
@@ -90,19 +90,19 @@ func displaySwitchResult(resp *pb.StatusResponse, action pb.SwitchAction) {
 		if int(resp.CurrentComputer) < len(resp.ComputerNames) {
 			currentName = resp.ComputerNames[resp.CurrentComputer]
 		}
-		
+
 		switch action {
 		case pb.SwitchAction_SWITCH_ACTION_NEXT:
-			fmt.Printf("✓ Switched to next computer: %s (%d/%d)\n", 
+			fmt.Printf("✓ Switched to next computer: %s (%d/%d)\n",
 				currentName, resp.CurrentComputer+1, resp.TotalComputers)
 		case pb.SwitchAction_SWITCH_ACTION_PREVIOUS:
-			fmt.Printf("✓ Switched to previous computer: %s (%d/%d)\n", 
+			fmt.Printf("✓ Switched to previous computer: %s (%d/%d)\n",
 				currentName, resp.CurrentComputer+1, resp.TotalComputers)
 		default:
-			fmt.Printf("✓ Active computer: %s (%d/%d)\n", 
+			fmt.Printf("✓ Active computer: %s (%d/%d)\n",
 				currentName, resp.CurrentComputer+1, resp.TotalComputers)
 		}
-		
+
 		// Show all computers in rotation
 		if len(resp.ComputerNames) > 0 {
 			fmt.Printf("Computers in rotation: ")
@@ -141,7 +141,7 @@ func displaySwitchResult(resp *pb.StatusResponse, action pb.SwitchAction) {
 			}
 		}
 	}
-	
+
 	// Show connection status
 	if resp.Connected && resp.ServerHost != "" {
 		fmt.Printf("Connected to: %s\n", resp.ServerHost)

@@ -49,7 +49,7 @@ func printSummary(phases []setupPhase, needsRelogin bool) {
 	fmt.Println(ui.FormatSummaryHeader("Setup Summary"))
 	allSuccess := true
 	var actions []string
-	
+
 	for _, phase := range phases {
 		for _, result := range phase.results {
 			if !result.success {
@@ -60,9 +60,9 @@ func printSummary(phases []setupPhase, needsRelogin bool) {
 			}
 		}
 	}
-	
+
 	fmt.Print(ui.FormatSummaryStatus(allSuccess, needsRelogin))
-	
+
 	if allSuccess && !needsRelogin {
 		fmt.Println("   You can now run Waymon in the configured modes.")
 	} else if needsRelogin {
@@ -70,7 +70,7 @@ func printSummary(phases []setupPhase, needsRelogin bool) {
 	} else {
 		fmt.Println("   Please review the results above and try again if needed.")
 	}
-	
+
 	if len(actions) > 0 {
 		fmt.Print(ui.FormatNextStepsHeader())
 		for i, action := range actions {
@@ -120,7 +120,7 @@ func runSetup(cmd *cobra.Command, args []string) error {
 	// Determine setup mode (from flag or interactive prompt)
 	var setupMode string
 	var err error
-	
+
 	if setupModeFlag != "" {
 		setupMode = setupModeFlag
 		// Validate the flag value
@@ -239,11 +239,11 @@ func setupBothModes() error {
 
 	// Testing phase
 	testPhase := setupPhase{name: "Access Testing"}
-	
+
 	uinputOk, inputOk := testBothAccessStructured()
 	testPhase.addResult("Server mode access", uinputOk, "")
 	testPhase.addResult("Client mode access", inputOk, "")
-	
+
 	if !uinputOk || !inputOk {
 		needsRelogin = true
 	}
@@ -253,7 +253,7 @@ func setupBothModes() error {
 
 	// Print summary
 	printSummary(phases, needsRelogin)
-	
+
 	return nil
 }
 
@@ -350,7 +350,7 @@ func createSecureSetup() error {
 
 	// Create secure udev rule - only waymon group can access
 	rule := `KERNEL=="uinput", GROUP="waymon", MODE="0660", TAG+="uaccess"`
-	
+
 	// Create the udev rule file
 	cmd = exec.Command("sudo", "tee", "/etc/udev/rules.d/99-waymon-uinput.rules")
 	cmd.Stdin = strings.NewReader(rule)

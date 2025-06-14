@@ -59,7 +59,7 @@ func runMonitors(cmd *cobra.Command, args []string) error {
 
 	// Get monitor information
 	monitors := disp.GetMonitors()
-	
+
 	if jsonOutput {
 		// Output JSON format for programmatic usage
 		info := DisplayInfo{
@@ -89,7 +89,7 @@ func runMonitors(cmd *cobra.Command, args []string) error {
 	}
 
 	logger.Infof("Detected %d monitor(s):\n", len(monitors))
-	
+
 	for i, mon := range monitors {
 		logger.Infof("Monitor %d:", i+1)
 		logger.Infof("  Name:       %s", mon.Name)
@@ -98,15 +98,15 @@ func runMonitors(cmd *cobra.Command, args []string) error {
 		}
 		logger.Infof("  Resolution: %dx%d", mon.Width, mon.Height)
 		logger.Infof("  Position:   (%d, %d)", mon.X, mon.Y)
-		
+
 		if mon.Primary {
 			logger.Info("  Primary:    Yes")
 		}
-		
+
 		if mon.Scale != 1.0 {
 			logger.Infof("  Scale:      %.1fx", mon.Scale)
 		}
-		
+
 		logger.Info("")
 	}
 
@@ -114,7 +114,7 @@ func runMonitors(cmd *cobra.Command, args []string) error {
 	if len(monitors) > 1 {
 		minX, minY := monitors[0].X, monitors[0].Y
 		maxX, maxY := monitors[0].X+monitors[0].Width, monitors[0].Y+monitors[0].Height
-		
+
 		for _, mon := range monitors[1:] {
 			if mon.X < minX {
 				minX = mon.X
@@ -129,7 +129,7 @@ func runMonitors(cmd *cobra.Command, args []string) error {
 				maxY = mon.Y + mon.Height
 			}
 		}
-		
+
 		totalWidth := maxX - minX
 		totalHeight := maxY - minY
 		logger.Infof("Total virtual screen: %dx%d", totalWidth, totalHeight)

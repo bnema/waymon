@@ -8,7 +8,7 @@ import (
 
 var (
 	logLevel string
-	
+
 	rootCmd = &cobra.Command{
 		Use:   "waymon",
 		Short: "Waymon - Wayland mouse sharing",
@@ -48,7 +48,7 @@ func initConfig() {
 	if logLevel != "" {
 		logger.SetLevel(logLevel)
 	}
-	
+
 	if err := config.Init(); err != nil {
 		logger.Warnf("Warning: %v", err)
 	}

@@ -18,13 +18,13 @@ import (
 
 // SocketServer handles incoming IPC connections
 type SocketServer struct {
-	mu       sync.Mutex
-	listener net.Listener
+	mu         sync.Mutex
+	listener   net.Listener
 	socketPath string
-	handler  MessageHandler
-	wg       sync.WaitGroup
-	cancel   context.CancelFunc
-	running  bool
+	handler    MessageHandler
+	wg         sync.WaitGroup
+	cancel     context.CancelFunc
+	running    bool
 }
 
 // MessageHandler defines the interface for handling IPC messages
@@ -178,7 +178,7 @@ func (s *SocketServer) handleMessage(msg *pb.IPCMessage) *pb.IPCMessage {
 			errMsg, _ := NewErrorMessage(fmt.Sprintf("Invalid switch command: %v", err))
 			return errMsg
 		}
-		
+
 		response, err := s.handler.HandleSwitchCommand(cmd)
 		if err != nil {
 			errMsg, _ := NewErrorMessage(err.Error())
@@ -192,7 +192,7 @@ func (s *SocketServer) handleMessage(msg *pb.IPCMessage) *pb.IPCMessage {
 			errMsg, _ := NewErrorMessage(fmt.Sprintf("Invalid status query: %v", err))
 			return errMsg
 		}
-		
+
 		response, err := s.handler.HandleStatusQuery(query)
 		if err != nil {
 			errMsg, _ := NewErrorMessage(err.Error())
