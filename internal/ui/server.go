@@ -4,10 +4,10 @@ import (
 	"fmt"
 	"strings"
 
-	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
 	"github.com/bnema/waymon/internal/ipc"
 	"github.com/bnema/waymon/internal/logger"
+	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 )
 
 // ServerModel is the Bubble Tea model for server UI
@@ -65,7 +65,7 @@ func NewServerModel(cfg ServerConfig) *ServerModel {
 		messages:  []Message{},
 		ipcClient: ipcClient,
 	}
-	
+
 	model.updateControls()
 	return model
 }
@@ -215,12 +215,12 @@ func (m *ServerModel) updateControls() {
 		{Key: "c", Desc: "Clear messages"},
 		{Key: "r", Desc: "Refresh display"},
 	}
-	
+
 	// Add switch control if clients are connected
 	if len(m.connections.Connections) > 0 {
 		baseControls = append(baseControls, Control{Key: "s", Desc: "Switch computers"})
 	}
-	
+
 	m.controls.Controls = baseControls
 }
 
@@ -230,26 +230,26 @@ func (m *ServerModel) handleSwitchKey() {
 		m.AddMessage(MessageWarning, "No clients connected - cannot switch")
 		return
 	}
-	
+
 	if m.ipcClient == nil {
 		m.AddMessage(MessageError, "IPC client not available")
 		return
 	}
-	
+
 	// Send switch command via IPC
 	resp, err := m.ipcClient.SendSwitchNext()
 	if err != nil {
 		m.AddMessage(MessageError, fmt.Sprintf("Failed to switch: %v", err))
 		return
 	}
-	
+
 	// Show success message with rotation info
 	if resp.TotalComputers > 1 {
 		currentName := "unknown"
 		if int(resp.CurrentComputer) < len(resp.ComputerNames) {
 			currentName = resp.ComputerNames[resp.CurrentComputer]
 		}
-		m.AddMessage(MessageSuccess, fmt.Sprintf("Switched to %s (%d/%d)", 
+		m.AddMessage(MessageSuccess, fmt.Sprintf("Switched to %s (%d/%d)",
 			currentName, resp.CurrentComputer+1, resp.TotalComputers))
 	} else {
 		if resp.Active {
@@ -259,4 +259,3 @@ func (m *ServerModel) handleSwitchKey() {
 		}
 	}
 }
-

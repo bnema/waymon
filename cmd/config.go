@@ -214,7 +214,7 @@ var configSSHListCmd = &cobra.Command{
 	Short: "List whitelisted SSH keys",
 	RunE: func(cmd *cobra.Command, args []string) error {
 		cfg := config.Get()
-		
+
 		if len(cfg.Server.SSHWhitelist) == 0 {
 			logger.Info("No SSH keys in whitelist")
 			if cfg.Server.SSHWhitelistOnly {
@@ -226,18 +226,18 @@ var configSSHListCmd = &cobra.Command{
 			}
 			return nil
 		}
-		
+
 		logger.Info("Whitelisted SSH Keys:")
 		for i, fp := range cfg.Server.SSHWhitelist {
 			logger.Infof("%d. %s", i+1, fp)
 		}
-		
+
 		if cfg.Server.SSHWhitelistOnly {
 			logger.Info("\nWhitelist-only mode is ENABLED")
 		} else {
 			logger.Info("\nWhitelist-only mode is DISABLED")
 		}
-		
+
 		return nil
 	},
 }
@@ -248,11 +248,11 @@ var configSSHRemoveCmd = &cobra.Command{
 	Args:  cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		fingerprint := args[0]
-		
+
 		if err := config.RemoveSSHKeyFromWhitelist(fingerprint); err != nil {
 			return err
 		}
-		
+
 		logger.Infof("Removed SSH key from whitelist: %s", fingerprint)
 		return nil
 	},
@@ -264,18 +264,18 @@ var configSSHClearCmd = &cobra.Command{
 	RunE: func(cmd *cobra.Command, args []string) error {
 		cfg := config.Get()
 		count := len(cfg.Server.SSHWhitelist)
-		
+
 		if count == 0 {
 			logger.Info("Whitelist is already empty")
 			return nil
 		}
-		
+
 		// Clear whitelist
 		cfg.Server.SSHWhitelist = []string{}
 		if err := config.UpdateServer(cfg.Server); err != nil {
 			return err
 		}
-		
+
 		logger.Infof("Cleared %d SSH key(s) from whitelist", count)
 		return nil
 	},
@@ -293,7 +293,7 @@ func init() {
 	configHostCmd.AddCommand(configHostAddCmd)
 	configHostCmd.AddCommand(configHostRemoveCmd)
 	configHostCmd.AddCommand(configHostListCmd)
-	
+
 	// Add SSH subcommands
 	configSSHCmd.AddCommand(configSSHListCmd)
 	configSSHCmd.AddCommand(configSSHRemoveCmd)

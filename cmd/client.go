@@ -45,6 +45,10 @@ func init() {
 }
 
 func runClient(cmd *cobra.Command, args []string) error {
+	// Create root context for graceful shutdown
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
 	// Set up file logging since Bubble Tea will hide terminal output
 	// This MUST be done before any log output to avoid TUI corruption
 	logFile, err := logger.SetupFileLogging("CLIENT")
@@ -103,26 +107,31 @@ func runClient(cmd *cobra.Command, args []string) error {
 	client := network.NewSSHClient(privateKeyPath)
 	defer client.Disconnect()
 
-	// Create Wayland barrier system
-	barrier := input.NewWaylandBarrier(disp, client, int32(edgeSize))
-	
+	// Create edge detector for mouse capture
+	edgeDetector := input.NewEdgeDetector(disp, client, int32(edgeSize))
+
+	// Create mouse capture system
+	mouseCapture := input.NewMouseCapture(edgeDetector)
+
 	// Create hotkey system for manual switching
 	modifiers := uint32(0)
 	if cfg.Client.HotkeyModifier == "ctrl+alt" {
 		modifiers = input.ModCtrl | input.ModAlt
 	}
 	hotkeyCapture := input.NewHotkeyCapture(modifiers, input.KEY_S, func() {
-		if barrier.IsCapturing() {
-			barrier.StopCapture()
+		if edgeDetector.IsCapturing() {
+			edgeDetector.StopCapture()
 		} else {
 			// Toggle to primary monitor right edge as default
 			primary := disp.GetPrimaryMonitor()
 			if primary != nil {
-				barrier.StartCapture(display.EdgeRight, primary)
+				edgeDetector.StartCapture(display.EdgeRight, primary)
+			} else {
+				logger.Warn("No primary monitor found for hotkey activation")
 			}
 		}
 	})
-	
+
 	// Try to start hotkey capture (optional feature)
 	if err := hotkeyCapture.Start(); err != nil {
 		logger.Warnf("Hotkey capture not available: %v", err)
@@ -135,39 +144,13 @@ func runClient(cmd *cobra.Command, args []string) error {
 
 	// Create the program first
 	p := tea.NewProgram(model)
-	
-	// Set up logger to send log entries to UI
-	logger.SetUINotifier(func(level, message string) {
-		logEntry := ui.LogEntry{
-			Timestamp: time.Now(),
-			Level:     level,
-			Message:   message,
-		}
-		p.Send(ui.LogMsg{Entry: logEntry})
-	})
 
-	// Connect to server in background
-	go func() {
-		ctx := context.Background()
-		logger.Info("Attempting to connect to server", "addr", serverAddr)
-		
-		if err := client.Connect(ctx, serverAddr); err != nil {
-			if strings.Contains(err.Error(), "waiting for server approval") {
-				logger.Info("Waiting for server approval...")
-				p.Send(ui.WaitingApprovalMsg{})
-			} else {
-				logger.Errorf("Failed to connect to server: %v", err)
-				p.Send(ui.DisconnectedMsg{})
-			}
-		} else {
-			logger.Info("Successfully connected to server", "addr", serverAddr)
-			p.Send(ui.ConnectedMsg{})
-		}
-	}()
+	// Note: We'll set up the logger UI notifier AFTER p.Run() starts
+	// to avoid deadlock issues with p.Send() before the program is running
 
-	// Set up barrier callbacks
-	barrier.SetCallbacks(
-		func(edge display.Edge, host string) {
+	// Set up edge detector callbacks
+	edgeDetector.SetCallbacks(
+		func(edge display.Edge, x, y int32) {
 			// Edge activated
 			if client.IsConnected() {
 				p.Send(ui.CaptureStartMsg{})
@@ -178,32 +161,92 @@ func runClient(cmd *cobra.Command, args []string) error {
 			p.Send(ui.CaptureStopMsg{})
 		},
 	)
-	
-	// Start barrier system
-	if err := barrier.Start(); err != nil {
-		return fmt.Errorf("failed to start barrier system: %w", err)
-	}
-	defer barrier.Stop()
-	
-	// For now, simulate edge detection with a simple demo
-	// In production, this would use actual Wayland pointer constraints
-	go func() {
-		time.Sleep(5 * time.Second)
-		logger.Info("Demo: Simulating mouse reaching right edge")
-		if primary := disp.GetPrimaryMonitor(); primary != nil {
-			barrier.StartCapture(display.EdgeRight, primary)
-			time.Sleep(3 * time.Second)
-			logger.Info("Demo: Simulating return from remote")
-			barrier.StopCapture()
+
+	// Start server connection after TUI is running
+	// We need to delay this to avoid logger deadlock
+	connectToServer := func() {
+		// Now that TUI is running, set up logger to send to UI
+		logger.SetUINotifier(func(level, message string) {
+			logEntry := ui.LogEntry{
+				Timestamp: time.Now(),
+				Level:     level,
+				Message:   message,
+			}
+			p.Send(ui.LogMsg{Entry: logEntry})
+		})
+
+		logger.Info("Starting connection to server")
+
+		// Small delay to ensure TUI is fully ready
+		time.Sleep(100 * time.Millisecond)
+
+		// Create a context with a 30-second timeout for the connection
+		connCtx, connCancel := context.WithTimeout(ctx, 30*time.Second)
+		defer connCancel()
+
+		logger.Infof("Attempting to connect to server at %s", serverAddr)
+
+		// Immediately show waiting for approval since SSH auth can take time
+		p.Send(ui.WaitingApprovalMsg{})
+
+		if err := client.Connect(connCtx, serverAddr); err != nil {
+			if strings.Contains(err.Error(), "waiting for server approval") {
+				// Keep showing the waiting message
+				logger.Info("Connection pending server approval")
+			} else if strings.Contains(err.Error(), "timed out") {
+				logger.Errorf("Connection timed out: %v", err)
+				p.Send(ui.DisconnectedMsg{})
+			} else {
+				logger.Errorf("Failed to connect to server: %v", err)
+				p.Send(ui.DisconnectedMsg{})
+			}
+		} else {
+			logger.Infof("Successfully connected to server at %s", serverAddr)
+			p.Send(ui.ConnectedMsg{})
+
+			// Start edge detector and mouse capture after successful connection
+			logger.Info("Starting edge detector and mouse capture systems")
+			if err := edgeDetector.Start(); err != nil {
+				logger.Errorf("Failed to start edge detector: %v", err)
+			}
+			if err := mouseCapture.Start(); err != nil {
+				logger.Errorf("Failed to start mouse capture: %v", err)
+			}
 		}
+	}
+
+	// Start connection in background AFTER TUI starts
+	go func() {
+		// Wait a bit for TUI to initialize
+		time.Sleep(200 * time.Millisecond)
+		connectToServer()
 	}()
 
-	// Handle graceful shutdown
+	// Ensure cleanup happens on any exit path
+	defer func() {
+		logger.Info("Cleaning up client resources...")
+		cancel() // Cancel context
+		if client.IsConnected() {
+			logger.Info("Disconnecting from server...")
+			client.Disconnect()
+		}
+		edgeDetector.Stop()
+		mouseCapture.Stop()
+		hotkeyCapture.Stop()
+	}()
+
+	// Handle graceful shutdown with proper cleanup
 	sigCh := make(chan os.Signal, 1)
 	signal.Notify(sigCh, os.Interrupt, syscall.SIGTERM)
 
 	go func() {
 		<-sigCh
+		logger.Info("Received shutdown signal, initiating graceful shutdown...")
+
+		// Cancel context to signal shutdown to all components
+		cancel()
+
+		// Quit TUI immediately - defer cleanup will handle the rest
 		p.Send(tea.Quit())
 	}()
 

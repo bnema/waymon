@@ -69,7 +69,7 @@ func (c *Client) SendSwitchNext() (*pb.StatusResponse, error) {
 	return c.SendSwitch(pb.SwitchAction_SWITCH_ACTION_NEXT)
 }
 
-// SendSwitchPrevious sends a "switch to previous computer" command  
+// SendSwitchPrevious sends a "switch to previous computer" command
 func (c *Client) SendSwitchPrevious() (*pb.StatusResponse, error) {
 	return c.SendSwitch(pb.SwitchAction_SWITCH_ACTION_PREVIOUS)
 }

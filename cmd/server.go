@@ -50,14 +50,12 @@ func initializeServer(ctx context.Context, srv *server.Server, cfg *config.Confi
 	if err := srv.Start(ctx); err != nil {
 		return fmt.Errorf("failed to start server: %w", err)
 	}
-	
+
 	// NOW set up client connection callbacks AFTER the SSH server is created
 	if sshSrv := srv.GetNetworkServer(); sshSrv != nil {
 		logger.Debug("Setting up SSH server callbacks")
 		sshSrv.OnClientConnected = func(addr, publicKey string) {
-			logger.Debugf("OnClientConnected callback fired: addr=%s", addr)
 			if p != nil {
-				logger.Debug("Sending ClientConnectedMsg to TUI")
 				p.Send(ui.ClientConnectedMsg{ClientAddr: addr})
 			} else {
 				logger.Infof("Client connected from %s", addr)
@@ -71,28 +69,25 @@ func initializeServer(ctx context.Context, srv *server.Server, cfg *config.Confi
 			}
 		}
 		sshSrv.OnAuthRequest = func(addr, publicKey, fingerprint string) bool {
-			logger.Debugf("SSH auth request handler called addr=%s fingerprint=%s", addr, fingerprint)
-			
 			if p != nil {
 				// Create a channel for the response
 				responseChan := make(chan bool, 1)
-				
+
 				// Send auth request to UI with the response channel
 				p.Send(ui.SSHAuthRequestMsg{
-					ClientAddr:    addr,
-					PublicKey:     publicKey,
-					Fingerprint:   fingerprint,
-					ResponseChan:  responseChan,
+					ClientAddr:   addr,
+					PublicKey:    publicKey,
+					Fingerprint:  fingerprint,
+					ResponseChan: responseChan,
 				})
-				
+
 				// Wait for approval from UI
 				select {
 				case approved := <-responseChan:
-					logger.Debugf("SSH auth response received approved=%v fingerprint=%s", approved, fingerprint)
 					return approved
 				case <-time.After(30 * time.Second):
 					// Timeout after 30 seconds
-					logger.Debugf("SSH auth request timed out fingerprint=%s", fingerprint)
+					logger.Warn("SSH auth request timed out", "fingerprint", fingerprint)
 					return false
 				}
 			} else {
@@ -137,7 +132,7 @@ func initializeServer(ctx context.Context, srv *server.Server, cfg *config.Confi
 	if err := srv.StartNetworking(ctx); err != nil {
 		return fmt.Errorf("failed to start network server: %w", err)
 	}
-	
+
 	return nil
 }
 
@@ -148,14 +143,14 @@ func runServer(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("failed to setup file logging: %w", err)
 	}
 	defer logFile.Close()
-	
+
 	// Show log location if not using TUI
 	if noTUI {
 		fmt.Printf("Logging to: %s\n", logFile.Name())
 	}
 
 	// Server runs as normal user and will request sudo when needed for uinput
-	
+
 	// Check if uinput is available (but don't fail if no access yet)
 	if err := CheckUinputAvailable(); err != nil {
 		logger.Warnf("uinput not fully configured: %v", err)
@@ -182,7 +177,7 @@ func runServer(cmd *cobra.Command, args []string) error {
 
 	var p *tea.Program
 	var srv *server.Server
-	
+
 	if !noTUI {
 		if debugTUI {
 			// Use minimal debug UI
@@ -193,7 +188,7 @@ func runServer(cmd *cobra.Command, args []string) error {
 			model := ui.NewFullscreenServerModel(serverPort, cfg.Server.Name)
 			p = tea.NewProgram(model, tea.WithAltScreen())
 		}
-		
+
 		// Set up logger to send log entries to UI
 		logger.SetUINotifier(func(level, message string) {
 			if p != nil {
@@ -213,7 +208,7 @@ func runServer(cmd *cobra.Command, args []string) error {
 		if err != nil {
 			return fmt.Errorf("failed to create server: %w", err)
 		}
-		
+
 		logger.Info("Waymon server starting...")
 		logger.Debug("DEBUG: This is a debug message to test log level")
 	}
@@ -221,14 +216,14 @@ func runServer(cmd *cobra.Command, args []string) error {
 	// Create a context that we'll cancel on shutdown
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	
+
 	if p == nil {
 		// No TUI mode - initialize server immediately
 		if err := initializeServer(ctx, srv, cfg, bindAddress, serverPort, nil); err != nil {
 			return err
 		}
 	}
-	
+
 	// Handle graceful shutdown
 	sigCh := make(chan os.Signal, 1)
 	signal.Notify(sigCh, os.Interrupt, syscall.SIGTERM)
@@ -252,7 +247,7 @@ func runServer(cmd *cobra.Command, args []string) error {
 		go func() {
 			// Give TUI time to start
 			time.Sleep(500 * time.Millisecond)
-			
+
 			// Create server instance now that TUI is running
 			logger.Info("Creating server instance...")
 			var err error
@@ -262,10 +257,10 @@ func runServer(cmd *cobra.Command, args []string) error {
 				p.Send(tea.Quit())
 				return
 			}
-			
+
 			logger.Info("Waymon server starting...")
 			logger.Debug("DEBUG: This is a debug message to test log level")
-			
+
 			// Initialize server
 			if err := initializeServer(ctx, srv, cfg, bindAddress, serverPort, p); err != nil {
 				logger.Errorf("Server initialization failed: %v", err)
@@ -273,7 +268,7 @@ func runServer(cmd *cobra.Command, args []string) error {
 				p.Send(tea.Quit())
 			}
 		}()
-		
+
 		// Run TUI (blocking)
 		if _, err := p.Run(); err != nil {
 			return err

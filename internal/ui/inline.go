@@ -12,21 +12,21 @@ import (
 
 // InlineClientModel represents the inline UI model for the client
 type InlineClientModel struct {
-	connected      bool
+	connected       bool
 	waitingApproval bool
-	capturing      bool
-	serverAddr     string
-	lastUpdate     time.Time
-	spinner        spinner.Model
-	message        string
-	messageType    string // "info", "error", "success"
-	messageExpiry  time.Time
-	
+	capturing       bool
+	serverAddr      string
+	lastUpdate      time.Time
+	spinner         spinner.Model
+	message         string
+	messageType     string // "info", "error", "success"
+	messageExpiry   time.Time
+
 	// Log display
-	logBuffer     []LogEntry
-	maxLogLines   int
-	windowHeight  int
-	windowWidth   int
+	logBuffer    []LogEntry
+	maxLogLines  int
+	windowHeight int
+	windowWidth  int
 }
 
 // NewInlineClientModel creates a new inline client UI model
@@ -34,7 +34,7 @@ func NewInlineClientModel(serverAddr string) *InlineClientModel {
 	s := spinner.New()
 	s.Spinner = spinner.Dot
 	s.Style = lipgloss.NewStyle().Foreground(lipgloss.Color("205"))
-	
+
 	return &InlineClientModel{
 		serverAddr:   serverAddr,
 		spinner:      s,
@@ -49,7 +49,7 @@ func NewInlineClientModel(serverAddr string) *InlineClientModel {
 // AddLogEntry adds a new log entry to the client buffer
 func (m *InlineClientModel) AddLogEntry(entry LogEntry) {
 	m.logBuffer = append(m.logBuffer, entry)
-	
+
 	// Keep only the last maxLogLines entries
 	if len(m.logBuffer) > m.maxLogLines {
 		m.logBuffer = m.logBuffer[len(m.logBuffer)-m.maxLogLines:]
@@ -80,6 +80,7 @@ func (m *InlineClientModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.SetMessage("info", "Reconnecting...")
 			// Trigger reconnection logic here
 		case "q", "ctrl+c":
+			// Send quit message - signal handler will do proper cleanup
 			return m, tea.Quit
 		}
 
@@ -100,7 +101,7 @@ func (m *InlineClientModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.waitingApproval = false
 		m.capturing = false
 		m.SetMessage("error", "Disconnected from server")
-		
+
 	case WaitingApprovalMsg:
 		m.waitingApproval = true
 		m.SetMessage("info", "Waiting for server approval...")
@@ -112,11 +113,11 @@ func (m *InlineClientModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case CaptureStopMsg:
 		m.capturing = false
 		m.SetMessage("info", "Mouse capture stopped")
-	
+
 	case tea.WindowSizeMsg:
 		m.windowHeight = msg.Height
 		m.windowWidth = msg.Width
-	
+
 	case LogMsg:
 		m.AddLogEntry(msg.Entry)
 	}
@@ -135,35 +136,35 @@ func (m *InlineClientModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 // View renders the inline client UI with status bar + logs
 func (m *InlineClientModel) View() string {
 	var output strings.Builder
-	
+
 	// Calculate available space for logs
 	statusBarHeight := 1
 	waitingPromptHeight := 0
 	if m.waitingApproval {
 		waitingPromptHeight = 4 // Waiting prompt takes 4 lines
 	}
-	
+
 	availableHeight := m.windowHeight - statusBarHeight - waitingPromptHeight - 1 // -1 for padding
 	if availableHeight < 1 {
 		availableHeight = 10 // Minimum height
 	}
-	
+
 	// 1. Render status bar
 	statusBar := m.renderClientStatusBar()
 	output.WriteString(statusBar)
 	output.WriteString("\n")
-	
+
 	// 2. If waiting for approval, show it
 	if m.waitingApproval {
 		waitingPrompt := m.renderWaitingPrompt()
 		output.WriteString(waitingPrompt)
 		output.WriteString("\n")
 	}
-	
+
 	// 3. Render recent logs
 	logView := m.renderClientLogs(availableHeight)
 	output.WriteString(logView)
-	
+
 	return output.String()
 }
 
@@ -212,7 +213,7 @@ func (m *InlineClientModel) renderWaitingPrompt() string {
 	waitingStyle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("214"))
 	serverStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("205"))
 	infoStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("247"))
-	
+
 	var prompt strings.Builder
 	prompt.WriteString(waitingStyle.Render("⏳ WAITING FOR SERVER APPROVAL: "))
 	prompt.WriteString(serverStyle.Render(m.serverAddr))
@@ -220,7 +221,7 @@ func (m *InlineClientModel) renderWaitingPrompt() string {
 	prompt.WriteString(infoStyle.Render("The server administrator needs to approve your SSH key..."))
 	prompt.WriteString("\n")
 	prompt.WriteString(infoStyle.Render("Press [q] to quit or [r] to reconnect"))
-	
+
 	return prompt.String()
 }
 
@@ -230,28 +231,28 @@ func (m *InlineClientModel) renderClientLogs(maxLines int) string {
 		dimStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("240"))
 		return dimStyle.Render("No logs yet...")
 	}
-	
+
 	var logLines []string
-	
+
 	// Show the most recent logs that fit in the available space
 	startIdx := 0
 	if len(m.logBuffer) > maxLines {
 		startIdx = len(m.logBuffer) - maxLines
 	}
-	
+
 	for i := startIdx; i < len(m.logBuffer); i++ {
 		entry := m.logBuffer[i]
 		logLine := m.formatClientLogEntry(entry)
 		logLines = append(logLines, logLine)
 	}
-	
+
 	return strings.Join(logLines, "\n")
 }
 
 // formatClientLogEntry formats a single log entry with colors for client
 func (m *InlineClientModel) formatClientLogEntry(entry LogEntry) string {
 	timeStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("244"))
-	
+
 	var levelStyle lipgloss.Style
 	switch strings.ToUpper(entry.Level) {
 	case "ERROR":
@@ -265,9 +266,9 @@ func (m *InlineClientModel) formatClientLogEntry(entry LogEntry) string {
 	default:
 		levelStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("247"))
 	}
-	
+
 	msgStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("255"))
-	
+
 	return fmt.Sprintf("%s %s %s",
 		timeStyle.Render(entry.Timestamp.Format("15:04:05")),
 		levelStyle.Render(fmt.Sprintf("%-5s", strings.ToUpper(entry.Level))),
@@ -298,16 +299,16 @@ type InlineServerModel struct {
 	message       string
 	messageType   string
 	messageExpiry time.Time
-	
+
 	// SSH auth approval
-	pendingAuth   *SSHAuthRequestMsg
-	authChannel   chan bool // Send approval decision back
-	
+	pendingAuth *SSHAuthRequestMsg
+	authChannel chan bool // Send approval decision back
+
 	// Log display
-	logBuffer     []LogEntry
-	maxLogLines   int
-	windowHeight  int
-	windowWidth   int
+	logBuffer    []LogEntry
+	maxLogLines  int
+	windowHeight int
+	windowWidth  int
 }
 
 // NewInlineServerModel creates a new inline server UI model
@@ -315,7 +316,7 @@ func NewInlineServerModel(port int, serverName string) *InlineServerModel {
 	s := spinner.New()
 	s.Spinner = spinner.Globe
 	s.Style = lipgloss.NewStyle().Foreground(lipgloss.Color("205"))
-	
+
 	return &InlineServerModel{
 		port:         port,
 		serverName:   serverName,
@@ -331,7 +332,7 @@ func NewInlineServerModel(port int, serverName string) *InlineServerModel {
 // AddLogEntry adds a new log entry to the buffer
 func (m *InlineServerModel) AddLogEntry(entry LogEntry) {
 	m.logBuffer = append(m.logBuffer, entry)
-	
+
 	// Keep only the last maxLogLines entries
 	if len(m.logBuffer) > m.maxLogLines {
 		m.logBuffer = m.logBuffer[len(m.logBuffer)-m.maxLogLines:]
@@ -375,9 +376,10 @@ func (m *InlineServerModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			return m, nil
 		}
-		
+
 		switch msg.String() {
 		case "q", "ctrl+c":
+			// Send quit message - signal handler will do proper cleanup
 			return m, tea.Quit
 		}
 
@@ -400,11 +402,11 @@ func (m *InlineServerModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.clientCount--
 		}
 		m.SetMessage("info", fmt.Sprintf("Client disconnected (remaining: %d)", m.clientCount))
-	
+
 	case tea.WindowSizeMsg:
 		m.windowHeight = msg.Height
 		m.windowWidth = msg.Width
-	
+
 	case LogMsg:
 		m.AddLogEntry(msg.Entry)
 	}
@@ -423,24 +425,24 @@ func (m *InlineServerModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 // View renders the inline server UI with status bar + logs
 func (m *InlineServerModel) View() string {
 	var output strings.Builder
-	
+
 	// Calculate available space for logs (leave room for status bar and auth prompt)
 	statusBarHeight := 1
 	authPromptHeight := 0
 	if m.pendingAuth != nil {
 		authPromptHeight = 4 // Auth prompt takes 4 lines
 	}
-	
+
 	availableHeight := m.windowHeight - statusBarHeight - authPromptHeight - 1 // -1 for padding
 	if availableHeight < 1 {
 		availableHeight = 10 // Minimum height
 	}
-	
+
 	// 1. Render status bar
 	statusBar := m.renderStatusBar()
 	output.WriteString(statusBar)
 	output.WriteString("\n")
-	
+
 	// 2. Render temporary message if active
 	if !m.messageExpiry.IsZero() && time.Now().Before(m.messageExpiry) {
 		messageStyle := lipgloss.NewStyle()
@@ -457,18 +459,18 @@ func (m *InlineServerModel) View() string {
 		output.WriteString(messageStyle.Render(m.message))
 		output.WriteString("\n")
 	}
-	
+
 	// 3. If there's a pending auth request, show it
 	if m.pendingAuth != nil {
 		authPrompt := m.renderAuthPrompt()
 		output.WriteString(authPrompt)
 		output.WriteString("\n")
 	}
-	
+
 	// 4. Render recent logs
 	logView := m.renderLogs(availableHeight)
 	output.WriteString(logView)
-	
+
 	return output.String()
 }
 
@@ -514,7 +516,7 @@ func (m *InlineServerModel) renderAuthPrompt() string {
 	addrStyle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("205"))
 	keyStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("247"))
 	promptStyle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("42"))
-	
+
 	var prompt strings.Builder
 	prompt.WriteString(warnStyle.Render("⚠️  NEW CONNECTION: "))
 	prompt.WriteString(addrStyle.Render(m.pendingAuth.ClientAddr))
@@ -523,7 +525,7 @@ func (m *InlineServerModel) renderAuthPrompt() string {
 	prompt.WriteString(keyStyle.Render(m.pendingAuth.Fingerprint))
 	prompt.WriteString("\n")
 	prompt.WriteString(promptStyle.Render("Allow this connection? [Y/n]"))
-	
+
 	return prompt.String()
 }
 
@@ -533,28 +535,28 @@ func (m *InlineServerModel) renderLogs(maxLines int) string {
 		dimStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("240"))
 		return dimStyle.Render("No logs yet...")
 	}
-	
+
 	var logLines []string
-	
+
 	// Show the most recent logs that fit in the available space
 	startIdx := 0
 	if len(m.logBuffer) > maxLines {
 		startIdx = len(m.logBuffer) - maxLines
 	}
-	
+
 	for i := startIdx; i < len(m.logBuffer); i++ {
 		entry := m.logBuffer[i]
 		logLine := m.formatLogEntry(entry)
 		logLines = append(logLines, logLine)
 	}
-	
+
 	return strings.Join(logLines, "\n")
 }
 
 // formatLogEntry formats a single log entry with colors
 func (m *InlineServerModel) formatLogEntry(entry LogEntry) string {
 	timeStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("244"))
-	
+
 	var levelStyle lipgloss.Style
 	switch strings.ToUpper(entry.Level) {
 	case "ERROR":
@@ -568,9 +570,9 @@ func (m *InlineServerModel) formatLogEntry(entry LogEntry) string {
 	default:
 		levelStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("247"))
 	}
-	
+
 	msgStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("255"))
-	
+
 	return fmt.Sprintf("%s %s %s",
 		timeStyle.Render(entry.Timestamp.Format("15:04:05")),
 		levelStyle.Render(fmt.Sprintf("%-5s", strings.ToUpper(entry.Level))),
@@ -597,7 +599,6 @@ func pluralize(count int) string {
 	return "s"
 }
 
-
 // Message types for reactive updates
 type (
 	ConnectedMsg          struct{}
@@ -607,13 +608,13 @@ type (
 	CaptureStopMsg        struct{}
 	ClientConnectedMsg    struct{ ClientAddr string }
 	ClientDisconnectedMsg struct{ ClientAddr string }
-	SSHAuthRequestMsg     struct{ 
-		ClientAddr   string 
+	SSHAuthRequestMsg     struct {
+		ClientAddr   string
 		PublicKey    string
 		Fingerprint  string
 		ResponseChan chan bool
 	}
-	SSHAuthApprovedMsg    struct{ Fingerprint string }
-	SSHAuthDeniedMsg      struct{ Fingerprint string }
-	LogMsg                struct{ Entry LogEntry }
+	SSHAuthApprovedMsg struct{ Fingerprint string }
+	SSHAuthDeniedMsg   struct{ Fingerprint string }
+	LogMsg             struct{ Entry LogEntry }
 )

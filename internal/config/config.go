@@ -34,27 +34,27 @@ type ServerConfig struct {
 	BindAddress string `mapstructure:"bind_address"`
 	Name        string `mapstructure:"name"`
 	MaxClients  int    `mapstructure:"max_clients"`
-	
+
 	// SSH configuration
-	SSHHostKeyPath  string   `mapstructure:"ssh_host_key_path"`
-	SSHAuthKeysPath string   `mapstructure:"ssh_authorized_keys_path"`
-	SSHWhitelist    []string `mapstructure:"ssh_whitelist"` // List of allowed SSH key fingerprints
-	SSHWhitelistOnly bool    `mapstructure:"ssh_whitelist_only"` // Only allow whitelisted keys
+	SSHHostKeyPath   string   `mapstructure:"ssh_host_key_path"`
+	SSHAuthKeysPath  string   `mapstructure:"ssh_authorized_keys_path"`
+	SSHWhitelist     []string `mapstructure:"ssh_whitelist"`      // List of allowed SSH key fingerprints
+	SSHWhitelistOnly bool     `mapstructure:"ssh_whitelist_only"` // Only allow whitelisted keys
 }
 
 // ClientConfig contains client-specific settings
 type ClientConfig struct {
-	ServerAddress  string `mapstructure:"server_address"`
-	AutoConnect    bool   `mapstructure:"auto_connect"`
-	ReconnectDelay int    `mapstructure:"reconnect_delay"`
-	EdgeThreshold  int    `mapstructure:"edge_threshold"`
-	ScreenPosition string `mapstructure:"screen_position"` // Deprecated: use EdgeMappings instead
-	EdgeMappings   []EdgeMapping `mapstructure:"edge_mappings"` // Monitor-specific edge mappings
-	HotkeyModifier string `mapstructure:"hotkey_modifier"`
-	HotkeyKey      string `mapstructure:"hotkey_key"`
-	
+	ServerAddress  string        `mapstructure:"server_address"`
+	AutoConnect    bool          `mapstructure:"auto_connect"`
+	ReconnectDelay int           `mapstructure:"reconnect_delay"`
+	EdgeThreshold  int           `mapstructure:"edge_threshold"`
+	ScreenPosition string        `mapstructure:"screen_position"` // Deprecated: use EdgeMappings instead
+	EdgeMappings   []EdgeMapping `mapstructure:"edge_mappings"`   // Monitor-specific edge mappings
+	HotkeyModifier string        `mapstructure:"hotkey_modifier"`
+	HotkeyKey      string        `mapstructure:"hotkey_key"`
+
 	// SSH configuration
-	SSHPrivateKey  string `mapstructure:"ssh_private_key"`
+	SSHPrivateKey string `mapstructure:"ssh_private_key"`
 }
 
 // DisplayConfig contains display detection settings
@@ -82,23 +82,23 @@ type HostConfig struct {
 
 // EdgeMapping defines which monitor edge connects to which host
 type EdgeMapping struct {
-	MonitorID   string `mapstructure:"monitor_id"`   // Monitor ID/name or "primary" for primary monitor, "*" for any
-	Edge        string `mapstructure:"edge"`         // "left", "right", "top", "bottom"
-	Host        string `mapstructure:"host"`         // Host name or address to connect to
-	Description string `mapstructure:"description"`  // Optional description
+	MonitorID   string `mapstructure:"monitor_id"`  // Monitor ID/name or "primary" for primary monitor, "*" for any
+	Edge        string `mapstructure:"edge"`        // "left", "right", "top", "bottom"
+	Host        string `mapstructure:"host"`        // Host name or address to connect to
+	Description string `mapstructure:"description"` // Optional description
 }
 
 var (
 	// DefaultConfig provides sensible defaults
 	DefaultConfig = Config{
 		Server: ServerConfig{
-			Port:        52525,
-			BindAddress: "0.0.0.0",
-			Name:        getHostname(),
-			MaxClients:  1,
-			SSHHostKeyPath:  "~/.config/waymon/host_key",
-			SSHAuthKeysPath: "~/.config/waymon/authorized_keys",
-			SSHWhitelist:    []string{},
+			Port:             52525,
+			BindAddress:      "0.0.0.0",
+			Name:             getHostname(),
+			MaxClients:       1,
+			SSHHostKeyPath:   "~/.config/waymon/host_key",
+			SSHAuthKeysPath:  "~/.config/waymon/authorized_keys",
+			SSHWhitelist:     []string{},
 			SSHWhitelistOnly: true,
 		},
 		Client: ClientConfig{
@@ -158,7 +158,7 @@ func Init() error {
 	viper.SetDefault("server.ssh_authorized_keys_path", DefaultConfig.Server.SSHAuthKeysPath)
 	viper.SetDefault("server.ssh_whitelist", DefaultConfig.Server.SSHWhitelist)
 	viper.SetDefault("server.ssh_whitelist_only", DefaultConfig.Server.SSHWhitelistOnly)
-	
+
 	viper.SetDefault("client.server_address", DefaultConfig.Client.ServerAddress)
 	viper.SetDefault("client.auto_connect", DefaultConfig.Client.AutoConnect)
 	viper.SetDefault("client.reconnect_delay", DefaultConfig.Client.ReconnectDelay)
@@ -168,16 +168,16 @@ func Init() error {
 	viper.SetDefault("client.hotkey_modifier", DefaultConfig.Client.HotkeyModifier)
 	viper.SetDefault("client.hotkey_key", DefaultConfig.Client.HotkeyKey)
 	viper.SetDefault("client.ssh_private_key", DefaultConfig.Client.SSHPrivateKey)
-	
+
 	viper.SetDefault("display.refresh_interval", DefaultConfig.Display.RefreshInterval)
 	viper.SetDefault("display.backend", DefaultConfig.Display.Backend)
 	viper.SetDefault("display.cursor_tracking", DefaultConfig.Display.CursorTracking)
-	
+
 	viper.SetDefault("input.mouse_sensitivity", DefaultConfig.Input.MouseSensitivity)
 	viper.SetDefault("input.scroll_speed", DefaultConfig.Input.ScrollSpeed)
 	viper.SetDefault("input.enable_keyboard", DefaultConfig.Input.EnableKeyboard)
 	viper.SetDefault("input.keyboard_layout", DefaultConfig.Input.KeyboardLayout)
-	
+
 	viper.SetDefault("hosts", DefaultConfig.Hosts)
 
 	// Read config file if it exists
@@ -326,14 +326,14 @@ func UpdateClient(clientCfg ClientConfig) error {
 // AddSSHKeyToWhitelist adds an SSH key fingerprint to the whitelist
 func AddSSHKeyToWhitelist(fingerprint string) error {
 	cfg := Get()
-	
+
 	// Check if already whitelisted
 	for _, fp := range cfg.Server.SSHWhitelist {
 		if fp == fingerprint {
 			return fmt.Errorf("key already whitelisted")
 		}
 	}
-	
+
 	// Add to whitelist
 	cfg.Server.SSHWhitelist = append(cfg.Server.SSHWhitelist, fingerprint)
 	viper.Set("server.ssh_whitelist", cfg.Server.SSHWhitelist)
@@ -343,7 +343,7 @@ func AddSSHKeyToWhitelist(fingerprint string) error {
 // RemoveSSHKeyFromWhitelist removes an SSH key fingerprint from the whitelist
 func RemoveSSHKeyFromWhitelist(fingerprint string) error {
 	cfg := Get()
-	
+
 	// Find and remove
 	for i, fp := range cfg.Server.SSHWhitelist {
 		if fp == fingerprint {
@@ -352,20 +352,20 @@ func RemoveSSHKeyFromWhitelist(fingerprint string) error {
 			return Save()
 		}
 	}
-	
+
 	return fmt.Errorf("key not found in whitelist")
 }
 
 // IsSSHKeyWhitelisted checks if an SSH key fingerprint is whitelisted
 func IsSSHKeyWhitelisted(fingerprint string) bool {
 	cfg := Get()
-	
+
 	for _, fp := range cfg.Server.SSHWhitelist {
 		if fp == fingerprint {
 			return true
 		}
 	}
-	
+
 	return false
 }
 
