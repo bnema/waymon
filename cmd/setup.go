@@ -630,10 +630,19 @@ func VerifyClientSetup() error {
 	}
 
 	if !strings.Contains(string(output), "input") {
-		return fmt.Errorf("user %s is not in input group - please run 'waymon setup client' and log out/in", username)
+		// Check if we can actually access input devices before failing
+		if err := testInputAccess(); err != nil {
+			return fmt.Errorf("user %s is not in input group and cannot access input devices - please run 'waymon setup client' and log out/in", username)
+		}
+		// User is not in input group but has access somehow (unusual but possible)
+		return nil
 	}
 
-	// For client mode, we only need input group access
-	// No need to check uinput module or /dev/uinput access
+	// User is in input group, but let's verify actual access
+	if err := testInputAccess(); err != nil {
+		// User is in group but still can't access - probably needs to log out/in
+		return fmt.Errorf("user %s is in input group but cannot access input devices - please log out and back in for group changes to take effect", username)
+	}
+
 	return nil
 }
