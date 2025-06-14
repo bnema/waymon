@@ -2,6 +2,8 @@
 package ui
 
 import (
+	"fmt"
+	"strings"
 	"github.com/charmbracelet/lipgloss"
 )
 
@@ -174,6 +176,135 @@ var (
 	SpinnerCircle = []string{"◐", "◓", "◑", "◒"}
 )
 
+// Icons and indicators for consistent app-wide usage (using simple ASCII/Unicode symbols)
+var (
+	// Status icons
+	IconSuccess    = "✓"
+	IconError      = "✗"
+	IconWarning    = "!"
+	IconInfo       = "i"
+	IconProcessing = "~"
+	IconCheck      = "✓"
+	IconCross      = "✗"
+	
+	// Application icons
+	IconSetup   = "»"
+	IconServer  = "S"
+	IconClient  = "C"
+	IconConfig  = "*"
+	IconNetwork = "#"
+	IconSummary = "="
+	IconSteps   = "→"
+	IconPhase   = "·"
+	
+	// Progress icons
+	IconProgress = "..."
+	IconDone     = "✓"
+	IconPending  = "·"
+)
+
+// Setup-specific styles
+var (
+	// Setup header styles
+	SetupHeaderStyle = lipgloss.NewStyle().
+				Bold(true).
+				Foreground(ColorPrimary)
+
+	SetupPhaseStyle = lipgloss.NewStyle().
+				Bold(true).
+				Foreground(ColorInfo)
+
+	// Setup result styles
+	SetupSuccessStyle = lipgloss.NewStyle().
+				Foreground(ColorSuccess)
+
+	SetupErrorStyle = lipgloss.NewStyle().
+				Foreground(ColorError)
+
+	SetupWarningStyle = lipgloss.NewStyle().
+				Foreground(ColorWarning)
+
+	// Setup summary styles
+	SummaryHeaderStyle = lipgloss.NewStyle().
+				Bold(true).
+				Foreground(ColorPrimary)
+
+	SummarySuccessStyle = lipgloss.NewStyle().
+				Foreground(ColorSuccess).
+				Bold(true)
+
+	SummaryWarningStyle = lipgloss.NewStyle().
+				Foreground(ColorWarning).
+				Bold(true)
+
+	SummaryErrorStyle = lipgloss.NewStyle().
+				Foreground(ColorError).
+				Bold(true)
+
+	// Action item styles
+	ActionItemStyle = lipgloss.NewStyle().
+				Foreground(ColorText).
+				MarginLeft(1)
+)
+
+// Setup formatting functions
+func FormatSetupHeader(title string) string {
+	coloredIcon := InfoStyle.Render(IconSetup)
+	header := SetupHeaderStyle.Render(coloredIcon + " " + title)
+	return header + "\n" + CreateSeparator(50, "─")
+}
+
+func FormatSetupPhase(phase string) string {
+	coloredIcon := InfoStyle.Render(IconPhase)
+	return SetupPhaseStyle.Render(coloredIcon + " " + phase)
+}
+
+func FormatSetupResult(success bool, step, message string) string {
+	var coloredIcon string
+	var style lipgloss.Style
+	
+	if success {
+		coloredIcon = SuccessStyle.Render(IconSuccess)
+		style = SetupSuccessStyle
+	} else {
+		coloredIcon = ErrorStyle.Render(IconError)
+		style = SetupErrorStyle
+	}
+	
+	result := "   " + coloredIcon + " " + step
+	if message != "" {
+		result += " - " + style.Render(message)
+	}
+	return result
+}
+
+func FormatSummaryHeader(title string) string {
+	coloredIcon := InfoStyle.Render(IconSummary)
+	header := SummaryHeaderStyle.Render(coloredIcon + " " + title)
+	return header + "\n" + CreateSeparator(50, "─")
+}
+
+func FormatSummaryStatus(allSuccess, needsRelogin bool) string {
+	if allSuccess && !needsRelogin {
+		coloredIcon := SuccessStyle.Render(IconDone)
+		return SummarySuccessStyle.Render(coloredIcon + " Setup completed successfully!")
+	} else if needsRelogin {
+		coloredIcon := WarningStyle.Render(IconWarning)
+		return SummaryWarningStyle.Render(coloredIcon + " Setup completed, but requires relogin")
+	} else {
+		coloredIcon := ErrorStyle.Render(IconError)
+		return SummaryErrorStyle.Render(coloredIcon + " Setup completed with some issues")
+	}
+}
+
+func FormatActionItem(index int, action string) string {
+	return ActionItemStyle.Render(fmt.Sprintf("   %d. %s", index, action))
+}
+
+func FormatNextStepsHeader() string {
+	return SetupPhaseStyle.Render(IconSteps + " Next Steps:")
+}
+
 // Layout helpers
 func Center(width int, content string) string {
 	return lipgloss.PlaceHorizontal(width, lipgloss.Center, content)
@@ -181,4 +312,20 @@ func Center(width int, content string) string {
 
 func Right(width int, content string) string {
 	return lipgloss.PlaceHorizontal(width, lipgloss.Right, content)
+}
+
+// CreateSeparator creates a horizontal line separator
+func CreateSeparator(width int, char string) string {
+	if width <= 0 {
+		width = 50 // Default width
+	}
+	
+	// For all separator types, just repeat the character
+	if char == "" {
+		char = "─" // Default to horizontal line
+	}
+	
+	return lipgloss.NewStyle().
+		Foreground(ColorSubtle).
+		Render(strings.Repeat(char, width))
 }

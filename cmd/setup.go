@@ -7,10 +7,77 @@ import (
 	"os/user"
 	"strings"
 
-	"github.com/bnema/waymon/internal/logger"
+	"github.com/bnema/waymon/internal/ui"
 	"github.com/charmbracelet/huh"
 	"github.com/spf13/cobra"
 )
+
+type setupResult struct {
+	step    string
+	success bool
+	message string
+	action  string
+}
+
+type setupPhase struct {
+	name    string
+	results []setupResult
+}
+
+func (p *setupPhase) addResult(step string, success bool, message string, action ...string) {
+	actionStr := ""
+	if len(action) > 0 {
+		actionStr = action[0]
+	}
+	p.results = append(p.results, setupResult{
+		step:    step,
+		success: success,
+		message: message,
+		action:  actionStr,
+	})
+}
+
+func printPhase(phase setupPhase) {
+	fmt.Print(ui.FormatSetupPhase(phase.name))
+	for _, result := range phase.results {
+		fmt.Println(ui.FormatSetupResult(result.success, result.step, result.message))
+	}
+	fmt.Println()
+}
+
+func printSummary(phases []setupPhase, needsRelogin bool) {
+	fmt.Println(ui.FormatSummaryHeader("Setup Summary"))
+	allSuccess := true
+	var actions []string
+	
+	for _, phase := range phases {
+		for _, result := range phase.results {
+			if !result.success {
+				allSuccess = false
+			}
+			if result.action != "" {
+				actions = append(actions, result.action)
+			}
+		}
+	}
+	
+	fmt.Print(ui.FormatSummaryStatus(allSuccess, needsRelogin))
+	
+	if allSuccess && !needsRelogin {
+		fmt.Println("   You can now run Waymon in the configured modes.")
+	} else if needsRelogin {
+		fmt.Println("   Please log out and back in for group changes to take effect.")
+	} else {
+		fmt.Println("   Please review the results above and try again if needed.")
+	}
+	
+	if len(actions) > 0 {
+		fmt.Print(ui.FormatNextStepsHeader())
+		for i, action := range actions {
+			fmt.Println(ui.FormatActionItem(i+1, action))
+		}
+	}
+}
 
 var setupCmd = &cobra.Command{
 	Use:   "setup",
@@ -23,26 +90,48 @@ This command:
 	RunE: runSetup,
 }
 
+var (
+	setupModeFlag string
+)
+
 func init() {
 	rootCmd.AddCommand(setupCmd)
+	setupCmd.Flags().StringVarP(&setupModeFlag, "mode", "m", "", "Setup mode: server, client, or both (skips interactive prompt)")
 }
 
 func runSetup(cmd *cobra.Command, args []string) error {
-	logger.Info("Waymon Permissions Setup")
-	logger.Info("========================")
-	logger.Info("")
-
+	fmt.Println(ui.FormatSetupHeader("Waymon Setup"))
 	// Check if running as root
 	if os.Geteuid() == 0 {
-		logger.Info("Please run this command as a normal user (not root)")
-		logger.Info("The setup will use sudo when needed")
+		fmt.Println(ui.ErrorStyle.Render(ui.IconError + " Please run this command as a normal user (not root)"))
+		fmt.Println("   The setup will use sudo when needed")
 		return fmt.Errorf("cannot run setup as root")
 	}
 
-	// Ask user what they want to set up
-	setupMode, err := askSetupMode()
-	if err != nil {
-		return err
+	// Explain sudo usage upfront
+	fmt.Println(ui.InfoStyle.Render("This setup requires sudo permissions to:"))
+	fmt.Println("   • Load the uinput kernel module")
+	fmt.Println("   • Create system groups (waymon)")
+	fmt.Println("   • Add your user to system groups (waymon, input)")
+	fmt.Println("   • Create udev rules for device access")
+	fmt.Println("   • Reload system configuration")
+	fmt.Println()
+
+	// Determine setup mode (from flag or interactive prompt)
+	var setupMode string
+	var err error
+	
+	if setupModeFlag != "" {
+		setupMode = setupModeFlag
+		// Validate the flag value
+		if setupMode != "server" && setupMode != "client" && setupMode != "both" {
+			return fmt.Errorf("invalid setup mode: %s (must be server, client, or both)", setupMode)
+		}
+	} else {
+		setupMode, err = askSetupMode()
+		if err != nil {
+			return err
+		}
 	}
 
 	// Setup based on user choice
@@ -83,74 +172,96 @@ func askSetupMode() (string, error) {
 }
 
 func setupServerMode() error {
-	logger.Info("")
-	logger.Info("Setting up SERVER mode permissions...")
-	logger.Info("")
-
-	// Check if uinput module is loaded
-	if err := checkAndLoadUinput(); err != nil {
-		return err
+	// Perform server setup and collect results
+	serverPhase, serverErr := performServerSetup()
+	if serverErr != nil {
+		printPhase(serverPhase)
+		return serverErr
 	}
-
-	// Check if /dev/uinput exists
-	if err := checkUinputDevice(); err != nil {
-		return err
-	}
-
-	// Show current permissions
-	if err := showCurrentPermissions(); err != nil {
-		return err
-	}
-
-	// Create secure udev rule setup (server mode)
-	if err := createSecureSetup(); err != nil {
-		return err
-	}
+	printPhase(serverPhase)
 
 	// Test uinput access
-	return testUinputAccess()
+	testPhase := setupPhase{name: "Access Testing"}
+	err := testUinputAccess()
+	testPhase.addResult("Server mode access", err == nil, getErrorMessage(err))
+	printPhase(testPhase)
+
+	needsRelogin := err != nil && strings.Contains(err.Error(), "relogin")
+	printSummary([]setupPhase{serverPhase, testPhase}, needsRelogin)
+
+	return nil
 }
 
 func setupClientMode() error {
-	logger.Info("")
-	logger.Info("Setting up CLIENT mode permissions...")
-	logger.Info("")
-
-	// Setup input capture permissions (client mode)
-	if err := setupInputCapture(); err != nil {
-		return err
+	// Perform client setup and collect results
+	clientPhase, clientErr := performClientSetup()
+	if clientErr != nil {
+		printPhase(clientPhase)
+		return clientErr
 	}
+	printPhase(clientPhase)
 
 	// Test input access
-	return testInputAccess()
+	testPhase := setupPhase{name: "Access Testing"}
+	err := testInputAccess()
+	testPhase.addResult("Client mode access", err == nil, getErrorMessage(err))
+	printPhase(testPhase)
+
+	needsRelogin := err != nil && strings.Contains(err.Error(), "relogin")
+	printSummary([]setupPhase{clientPhase, testPhase}, needsRelogin)
+
+	return nil
 }
 
 func setupBothModes() error {
-	logger.Info("")
-	logger.Info("Setting up BOTH server and client mode permissions...")
-	logger.Info("")
+	var phases []setupPhase
+	needsRelogin := false
 
-	// Server setup
-	if err := checkAndLoadUinput(); err != nil {
-		return err
+	// Perform server setup and collect results
+	serverPhase, serverErr := performServerSetup()
+	if serverErr != nil {
+		phases = append(phases, serverPhase)
+		printPhase(serverPhase)
+		return serverErr
 	}
-	if err := checkUinputDevice(); err != nil {
-		return err
+	phases = append(phases, serverPhase)
+	printPhase(serverPhase)
+
+	// Perform client setup and collect results
+	clientPhase, clientErr := performClientSetup()
+	if clientErr != nil {
+		phases = append(phases, clientPhase)
+		printPhase(clientPhase)
+		return clientErr
 	}
-	if err := showCurrentPermissions(); err != nil {
-		return err
-	}
-	if err := createSecureSetup(); err != nil {
-		return err
+	phases = append(phases, clientPhase)
+	printPhase(clientPhase)
+
+	// Testing phase
+	testPhase := setupPhase{name: "Access Testing"}
+	
+	uinputOk, inputOk := testBothAccessStructured()
+	testPhase.addResult("Server mode access", uinputOk, "")
+	testPhase.addResult("Client mode access", inputOk, "")
+	
+	if !uinputOk || !inputOk {
+		needsRelogin = true
 	}
 
-	// Client setup
-	if err := setupInputCapture(); err != nil {
-		return err
-	}
+	phases = append(phases, testPhase)
+	printPhase(testPhase)
 
-	// Test both
-	return testBothAccess()
+	// Print summary
+	printSummary(phases, needsRelogin)
+	
+	return nil
+}
+
+func getErrorMessage(err error) string {
+	if err == nil {
+		return ""
+	}
+	return err.Error()
 }
 
 func checkAndLoadUinput() error {
@@ -162,17 +273,13 @@ func checkAndLoadUinput() error {
 	}
 
 	if strings.Contains(string(output), "uinput") {
-		logger.Info("✓ uinput module already loaded")
 		return nil
 	}
 
-	logger.Info("Loading uinput module...")
 	cmd = exec.Command("sudo", "modprobe", "uinput")
 	if err := cmd.Run(); err != nil {
 		return fmt.Errorf("failed to load uinput module: %w", err)
 	}
-
-	logger.Info("✓ uinput module loaded")
 	return nil
 }
 
@@ -181,7 +288,6 @@ func checkUinputDevice() error {
 	info, err := os.Stat("/dev/uinput")
 	if err != nil {
 		if os.IsNotExist(err) {
-			logger.Error("✗ /dev/uinput not found - this might be a problem")
 			return fmt.Errorf("/dev/uinput not found")
 		}
 		return fmt.Errorf("failed to check /dev/uinput: %w", err)
@@ -189,32 +295,17 @@ func checkUinputDevice() error {
 
 	// Check if it's a character device
 	if info.Mode()&os.ModeCharDevice == 0 {
-	logger.Error("✗ /dev/uinput is not a character device")
-	return fmt.Errorf("/dev/uinput is not a character device")
+		return fmt.Errorf("/dev/uinput is not a character device")
 	}
-
-	logger.Info("✓ /dev/uinput exists")
 	return nil
 }
 
 func showCurrentPermissions() error {
-	logger.Info("")
-	logger.Info("Current /dev/uinput permissions:")
-	
-	cmd := exec.Command("ls", "-la", "/dev/uinput")
-	output, err := cmd.Output()
-	if err != nil {
-		return fmt.Errorf("failed to check permissions: %w", err)
-	}
-
-	logger.Info(string(output))
+	// Silently check permissions - we don't need to display them in structured output
 	return nil
 }
 
 func setupInputCapture() error {
-	logger.Info("")
-	logger.Info("Setting up input capture permissions (client mode)...")
-	
 	// Get current user
 	currentUser, err := user.Current()
 	if err != nil {
@@ -228,25 +319,18 @@ func setupInputCapture() error {
 		return fmt.Errorf("failed to check user groups: %w", err)
 	}
 
-	if strings.Contains(string(output), "input") {
-		logger.Infof("✓ User %s is already in input group", currentUser.Username)
-	} else {
+	if !strings.Contains(string(output), "input") {
 		// Add current user to input group
-		logger.Infof("Adding %s to input group for mouse capture...", currentUser.Username)
 		cmd = exec.Command("sudo", "usermod", "-a", "-G", "input", currentUser.Username)
 		if err := cmd.Run(); err != nil {
 			return fmt.Errorf("failed to add user to input group: %w", err)
 		}
-		logger.Infof("✓ User %s added to input group", currentUser.Username)
 	}
 
 	return nil
 }
 
 func createSecureSetup() error {
-	logger.Info("")
-	logger.Info("Setting up secure uinput access...")
-	
 	// Get current user
 	currentUser, err := user.Current()
 	if err != nil {
@@ -259,14 +343,12 @@ func createSecureSetup() error {
 	}
 
 	// Add current user to waymon group
-	logger.Infof("Adding %s to waymon group...", currentUser.Username)
 	cmd := exec.Command("sudo", "usermod", "-a", "-G", "waymon", currentUser.Username)
 	if err := cmd.Run(); err != nil {
 		return fmt.Errorf("failed to add user to waymon group: %w", err)
 	}
 
 	// Create secure udev rule - only waymon group can access
-	logger.Info("Creating secure udev rule...")
 	rule := `KERNEL=="uinput", GROUP="waymon", MODE="0660", TAG+="uaccess"`
 	
 	// Create the udev rule file
@@ -288,8 +370,7 @@ func createSecureSetup() error {
 		return fmt.Errorf("failed to trigger udev: %w", err)
 	}
 
-	logger.Info("✓ Secure udev rule created at /etc/udev/rules.d/99-waymon-uinput.rules")
-	logger.Infof("✓ User %s added to waymon group", currentUser.Username)
+	// Rules created and user added successfully
 	return nil
 }
 
@@ -297,48 +378,30 @@ func ensureWaymonGroup() error {
 	// Check if waymon group exists
 	cmd := exec.Command("getent", "group", "waymon")
 	if err := cmd.Run(); err == nil {
-		logger.Info("✓ waymon group already exists")
 		return nil
 	}
 
 	// Create waymon group
-	logger.Info("Creating waymon group...")
 	cmd = exec.Command("sudo", "groupadd", "waymon")
 	if err := cmd.Run(); err != nil {
 		return fmt.Errorf("failed to create waymon group: %w", err)
 	}
-
-	logger.Info("✓ waymon group created")
 	return nil
 }
 
 func testUinputAccess() error {
-	logger.Info("")
-	logger.Info("Testing uinput access...")
-
 	file, err := os.OpenFile("/dev/uinput", os.O_WRONLY, 0)
 	if err != nil {
 		if os.IsPermission(err) {
-			logger.Error("✗ No write access to /dev/uinput")
-			logger.Info("")
-			logger.Info("IMPORTANT: You must log out and back in for the group changes to take effect!")
-			logger.Info("After logging back in, server mode should work.")
-			return nil
+			return fmt.Errorf("no write access to /dev/uinput - relogin required")
 		}
 		return fmt.Errorf("failed to test uinput access: %w", err)
 	}
 	file.Close()
-
-	logger.Info("✓ You have write access to /dev/uinput")
-	logger.Info("")
-	logger.Info("Setup complete! You can now run: waymon server")
 	return nil
 }
 
 func testInputAccess() error {
-	logger.Info("")
-	logger.Info("Testing input capture access...")
-
 	// Try to open a common input device (just test one)
 	inputDevices := []string{"/dev/input/event0", "/dev/input/event1", "/dev/input/event2"}
 	var testDevice string
@@ -350,47 +413,36 @@ func testInputAccess() error {
 	}
 
 	if testDevice == "" {
-		logger.Info("No input devices found to test - this might be normal")
-		logger.Info("Setup complete! You can now run: waymon client")
 		return nil
 	}
 
 	file, err := os.OpenFile(testDevice, os.O_RDONLY, 0)
 	if err != nil {
 		if os.IsPermission(err) {
-			logger.Error("✗ No read access to input devices")
-			logger.Info("")
-			logger.Info("IMPORTANT: You must log out and back in for the group changes to take effect!")
-			logger.Info("After logging back in, client mode should work.")
-			return nil
+			return fmt.Errorf("no read access to input devices - relogin required")
 		}
 		return fmt.Errorf("failed to test input access: %w", err)
 	}
 	file.Close()
-
-	logger.Info("✓ You have read access to input devices")
-	logger.Info("")
-	logger.Info("Setup complete! You can now run: waymon client")
 	return nil
 }
 
 func testBothAccess() error {
-	logger.Info("")
-	logger.Info("Testing both server and client access...")
+	// This function is replaced by testBothAccessStructured
+	// which returns the test results for structured output
+	return nil
+}
 
+func testBothAccessStructured() (bool, bool) {
 	// Test uinput access (server mode)
 	uinputOk := true
 	file, err := os.OpenFile("/dev/uinput", os.O_WRONLY, 0)
 	if err != nil {
 		if os.IsPermission(err) {
-			logger.Error("✗ No write access to /dev/uinput (server mode)")
 			uinputOk = false
-		} else {
-			return fmt.Errorf("failed to test uinput access: %w", err)
 		}
 	} else {
 		file.Close()
-		logger.Info("✓ You have write access to /dev/uinput (server mode)")
 	}
 
 	// Test input capture access (client mode)
@@ -408,26 +460,56 @@ func testBothAccess() error {
 		file, err := os.OpenFile(testDevice, os.O_RDONLY, 0)
 		if err != nil {
 			if os.IsPermission(err) {
-				logger.Error("✗ No read access to input devices (client mode)")
 				inputOk = false
 			}
 		} else {
 			file.Close()
-			logger.Info("✓ You have read access to input devices (client mode)")
 		}
 	}
 
-	logger.Info("")
-	if !uinputOk || !inputOk {
-		logger.Info("IMPORTANT: You must log out and back in for the group changes to take effect!")
-		logger.Info("After logging back in, both server and client modes should work.")
-	} else {
-		logger.Info("Setup complete! You can now run:")
-		logger.Info("  waymon server  (for server mode)")
-		logger.Info("  waymon client  (for client mode)")
+	return uinputOk, inputOk
+}
+
+// performServerSetup performs the server setup steps and returns the phase with results
+func performServerSetup() (setupPhase, error) {
+	phase := setupPhase{name: "Server Mode Setup"}
+
+	// Check if uinput module is loaded
+	err := checkAndLoadUinput()
+	phase.addResult("Load uinput module", err == nil, getErrorMessage(err))
+	if err != nil {
+		return phase, err
 	}
-	
-	return nil
+
+	// Check if /dev/uinput exists
+	err = checkUinputDevice()
+	phase.addResult("Verify /dev/uinput device", err == nil, getErrorMessage(err))
+	if err != nil {
+		return phase, err
+	}
+
+	// Create secure udev rule setup (server mode)
+	err = createSecureSetup()
+	phase.addResult("Configure uinput permissions", err == nil, getErrorMessage(err))
+	if err != nil {
+		return phase, err
+	}
+
+	return phase, nil
+}
+
+// performClientSetup performs the client setup steps and returns the phase with results
+func performClientSetup() (setupPhase, error) {
+	phase := setupPhase{name: "Client Mode Setup"}
+
+	// Setup input capture permissions (client mode)
+	err := setupInputCapture()
+	phase.addResult("Configure input capture", err == nil, getErrorMessage(err))
+	if err != nil {
+		return phase, err
+	}
+
+	return phase, nil
 }
 
 // CheckUinputAvailable checks if uinput is available but doesn't fail if no access

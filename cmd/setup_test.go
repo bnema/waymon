@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/bnema/waymon/internal/ui"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -252,5 +253,90 @@ func TestSetupModeValidation(t *testing.T) {
 			hasAtLeastOneGroup := tc.hasWaymonGroup || tc.hasInputGroup
 			assert.Equal(t, tc.shouldPass, hasAtLeastOneGroup, tc.description)
 		})
+	}
+}
+
+// Test formatting output doesn't have excessive blank lines
+func TestSetupFormattingOutput(t *testing.T) {
+	// Test that formatting functions don't produce excessive newlines
+	testCases := []struct {
+		name     string
+		output   string
+		maxBlank int // maximum consecutive blank lines allowed
+	}{
+		{
+			name:     "setup header",
+			output:   ui.FormatSetupHeader("Test Setup"),
+			maxBlank: 0,
+		},
+		{
+			name:     "setup phase",
+			output:   ui.FormatSetupPhase("Test Phase"),
+			maxBlank: 0,
+		},
+		{
+			name:     "setup result success",
+			output:   ui.FormatSetupResult(true, "Test Step", "Success"),
+			maxBlank: 0,
+		},
+		{
+			name:     "setup result failure",
+			output:   ui.FormatSetupResult(false, "Test Step", "Failed"),
+			maxBlank: 0,
+		},
+		{
+			name:     "summary header",
+			output:   ui.FormatSummaryHeader("Test Summary"),
+			maxBlank: 0,
+		},
+		{
+			name:     "summary status success",
+			output:   ui.FormatSummaryStatus(true, false),
+			maxBlank: 0,
+		},
+		{
+			name:     "next steps header",
+			output:   ui.FormatNextStepsHeader(),
+			maxBlank: 0,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			// Check for trailing newlines
+			assert.False(t, strings.HasSuffix(tc.output, "\n"), 
+				"Output should not end with newline: %q", tc.output)
+			
+			// Check for embedded double newlines
+			assert.False(t, strings.Contains(tc.output, "\n\n"),
+				"Output should not contain double newlines: %q", tc.output)
+		})
+	}
+}
+
+// Test that printPhase output is compact
+func TestPrintPhaseOutput(t *testing.T) {
+	// Create test phase
+	phase := setupPhase{
+		name: "Test Phase",
+		results: []setupResult{
+			{step: "Step 1", success: true, message: ""},
+			{step: "Step 2", success: false, message: "Error occurred"},
+		},
+	}
+
+	// Create a simple test that checks the formatting without actual stdout capture
+	// which can be unreliable in test environments
+	
+	// Test that phase formatting doesn't include trailing newlines
+	phaseHeader := ui.FormatSetupPhase(phase.name)
+	assert.False(t, strings.HasSuffix(phaseHeader, "\n"), 
+		"Phase header should not end with newline")
+	
+	// Test that result formatting doesn't include trailing newlines
+	for _, result := range phase.results {
+		formatted := ui.FormatSetupResult(result.success, result.step, result.message)
+		assert.False(t, strings.HasSuffix(formatted, "\n"),
+			"Result line should not end with newline")
 	}
 }
