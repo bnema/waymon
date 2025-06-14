@@ -53,9 +53,9 @@ func runClient(cmd *cobra.Command, args []string) error {
 	}
 	defer logFile.Close()
 
-	// Verify waymon setup has been completed
-	if err := VerifyWaymonSetup(); err != nil {
-		return fmt.Errorf("waymon setup verification failed: %w", err)
+	// Verify waymon client setup has been completed
+	if err := VerifyClientSetup(); err != nil {
+		return fmt.Errorf("waymon client setup verification failed: %w", err)
 	}
 
 	// Get configuration
