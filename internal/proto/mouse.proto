@@ -69,3 +69,57 @@ message InputEvent {
 message EventBatch {
   repeated InputEvent events = 1;
 }
+
+// IPC Message types for inter-process communication
+enum IPCMessageType {
+  IPC_MESSAGE_TYPE_UNSPECIFIED = 0;
+  IPC_MESSAGE_TYPE_SWITCH = 1;
+  IPC_MESSAGE_TYPE_STATUS = 2;
+  IPC_MESSAGE_TYPE_STATUS_RESPONSE = 3;
+  IPC_MESSAGE_TYPE_ERROR = 4;
+}
+
+// IPCMessage represents an IPC message
+message IPCMessage {
+  IPCMessageType type = 1;
+  oneof payload {
+    SwitchCommand switch_command = 2;
+    StatusQuery status_query = 3;
+    StatusResponse status_response = 4;
+    ErrorResponse error_response = 5;
+  }
+}
+
+// SwitchCommand represents a switch command
+message SwitchCommand {
+  optional bool enable = 1; // Deprecated: use switch_action instead
+  SwitchAction action = 2;   // The action to perform
+}
+
+// SwitchAction defines what action to take
+enum SwitchAction {
+  SWITCH_ACTION_UNSPECIFIED = 0;
+  SWITCH_ACTION_NEXT = 1;        // Switch to next computer in rotation
+  SWITCH_ACTION_PREVIOUS = 2;    // Switch to previous computer in rotation
+  SWITCH_ACTION_ENABLE = 3;      // Enable mouse sharing (legacy)
+  SWITCH_ACTION_DISABLE = 4;     // Disable mouse sharing (legacy)
+}
+
+// StatusQuery represents a status query (no fields needed)
+message StatusQuery {
+}
+
+// StatusResponse represents a status response
+message StatusResponse {
+  bool active = 1;              // Whether mouse sharing is currently active
+  bool connected = 2;           // Whether connected to server
+  string server_host = 3;       // Server address if connected
+  int32 current_computer = 4;   // Index of currently active computer (0 = server)
+  int32 total_computers = 5;    // Total number of computers in rotation
+  repeated string computer_names = 6; // Names/IDs of all computers in rotation
+}
+
+// ErrorResponse represents an error response
+message ErrorResponse {
+  string error = 1;
+}

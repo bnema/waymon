@@ -6,6 +6,8 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/bnema/waymon/internal/ipc"
+	"github.com/bnema/waymon/internal/logger"
 )
 
 // ClientModel is the Bubble Tea model for client UI
@@ -24,6 +26,7 @@ type ClientModel struct {
 	connected     bool
 	quitting      bool
 	currentEdge   string
+	ipcClient     *ipc.Client
 }
 
 // ClientConfig holds configuration for the client UI
@@ -49,7 +52,13 @@ func NewClientModel(cfg ClientConfig) *ClientModel {
 		},
 	}
 
-	return &ClientModel{
+	// Create IPC client for switch commands
+	ipcClient, err := ipc.NewClient()
+	if err != nil {
+		logger.Warnf("Failed to create IPC client: %v", err)
+	}
+
+	model := &ClientModel{
 		statusBar:     statusBar,
 		serverInfo:    serverInfo,
 		serverAddress: cfg.ServerAddress,
@@ -69,7 +78,11 @@ func NewClientModel(cfg ClientConfig) *ClientModel {
 		},
 		edgeIndicator: NewEdgeIndicator(),
 		messages:      []Message{},
+		ipcClient:     ipcClient,
 	}
+	
+	model.updateControls()
+	return model
 }
 
 // Init implements tea.Model
@@ -96,6 +109,8 @@ func (m *ClientModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		case "c":
 			m.messages = []Message{}
+		case "s":
+			m.handleSwitchKey()
 		}
 
 	case tea.WindowSizeMsg:
@@ -121,6 +136,7 @@ func (m *ClientModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.statusBar.Connected = true
 		m.statusBar.Status = fmt.Sprintf("Connected to %s", m.serverAddress)
 		m.AddMessage(MessageSuccess, "Reconnected to server")
+		m.updateControls() // Update controls to show switch hint when connected
 
 	case EdgeDetectedMsg:
 		m.currentEdge = msg.Edge
@@ -246,6 +262,59 @@ func (m *ClientModel) AddMessage(msgType MessageType, content string) {
 		Type:    msgType,
 		Content: content,
 	})
+}
+
+// updateControls updates the controls help based on current state
+func (m *ClientModel) updateControls() {
+	baseControls := []Control{
+		{Key: "Space", Desc: "Toggle mouse capture"},
+		{Key: "h", Desc: "Toggle edge hint"},
+		{Key: "r", Desc: "Reconnect to server"},
+		{Key: "q", Desc: "Quit"},
+	}
+	
+	// Add switch control if connected to server
+	if m.connected {
+		baseControls = append(baseControls, Control{Key: "s", Desc: "Switch computers"})
+	}
+	
+	m.controls.Controls = baseControls
+}
+
+// handleSwitchKey handles the switch key press
+func (m *ClientModel) handleSwitchKey() {
+	if !m.connected {
+		m.AddMessage(MessageWarning, "Not connected to server - cannot switch")
+		return
+	}
+	
+	if m.ipcClient == nil {
+		m.AddMessage(MessageError, "IPC client not available")
+		return
+	}
+	
+	// Send switch command via IPC
+	resp, err := m.ipcClient.SendSwitchNext()
+	if err != nil {
+		m.AddMessage(MessageError, fmt.Sprintf("Failed to switch: %v", err))
+		return
+	}
+	
+	// Show success message with rotation info
+	if resp.TotalComputers > 1 {
+		currentName := "unknown"
+		if int(resp.CurrentComputer) < len(resp.ComputerNames) {
+			currentName = resp.ComputerNames[resp.CurrentComputer]
+		}
+		m.AddMessage(MessageSuccess, fmt.Sprintf("Switched to %s (%d/%d)", 
+			currentName, resp.CurrentComputer+1, resp.TotalComputers))
+	} else {
+		if resp.Active {
+			m.AddMessage(MessageSuccess, "Mouse sharing enabled")
+		} else {
+			m.AddMessage(MessageSuccess, "Mouse sharing disabled")
+		}
+	}
 }
 
 // EdgeIndicator shows which edge is active

@@ -198,6 +198,118 @@ func (ScrollDirection) EnumDescriptor() ([]byte, []int) {
 	return file_internal_proto_mouse_proto_rawDescGZIP(), []int{2}
 }
 
+// IPC Message types for inter-process communication
+type IPCMessageType int32
+
+const (
+	IPCMessageType_IPC_MESSAGE_TYPE_UNSPECIFIED     IPCMessageType = 0
+	IPCMessageType_IPC_MESSAGE_TYPE_SWITCH          IPCMessageType = 1
+	IPCMessageType_IPC_MESSAGE_TYPE_STATUS          IPCMessageType = 2
+	IPCMessageType_IPC_MESSAGE_TYPE_STATUS_RESPONSE IPCMessageType = 3
+	IPCMessageType_IPC_MESSAGE_TYPE_ERROR           IPCMessageType = 4
+)
+
+// Enum value maps for IPCMessageType.
+var (
+	IPCMessageType_name = map[int32]string{
+		0: "IPC_MESSAGE_TYPE_UNSPECIFIED",
+		1: "IPC_MESSAGE_TYPE_SWITCH",
+		2: "IPC_MESSAGE_TYPE_STATUS",
+		3: "IPC_MESSAGE_TYPE_STATUS_RESPONSE",
+		4: "IPC_MESSAGE_TYPE_ERROR",
+	}
+	IPCMessageType_value = map[string]int32{
+		"IPC_MESSAGE_TYPE_UNSPECIFIED":     0,
+		"IPC_MESSAGE_TYPE_SWITCH":          1,
+		"IPC_MESSAGE_TYPE_STATUS":          2,
+		"IPC_MESSAGE_TYPE_STATUS_RESPONSE": 3,
+		"IPC_MESSAGE_TYPE_ERROR":           4,
+	}
+)
+
+func (x IPCMessageType) Enum() *IPCMessageType {
+	p := new(IPCMessageType)
+	*p = x
+	return p
+}
+
+func (x IPCMessageType) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (IPCMessageType) Descriptor() protoreflect.EnumDescriptor {
+	return file_internal_proto_mouse_proto_enumTypes[3].Descriptor()
+}
+
+func (IPCMessageType) Type() protoreflect.EnumType {
+	return &file_internal_proto_mouse_proto_enumTypes[3]
+}
+
+func (x IPCMessageType) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use IPCMessageType.Descriptor instead.
+func (IPCMessageType) EnumDescriptor() ([]byte, []int) {
+	return file_internal_proto_mouse_proto_rawDescGZIP(), []int{3}
+}
+
+// SwitchAction defines what action to take
+type SwitchAction int32
+
+const (
+	SwitchAction_SWITCH_ACTION_UNSPECIFIED SwitchAction = 0
+	SwitchAction_SWITCH_ACTION_NEXT        SwitchAction = 1 // Switch to next computer in rotation
+	SwitchAction_SWITCH_ACTION_PREVIOUS    SwitchAction = 2 // Switch to previous computer in rotation
+	SwitchAction_SWITCH_ACTION_ENABLE      SwitchAction = 3 // Enable mouse sharing (legacy)
+	SwitchAction_SWITCH_ACTION_DISABLE     SwitchAction = 4 // Disable mouse sharing (legacy)
+)
+
+// Enum value maps for SwitchAction.
+var (
+	SwitchAction_name = map[int32]string{
+		0: "SWITCH_ACTION_UNSPECIFIED",
+		1: "SWITCH_ACTION_NEXT",
+		2: "SWITCH_ACTION_PREVIOUS",
+		3: "SWITCH_ACTION_ENABLE",
+		4: "SWITCH_ACTION_DISABLE",
+	}
+	SwitchAction_value = map[string]int32{
+		"SWITCH_ACTION_UNSPECIFIED": 0,
+		"SWITCH_ACTION_NEXT":        1,
+		"SWITCH_ACTION_PREVIOUS":    2,
+		"SWITCH_ACTION_ENABLE":      3,
+		"SWITCH_ACTION_DISABLE":     4,
+	}
+)
+
+func (x SwitchAction) Enum() *SwitchAction {
+	p := new(SwitchAction)
+	*p = x
+	return p
+}
+
+func (x SwitchAction) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (SwitchAction) Descriptor() protoreflect.EnumDescriptor {
+	return file_internal_proto_mouse_proto_enumTypes[4].Descriptor()
+}
+
+func (SwitchAction) Type() protoreflect.EnumType {
+	return &file_internal_proto_mouse_proto_enumTypes[4]
+}
+
+func (x SwitchAction) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use SwitchAction.Descriptor instead.
+func (SwitchAction) EnumDescriptor() ([]byte, []int) {
+	return file_internal_proto_mouse_proto_rawDescGZIP(), []int{4}
+}
+
 // MouseEvent represents a mouse event
 type MouseEvent struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
@@ -520,6 +632,349 @@ func (x *EventBatch) GetEvents() []*InputEvent {
 	return nil
 }
 
+// IPCMessage represents an IPC message
+type IPCMessage struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	Type  IPCMessageType         `protobuf:"varint,1,opt,name=type,proto3,enum=waymon.IPCMessageType" json:"type,omitempty"`
+	// Types that are valid to be assigned to Payload:
+	//
+	//	*IPCMessage_SwitchCommand
+	//	*IPCMessage_StatusQuery
+	//	*IPCMessage_StatusResponse
+	//	*IPCMessage_ErrorResponse
+	Payload       isIPCMessage_Payload `protobuf_oneof:"payload"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *IPCMessage) Reset() {
+	*x = IPCMessage{}
+	mi := &file_internal_proto_mouse_proto_msgTypes[4]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *IPCMessage) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*IPCMessage) ProtoMessage() {}
+
+func (x *IPCMessage) ProtoReflect() protoreflect.Message {
+	mi := &file_internal_proto_mouse_proto_msgTypes[4]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use IPCMessage.ProtoReflect.Descriptor instead.
+func (*IPCMessage) Descriptor() ([]byte, []int) {
+	return file_internal_proto_mouse_proto_rawDescGZIP(), []int{4}
+}
+
+func (x *IPCMessage) GetType() IPCMessageType {
+	if x != nil {
+		return x.Type
+	}
+	return IPCMessageType_IPC_MESSAGE_TYPE_UNSPECIFIED
+}
+
+func (x *IPCMessage) GetPayload() isIPCMessage_Payload {
+	if x != nil {
+		return x.Payload
+	}
+	return nil
+}
+
+func (x *IPCMessage) GetSwitchCommand() *SwitchCommand {
+	if x != nil {
+		if x, ok := x.Payload.(*IPCMessage_SwitchCommand); ok {
+			return x.SwitchCommand
+		}
+	}
+	return nil
+}
+
+func (x *IPCMessage) GetStatusQuery() *StatusQuery {
+	if x != nil {
+		if x, ok := x.Payload.(*IPCMessage_StatusQuery); ok {
+			return x.StatusQuery
+		}
+	}
+	return nil
+}
+
+func (x *IPCMessage) GetStatusResponse() *StatusResponse {
+	if x != nil {
+		if x, ok := x.Payload.(*IPCMessage_StatusResponse); ok {
+			return x.StatusResponse
+		}
+	}
+	return nil
+}
+
+func (x *IPCMessage) GetErrorResponse() *ErrorResponse {
+	if x != nil {
+		if x, ok := x.Payload.(*IPCMessage_ErrorResponse); ok {
+			return x.ErrorResponse
+		}
+	}
+	return nil
+}
+
+type isIPCMessage_Payload interface {
+	isIPCMessage_Payload()
+}
+
+type IPCMessage_SwitchCommand struct {
+	SwitchCommand *SwitchCommand `protobuf:"bytes,2,opt,name=switch_command,json=switchCommand,proto3,oneof"`
+}
+
+type IPCMessage_StatusQuery struct {
+	StatusQuery *StatusQuery `protobuf:"bytes,3,opt,name=status_query,json=statusQuery,proto3,oneof"`
+}
+
+type IPCMessage_StatusResponse struct {
+	StatusResponse *StatusResponse `protobuf:"bytes,4,opt,name=status_response,json=statusResponse,proto3,oneof"`
+}
+
+type IPCMessage_ErrorResponse struct {
+	ErrorResponse *ErrorResponse `protobuf:"bytes,5,opt,name=error_response,json=errorResponse,proto3,oneof"`
+}
+
+func (*IPCMessage_SwitchCommand) isIPCMessage_Payload() {}
+
+func (*IPCMessage_StatusQuery) isIPCMessage_Payload() {}
+
+func (*IPCMessage_StatusResponse) isIPCMessage_Payload() {}
+
+func (*IPCMessage_ErrorResponse) isIPCMessage_Payload() {}
+
+// SwitchCommand represents a switch command
+type SwitchCommand struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Enable        *bool                  `protobuf:"varint,1,opt,name=enable,proto3,oneof" json:"enable,omitempty"`                    // Deprecated: use switch_action instead
+	Action        SwitchAction           `protobuf:"varint,2,opt,name=action,proto3,enum=waymon.SwitchAction" json:"action,omitempty"` // The action to perform
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *SwitchCommand) Reset() {
+	*x = SwitchCommand{}
+	mi := &file_internal_proto_mouse_proto_msgTypes[5]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SwitchCommand) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SwitchCommand) ProtoMessage() {}
+
+func (x *SwitchCommand) ProtoReflect() protoreflect.Message {
+	mi := &file_internal_proto_mouse_proto_msgTypes[5]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SwitchCommand.ProtoReflect.Descriptor instead.
+func (*SwitchCommand) Descriptor() ([]byte, []int) {
+	return file_internal_proto_mouse_proto_rawDescGZIP(), []int{5}
+}
+
+func (x *SwitchCommand) GetEnable() bool {
+	if x != nil && x.Enable != nil {
+		return *x.Enable
+	}
+	return false
+}
+
+func (x *SwitchCommand) GetAction() SwitchAction {
+	if x != nil {
+		return x.Action
+	}
+	return SwitchAction_SWITCH_ACTION_UNSPECIFIED
+}
+
+// StatusQuery represents a status query (no fields needed)
+type StatusQuery struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *StatusQuery) Reset() {
+	*x = StatusQuery{}
+	mi := &file_internal_proto_mouse_proto_msgTypes[6]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *StatusQuery) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*StatusQuery) ProtoMessage() {}
+
+func (x *StatusQuery) ProtoReflect() protoreflect.Message {
+	mi := &file_internal_proto_mouse_proto_msgTypes[6]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use StatusQuery.ProtoReflect.Descriptor instead.
+func (*StatusQuery) Descriptor() ([]byte, []int) {
+	return file_internal_proto_mouse_proto_rawDescGZIP(), []int{6}
+}
+
+// StatusResponse represents a status response
+type StatusResponse struct {
+	state           protoimpl.MessageState `protogen:"open.v1"`
+	Active          bool                   `protobuf:"varint,1,opt,name=active,proto3" json:"active,omitempty"`                                          // Whether mouse sharing is currently active
+	Connected       bool                   `protobuf:"varint,2,opt,name=connected,proto3" json:"connected,omitempty"`                                    // Whether connected to server
+	ServerHost      string                 `protobuf:"bytes,3,opt,name=server_host,json=serverHost,proto3" json:"server_host,omitempty"`                 // Server address if connected
+	CurrentComputer int32                  `protobuf:"varint,4,opt,name=current_computer,json=currentComputer,proto3" json:"current_computer,omitempty"` // Index of currently active computer (0 = server)
+	TotalComputers  int32                  `protobuf:"varint,5,opt,name=total_computers,json=totalComputers,proto3" json:"total_computers,omitempty"`    // Total number of computers in rotation
+	ComputerNames   []string               `protobuf:"bytes,6,rep,name=computer_names,json=computerNames,proto3" json:"computer_names,omitempty"`        // Names/IDs of all computers in rotation
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
+}
+
+func (x *StatusResponse) Reset() {
+	*x = StatusResponse{}
+	mi := &file_internal_proto_mouse_proto_msgTypes[7]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *StatusResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*StatusResponse) ProtoMessage() {}
+
+func (x *StatusResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_internal_proto_mouse_proto_msgTypes[7]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use StatusResponse.ProtoReflect.Descriptor instead.
+func (*StatusResponse) Descriptor() ([]byte, []int) {
+	return file_internal_proto_mouse_proto_rawDescGZIP(), []int{7}
+}
+
+func (x *StatusResponse) GetActive() bool {
+	if x != nil {
+		return x.Active
+	}
+	return false
+}
+
+func (x *StatusResponse) GetConnected() bool {
+	if x != nil {
+		return x.Connected
+	}
+	return false
+}
+
+func (x *StatusResponse) GetServerHost() string {
+	if x != nil {
+		return x.ServerHost
+	}
+	return ""
+}
+
+func (x *StatusResponse) GetCurrentComputer() int32 {
+	if x != nil {
+		return x.CurrentComputer
+	}
+	return 0
+}
+
+func (x *StatusResponse) GetTotalComputers() int32 {
+	if x != nil {
+		return x.TotalComputers
+	}
+	return 0
+}
+
+func (x *StatusResponse) GetComputerNames() []string {
+	if x != nil {
+		return x.ComputerNames
+	}
+	return nil
+}
+
+// ErrorResponse represents an error response
+type ErrorResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Error         string                 `protobuf:"bytes,1,opt,name=error,proto3" json:"error,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ErrorResponse) Reset() {
+	*x = ErrorResponse{}
+	mi := &file_internal_proto_mouse_proto_msgTypes[8]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ErrorResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ErrorResponse) ProtoMessage() {}
+
+func (x *ErrorResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_internal_proto_mouse_proto_msgTypes[8]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ErrorResponse.ProtoReflect.Descriptor instead.
+func (*ErrorResponse) Descriptor() ([]byte, []int) {
+	return file_internal_proto_mouse_proto_rawDescGZIP(), []int{8}
+}
+
+func (x *ErrorResponse) GetError() string {
+	if x != nil {
+		return x.Error
+	}
+	return ""
+}
+
 var File_internal_proto_mouse_proto protoreflect.FileDescriptor
 
 const file_internal_proto_mouse_proto_rawDesc = "" +
@@ -552,7 +1007,30 @@ const file_internal_proto_mouse_proto_rawDesc = "" +
 	"\x05event\"8\n" +
 	"\n" +
 	"EventBatch\x12*\n" +
-	"\x06events\x18\x01 \x03(\v2\x12.waymon.InputEventR\x06events*\xa9\x01\n" +
+	"\x06events\x18\x01 \x03(\v2\x12.waymon.InputEventR\x06events\"\xc0\x02\n" +
+	"\n" +
+	"IPCMessage\x12*\n" +
+	"\x04type\x18\x01 \x01(\x0e2\x16.waymon.IPCMessageTypeR\x04type\x12>\n" +
+	"\x0eswitch_command\x18\x02 \x01(\v2\x15.waymon.SwitchCommandH\x00R\rswitchCommand\x128\n" +
+	"\fstatus_query\x18\x03 \x01(\v2\x13.waymon.StatusQueryH\x00R\vstatusQuery\x12A\n" +
+	"\x0fstatus_response\x18\x04 \x01(\v2\x16.waymon.StatusResponseH\x00R\x0estatusResponse\x12>\n" +
+	"\x0eerror_response\x18\x05 \x01(\v2\x15.waymon.ErrorResponseH\x00R\rerrorResponseB\t\n" +
+	"\apayload\"e\n" +
+	"\rSwitchCommand\x12\x1b\n" +
+	"\x06enable\x18\x01 \x01(\bH\x00R\x06enable\x88\x01\x01\x12,\n" +
+	"\x06action\x18\x02 \x01(\x0e2\x14.waymon.SwitchActionR\x06actionB\t\n" +
+	"\a_enable\"\r\n" +
+	"\vStatusQuery\"\xe2\x01\n" +
+	"\x0eStatusResponse\x12\x16\n" +
+	"\x06active\x18\x01 \x01(\bR\x06active\x12\x1c\n" +
+	"\tconnected\x18\x02 \x01(\bR\tconnected\x12\x1f\n" +
+	"\vserver_host\x18\x03 \x01(\tR\n" +
+	"serverHost\x12)\n" +
+	"\x10current_computer\x18\x04 \x01(\x05R\x0fcurrentComputer\x12'\n" +
+	"\x0ftotal_computers\x18\x05 \x01(\x05R\x0etotalComputers\x12%\n" +
+	"\x0ecomputer_names\x18\x06 \x03(\tR\rcomputerNames\"%\n" +
+	"\rErrorResponse\x12\x14\n" +
+	"\x05error\x18\x01 \x01(\tR\x05error*\xa9\x01\n" +
 	"\tEventType\x12\x1a\n" +
 	"\x16EVENT_TYPE_UNSPECIFIED\x10\x00\x12\x13\n" +
 	"\x0fEVENT_TYPE_MOVE\x10\x01\x12\x14\n" +
@@ -573,7 +1051,19 @@ const file_internal_proto_mouse_proto_rawDesc = "" +
 	"\x13SCROLL_DIRECTION_UP\x10\x01\x12\x19\n" +
 	"\x15SCROLL_DIRECTION_DOWN\x10\x02\x12\x19\n" +
 	"\x15SCROLL_DIRECTION_LEFT\x10\x03\x12\x1a\n" +
-	"\x16SCROLL_DIRECTION_RIGHT\x10\x04B(Z&github.com/bnema/waymon/internal/protob\x06proto3"
+	"\x16SCROLL_DIRECTION_RIGHT\x10\x04*\xae\x01\n" +
+	"\x0eIPCMessageType\x12 \n" +
+	"\x1cIPC_MESSAGE_TYPE_UNSPECIFIED\x10\x00\x12\x1b\n" +
+	"\x17IPC_MESSAGE_TYPE_SWITCH\x10\x01\x12\x1b\n" +
+	"\x17IPC_MESSAGE_TYPE_STATUS\x10\x02\x12$\n" +
+	" IPC_MESSAGE_TYPE_STATUS_RESPONSE\x10\x03\x12\x1a\n" +
+	"\x16IPC_MESSAGE_TYPE_ERROR\x10\x04*\x96\x01\n" +
+	"\fSwitchAction\x12\x1d\n" +
+	"\x19SWITCH_ACTION_UNSPECIFIED\x10\x00\x12\x16\n" +
+	"\x12SWITCH_ACTION_NEXT\x10\x01\x12\x1a\n" +
+	"\x16SWITCH_ACTION_PREVIOUS\x10\x02\x12\x18\n" +
+	"\x14SWITCH_ACTION_ENABLE\x10\x03\x12\x19\n" +
+	"\x15SWITCH_ACTION_DISABLE\x10\x04B(Z&github.com/bnema/waymon/internal/protob\x06proto3"
 
 var (
 	file_internal_proto_mouse_proto_rawDescOnce sync.Once
@@ -587,29 +1077,42 @@ func file_internal_proto_mouse_proto_rawDescGZIP() []byte {
 	return file_internal_proto_mouse_proto_rawDescData
 }
 
-var file_internal_proto_mouse_proto_enumTypes = make([]protoimpl.EnumInfo, 3)
-var file_internal_proto_mouse_proto_msgTypes = make([]protoimpl.MessageInfo, 4)
+var file_internal_proto_mouse_proto_enumTypes = make([]protoimpl.EnumInfo, 5)
+var file_internal_proto_mouse_proto_msgTypes = make([]protoimpl.MessageInfo, 9)
 var file_internal_proto_mouse_proto_goTypes = []any{
-	(EventType)(0),       // 0: waymon.EventType
-	(MouseButton)(0),     // 1: waymon.MouseButton
-	(ScrollDirection)(0), // 2: waymon.ScrollDirection
-	(*MouseEvent)(nil),   // 3: waymon.MouseEvent
-	(*KeyEvent)(nil),     // 4: waymon.KeyEvent
-	(*InputEvent)(nil),   // 5: waymon.InputEvent
-	(*EventBatch)(nil),   // 6: waymon.EventBatch
+	(EventType)(0),         // 0: waymon.EventType
+	(MouseButton)(0),       // 1: waymon.MouseButton
+	(ScrollDirection)(0),   // 2: waymon.ScrollDirection
+	(IPCMessageType)(0),    // 3: waymon.IPCMessageType
+	(SwitchAction)(0),      // 4: waymon.SwitchAction
+	(*MouseEvent)(nil),     // 5: waymon.MouseEvent
+	(*KeyEvent)(nil),       // 6: waymon.KeyEvent
+	(*InputEvent)(nil),     // 7: waymon.InputEvent
+	(*EventBatch)(nil),     // 8: waymon.EventBatch
+	(*IPCMessage)(nil),     // 9: waymon.IPCMessage
+	(*SwitchCommand)(nil),  // 10: waymon.SwitchCommand
+	(*StatusQuery)(nil),    // 11: waymon.StatusQuery
+	(*StatusResponse)(nil), // 12: waymon.StatusResponse
+	(*ErrorResponse)(nil),  // 13: waymon.ErrorResponse
 }
 var file_internal_proto_mouse_proto_depIdxs = []int32{
-	0, // 0: waymon.MouseEvent.type:type_name -> waymon.EventType
-	1, // 1: waymon.MouseEvent.button:type_name -> waymon.MouseButton
-	2, // 2: waymon.MouseEvent.direction:type_name -> waymon.ScrollDirection
-	3, // 3: waymon.InputEvent.mouse:type_name -> waymon.MouseEvent
-	4, // 4: waymon.InputEvent.key:type_name -> waymon.KeyEvent
-	5, // 5: waymon.EventBatch.events:type_name -> waymon.InputEvent
-	6, // [6:6] is the sub-list for method output_type
-	6, // [6:6] is the sub-list for method input_type
-	6, // [6:6] is the sub-list for extension type_name
-	6, // [6:6] is the sub-list for extension extendee
-	0, // [0:6] is the sub-list for field type_name
+	0,  // 0: waymon.MouseEvent.type:type_name -> waymon.EventType
+	1,  // 1: waymon.MouseEvent.button:type_name -> waymon.MouseButton
+	2,  // 2: waymon.MouseEvent.direction:type_name -> waymon.ScrollDirection
+	5,  // 3: waymon.InputEvent.mouse:type_name -> waymon.MouseEvent
+	6,  // 4: waymon.InputEvent.key:type_name -> waymon.KeyEvent
+	7,  // 5: waymon.EventBatch.events:type_name -> waymon.InputEvent
+	3,  // 6: waymon.IPCMessage.type:type_name -> waymon.IPCMessageType
+	10, // 7: waymon.IPCMessage.switch_command:type_name -> waymon.SwitchCommand
+	11, // 8: waymon.IPCMessage.status_query:type_name -> waymon.StatusQuery
+	12, // 9: waymon.IPCMessage.status_response:type_name -> waymon.StatusResponse
+	13, // 10: waymon.IPCMessage.error_response:type_name -> waymon.ErrorResponse
+	4,  // 11: waymon.SwitchCommand.action:type_name -> waymon.SwitchAction
+	12, // [12:12] is the sub-list for method output_type
+	12, // [12:12] is the sub-list for method input_type
+	12, // [12:12] is the sub-list for extension type_name
+	12, // [12:12] is the sub-list for extension extendee
+	0,  // [0:12] is the sub-list for field type_name
 }
 
 func init() { file_internal_proto_mouse_proto_init() }
@@ -621,13 +1124,20 @@ func file_internal_proto_mouse_proto_init() {
 		(*InputEvent_Mouse)(nil),
 		(*InputEvent_Key)(nil),
 	}
+	file_internal_proto_mouse_proto_msgTypes[4].OneofWrappers = []any{
+		(*IPCMessage_SwitchCommand)(nil),
+		(*IPCMessage_StatusQuery)(nil),
+		(*IPCMessage_StatusResponse)(nil),
+		(*IPCMessage_ErrorResponse)(nil),
+	}
+	file_internal_proto_mouse_proto_msgTypes[5].OneofWrappers = []any{}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_internal_proto_mouse_proto_rawDesc), len(file_internal_proto_mouse_proto_rawDesc)),
-			NumEnums:      3,
-			NumMessages:   4,
+			NumEnums:      5,
+			NumMessages:   9,
 			NumExtensions: 0,
 			NumServices:   0,
 		},
