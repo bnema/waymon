@@ -4,12 +4,14 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"net"
 	"os"
 	"path/filepath"
 	"strings"
 	"sync"
 	"time"
 
+	"github.com/bnema/waymon/internal/logger"
 	"golang.org/x/crypto/ssh"
 	"google.golang.org/protobuf/proto"
 )
@@ -60,15 +62,20 @@ func (c *SSHClient) Connect(ctx context.Context, serverAddr string) error {
 	}
 
 	// Load private key
+	logger.Debugf("Loading SSH private key from: %s", c.privateKeyPath)
 	key, err := os.ReadFile(c.privateKeyPath)
 	if err != nil {
+		logger.Errorf("Failed to read private key from %s: %v", c.privateKeyPath, err)
 		return fmt.Errorf("failed to read private key: %w", err)
 	}
+	logger.Debugf("Private key loaded, size: %d bytes", len(key))
 
 	signer, err := ssh.ParsePrivateKey(key)
 	if err != nil {
+		logger.Errorf("Failed to parse private key: %v", err)
 		return fmt.Errorf("failed to parse private key: %w", err)
 	}
+	logger.Debug("Private key parsed successfully")
 
 	// Configure SSH client
 	config := &ssh.ClientConfig{
@@ -80,10 +87,51 @@ func (c *SSHClient) Connect(ctx context.Context, serverAddr string) error {
 		Timeout:         10 * time.Second,
 	}
 
-	// Connect to SSH server
-	client, err := ssh.Dial("tcp", serverAddr, config)
+	// Log connection attempt details
+	logger.Debugf("SSH client config: user=%s, timeout=%v, auth_method=publickey, key_path=%s", config.User, config.Timeout, c.privateKeyPath)
+	
+	// If serverAddr contains "localhost", try to use 127.0.0.1 explicitly
+	if strings.Contains(serverAddr, "localhost") {
+		originalAddr := serverAddr
+		serverAddr = strings.Replace(serverAddr, "localhost", "127.0.0.1", 1)
+		logger.Debugf("Replaced 'localhost' with '127.0.0.1' in server address: %s -> %s", originalAddr, serverAddr)
+	}
+	
+	logger.Debugf("Attempting SSH dial to %s", serverAddr)
+
+	// First, try a simple TCP connection to verify connectivity
+	logger.Debugf("Testing TCP connectivity to %s", serverAddr)
+	tcpConn, err := net.DialTimeout("tcp", serverAddr, 2*time.Second)
 	if err != nil {
-		return fmt.Errorf("failed to connect to SSH server: %w", err)
+		logger.Errorf("Failed to establish TCP connection to %s: %v", serverAddr, err)
+		return fmt.Errorf("failed to establish TCP connection: %w", err)
+	}
+	tcpConn.Close()
+	logger.Debug("TCP connectivity test successful")
+
+	// Create a channel to track dial completion
+	dialDone := make(chan struct{})
+	var dialErr error
+	var client *ssh.Client
+
+	// Perform dial in a goroutine so we can add extra logging
+	go func() {
+		logger.Debug("Starting SSH dial...")
+		client, dialErr = ssh.Dial("tcp", serverAddr, config)
+		close(dialDone)
+	}()
+
+	// Wait for dial to complete or timeout
+	select {
+	case <-dialDone:
+		if dialErr != nil {
+			logger.Errorf("SSH dial failed: %v", dialErr)
+			return fmt.Errorf("failed to connect to SSH server: %w", dialErr)
+		}
+		logger.Debug("SSH dial successful, creating session...")
+	case <-time.After(15 * time.Second):
+		logger.Error("SSH dial timed out after 15 seconds (config timeout was 10s)")
+		return fmt.Errorf("SSH dial timed out")
 	}
 
 	// Create session

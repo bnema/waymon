@@ -94,7 +94,7 @@ func (s *SSHServer) Start(ctx context.Context) error {
 	go func() {
 		defer s.wg.Done()
 		
-		logger.Infof("SSH server listening port=%d", s.port)
+		logger.Infof("SSH server listening on port %d (address: ':%d')", s.port, s.port)
 		if err := server.ListenAndServe(); err != nil && err != ssh.ErrServerClosed {
 			logger.Errorf("SSH server error: %v", err)
 		}
@@ -137,6 +137,7 @@ func (s *SSHServer) Stop() {
 
 // publicKeyAuth handles SSH public key authentication
 func (s *SSHServer) publicKeyAuth(ctx ssh.Context, key ssh.PublicKey) bool {
+	logger.Debugf("publicKeyAuth called from addr=%s user=%s", ctx.RemoteAddr(), ctx.User())
 	// Convert Wish SSH public key to golang.org/x/crypto/ssh public key
 	var goKey gossh.PublicKey
 	if wishKey, ok := key.(gossh.PublicKey); ok {
