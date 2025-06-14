@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/bnema/waymon/internal/logger"
+	"github.com/bnema/waymon/internal/protocol"
 	"golang.org/x/crypto/ssh"
 	"google.golang.org/protobuf/proto"
 )
@@ -21,12 +22,16 @@ type SSHClient struct {
 	client  *ssh.Client
 	session *ssh.Session
 	writer  io.Writer
+	reader  io.Reader
 
 	mu        sync.Mutex
 	connected bool
 
 	// SSH key paths
 	privateKeyPath string
+
+	// Event handling
+	onInputEvent func(*protocol.InputEvent)
 }
 
 // NewSSHClient creates a new SSH client
@@ -213,8 +218,8 @@ func (c *SSHClient) Connect(ctx context.Context, serverAddr string) error {
 		return fmt.Errorf("failed to get stdin pipe: %w", err)
 	}
 
-	// Get stdout to check for rejection messages
-	stdout, err := session.StdoutPipe()
+	// Get stdout for receiving input events from server
+	reader, err := session.StdoutPipe()
 	if err != nil {
 		session.Close()
 		client.Close()
@@ -233,7 +238,7 @@ func (c *SSHClient) Connect(ctx context.Context, serverAddr string) error {
 	// Set a short timeout for the initial read
 	readChan := make(chan int, 1)
 	go func() {
-		n, _ := stdout.Read(buf)
+		n, _ := reader.Read(buf)
 		readChan <- n
 	}()
 
@@ -249,7 +254,7 @@ func (c *SSHClient) Connect(ctx context.Context, serverAddr string) error {
 			// Wait for either approval or established message
 			if !strings.Contains(response, "Waymon SSH connection established") {
 				// Keep reading for final status
-				n2, _ := stdout.Read(buf)
+				n2, _ := reader.Read(buf)
 				if n2 > 0 {
 					response += string(buf[:n2])
 				}
@@ -270,7 +275,11 @@ func (c *SSHClient) Connect(ctx context.Context, serverAddr string) error {
 	c.client = client
 	c.session = session
 	c.writer = writer
+	c.reader = reader
 	c.connected = true
+
+	// Start receiving input events from server
+	go c.receiveInputEvents(ctx)
 
 	// Monitor connection
 	go c.monitorConnection()
@@ -300,6 +309,7 @@ func (c *SSHClient) Disconnect() error {
 	}
 
 	c.writer = nil
+	c.reader = nil
 
 	return nil
 }
@@ -346,6 +356,88 @@ func (c *SSHClient) SendMouseBatch(events []*MouseEvent) error {
 	return nil
 }
 
+// SendInputEvent sends an input event to the server (not used in redesigned architecture)
+func (c *SSHClient) SendInputEvent(event *protocol.InputEvent) error {
+	c.mu.Lock()
+	writer := c.writer
+	connected := c.connected
+	c.mu.Unlock()
+
+	if !connected || writer == nil {
+		return fmt.Errorf("not connected")
+	}
+
+	return writeInputMessage(writer, event)
+}
+
+// OnInputEvent sets the callback for receiving input events from server
+func (c *SSHClient) OnInputEvent(callback func(*protocol.InputEvent)) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.onInputEvent = callback
+}
+
+// receiveInputEvents continuously receives input events from the server
+func (c *SSHClient) receiveInputEvents(ctx context.Context) {
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		default:
+			c.mu.Lock()
+			reader := c.reader
+			connected := c.connected
+			c.mu.Unlock()
+
+			if !connected || reader == nil {
+				return
+			}
+
+			// Read length prefix (4 bytes)
+			lengthBuf := make([]byte, 4)
+			_, err := io.ReadFull(reader, lengthBuf)
+			if err != nil {
+				if err == io.EOF || err == io.ErrClosedPipe {
+					return // Connection closed
+				}
+				logger.Errorf("Failed to read message length: %v", err)
+				continue
+			}
+
+			// Decode length
+			length := int(lengthBuf[0])<<24 | int(lengthBuf[1])<<16 | int(lengthBuf[2])<<8 | int(lengthBuf[3])
+			if length <= 0 || length > 4096 {
+				logger.Errorf("Invalid message length: %d", length)
+				continue
+			}
+
+			// Read message data
+			msgBuf := make([]byte, length)
+			_, err = io.ReadFull(reader, msgBuf)
+			if err != nil {
+				logger.Errorf("Failed to read message data: %v", err)
+				continue
+			}
+
+			// Unmarshal input event
+			var inputEvent protocol.InputEvent
+			if err := proto.Unmarshal(msgBuf, &inputEvent); err != nil {
+				logger.Errorf("Failed to unmarshal input event: %v", err)
+				continue
+			}
+
+			// Call the callback if set
+			c.mu.Lock()
+			callback := c.onInputEvent
+			c.mu.Unlock()
+
+			if callback != nil {
+				callback(&inputEvent)
+			}
+		}
+	}
+}
+
 // monitorConnection monitors the SSH connection health
 func (c *SSHClient) monitorConnection() {
 	ticker := time.NewTicker(5 * time.Second)
@@ -378,6 +470,33 @@ func writeMessage(w io.Writer, msg proto.Message) error {
 	data, err := proto.Marshal(msg)
 	if err != nil {
 		return fmt.Errorf("failed to marshal message: %w", err)
+	}
+
+	// Write length prefix (4 bytes, big-endian)
+	length := len(data)
+	lengthBuf := []byte{
+		byte(length >> 24),
+		byte(length >> 16),
+		byte(length >> 8),
+		byte(length),
+	}
+
+	if _, err := w.Write(lengthBuf); err != nil {
+		return fmt.Errorf("failed to write length: %w", err)
+	}
+
+	if _, err := w.Write(data); err != nil {
+		return fmt.Errorf("failed to write data: %w", err)
+	}
+
+	return nil
+}
+
+// writeInputMessage writes an InputEvent message with length prefix
+func writeInputMessage(w io.Writer, event *protocol.InputEvent) error {
+	data, err := proto.Marshal(event)
+	if err != nil {
+		return fmt.Errorf("failed to marshal input event: %w", err)
 	}
 
 	// Write length prefix (4 bytes, big-endian)

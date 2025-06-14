@@ -9,6 +9,7 @@ import (
 
 	"github.com/bnema/waymon/internal/config"
 	"github.com/bnema/waymon/internal/logger"
+	"github.com/bnema/waymon/internal/protocol"
 	Proto "github.com/bnema/waymon/internal/proto"
 	"github.com/charmbracelet/ssh"
 	"github.com/charmbracelet/wish"
@@ -27,7 +28,7 @@ type SSHServer struct {
 	ctx          context.Context
 
 	// Active connections
-	mu      sync.Mutex
+	mu      sync.RWMutex
 	clients map[string]*sshClient // sessionID -> client
 
 	// Authentication
@@ -50,6 +51,7 @@ type sshClient struct {
 	session   ssh.Session
 	addr      string
 	publicKey string
+	writer    io.Writer // For sending input events to client
 }
 
 // NewSSHServer creates a new SSH-based server
@@ -110,6 +112,26 @@ func (s *SSHServer) Start(ctx context.Context) error {
 	s.ctx = ctx
 
 	return nil
+}
+
+// SendEventToClient sends an input event to a specific client by address
+func (s *SSHServer) SendEventToClient(clientAddr string, event *protocol.InputEvent) error {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	
+	// Find client by address
+	for _, client := range s.clients {
+		if client.addr == clientAddr {
+			// Use the same message format as the client expects
+			if err := writeInputMessage(client.writer, event); err != nil {
+				return fmt.Errorf("failed to send event to client: %w", err)
+			}
+			
+			return nil
+		}
+	}
+	
+	return fmt.Errorf("client not found: %s", clientAddr)
 }
 
 // Stop shuts down the SSH server
@@ -230,11 +252,15 @@ func (s *SSHServer) sessionHandler() wish.Middleware {
 				publicKey = gossh.FingerprintSHA256(sess.PublicKey())
 			}
 
+			// Get session writer for sending input events to client
+			writer := sess
+			
 			// Create and register client entry
 			client := &sshClient{
 				session:   sess,
 				addr:      addr,
 				publicKey: publicKey,
+				writer:    writer,
 			}
 			s.clients[sess.Context().SessionID()] = client
 			s.mu.Unlock()
@@ -370,4 +396,76 @@ func (s *SSHServer) Port() int {
 // IsSSHEnabled returns true since this is an SSH server
 func (s *SSHServer) IsSSHEnabled() bool {
 	return true
+}
+
+// SendInputEventToClient sends an input event to a specific client
+func (s *SSHServer) SendInputEventToClient(sessionID string, event *protocol.InputEvent) error {
+	s.mu.Lock()
+	client, exists := s.clients[sessionID]
+	s.mu.Unlock()
+
+	if !exists {
+		return fmt.Errorf("client not found: %s", sessionID)
+	}
+
+	return s.writeInputEvent(client.writer, event)
+}
+
+// SendInputEventToAllClients sends an input event to all connected clients
+func (s *SSHServer) SendInputEventToAllClients(event *protocol.InputEvent) error {
+	s.mu.Lock()
+	clients := make([]*sshClient, 0, len(s.clients))
+	for _, client := range s.clients {
+		clients = append(clients, client)
+	}
+	s.mu.Unlock()
+
+	var lastErr error
+	for _, client := range clients {
+		if err := s.writeInputEvent(client.writer, event); err != nil {
+			lastErr = err
+			logger.Errorf("Failed to send input event to client %s: %v", client.addr, err)
+		}
+	}
+
+	return lastErr
+}
+
+// GetClientSessions returns a map of sessionID -> client address for connected clients
+func (s *SSHServer) GetClientSessions() map[string]string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	sessions := make(map[string]string)
+	for sessionID, client := range s.clients {
+		sessions[sessionID] = client.addr
+	}
+	return sessions
+}
+
+// writeInputEvent writes an input event to a client
+func (s *SSHServer) writeInputEvent(w io.Writer, event *protocol.InputEvent) error {
+	data, err := proto.Marshal(event)
+	if err != nil {
+		return fmt.Errorf("failed to marshal input event: %w", err)
+	}
+
+	// Write length prefix (4 bytes, big-endian)
+	length := len(data)
+	lengthBuf := []byte{
+		byte(length >> 24),
+		byte(length >> 16),
+		byte(length >> 8),
+		byte(length),
+	}
+
+	if _, err := w.Write(lengthBuf); err != nil {
+		return fmt.Errorf("failed to write length: %w", err)
+	}
+
+	if _, err := w.Write(data); err != nil {
+		return fmt.Errorf("failed to write data: %w", err)
+	}
+
+	return nil
 }
