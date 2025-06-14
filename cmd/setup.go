@@ -610,3 +610,30 @@ func VerifyWaymonSetup() error {
 
 	return nil
 }
+
+// VerifyClientSetup checks if Waymon has been properly configured for client mode
+func VerifyClientSetup() error {
+	// Check if current user is in input group
+	username := os.Getenv("SUDO_USER")
+	if username == "" {
+		currentUser, err := user.Current()
+		if err != nil {
+			return fmt.Errorf("failed to get current user: %w", err)
+		}
+		username = currentUser.Username
+	}
+
+	cmd := exec.Command("groups", username)
+	output, err := cmd.Output()
+	if err != nil {
+		return fmt.Errorf("failed to check user groups: %w", err)
+	}
+
+	if !strings.Contains(string(output), "input") {
+		return fmt.Errorf("user %s is not in input group - please run 'waymon setup client' and log out/in", username)
+	}
+
+	// For client mode, we only need input group access
+	// No need to check uinput module or /dev/uinput access
+	return nil
+}
