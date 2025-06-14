@@ -617,4 +617,5 @@ type (
 	SSHAuthApprovedMsg struct{ Fingerprint string }
 	SSHAuthDeniedMsg   struct{ Fingerprint string }
 	LogMsg             struct{ Entry LogEntry }
+	SetClientManagerMsg struct{ ClientManager interface{} }
 )
