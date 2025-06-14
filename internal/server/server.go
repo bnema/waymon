@@ -23,9 +23,9 @@ type Server struct {
 	display      *display.Display
 	inputHandler input.Handler
 	sshServer    *network.SSHServer
-	
+
 	// Synchronization
-	wg     sync.WaitGroup
+	wg sync.WaitGroup
 }
 
 // New creates a new server instance
@@ -35,30 +35,30 @@ func New(cfg *config.Config) (*Server, error) {
 		config: cfg,
 	}
 	logger.Debug("Server.New: Server struct created")
-	
+
 	return s, nil
 }
 
 // Start starts the server with appropriate privilege separation
 func (s *Server) Start(ctx context.Context) error {
 	logger.Debug("Server.Start: Starting server initialization")
-	
+
 	// Initialize display detection (runs as normal user if possible)
 	logger.Debug("Server.Start: Initializing display")
 	if err := s.initDisplay(); err != nil {
 		return fmt.Errorf("failed to initialize display: %w", err)
 	}
-	
+
 	// Initialize input handler (requires root)
 	if err := s.initInput(); err != nil {
 		return fmt.Errorf("failed to initialize input: %w", err)
 	}
-	
+
 	// Initialize network (creates SSH server but doesn't start it yet)
 	if err := s.initNetwork(); err != nil {
 		return fmt.Errorf("failed to initialize network: %w", err)
 	}
-	
+
 	return nil
 }
 
@@ -67,11 +67,11 @@ func (s *Server) StartNetworking(ctx context.Context) error {
 	if s.sshServer == nil {
 		return fmt.Errorf("SSH server not initialized")
 	}
-	
+
 	// Start network server
 	s.wg.Add(1)
 	go s.runNetworkServer(ctx)
-	
+
 	return nil
 }
 
@@ -106,7 +106,7 @@ func (s *Server) initNetwork() error {
 	// Set up SSH paths
 	hostKeyPath := expandPath(s.config.Server.SSHHostKeyPath)
 	authKeysPath := expandPath(s.config.Server.SSHAuthKeysPath)
-	
+
 	// Ensure directories exist
 	if err := os.MkdirAll(filepath.Dir(hostKeyPath), 0700); err != nil {
 		return fmt.Errorf("failed to create host key directory: %w", err)
@@ -114,22 +114,21 @@ func (s *Server) initNetwork() error {
 	if err := os.MkdirAll(filepath.Dir(authKeysPath), 0700); err != nil {
 		return fmt.Errorf("failed to create auth keys directory: %w", err)
 	}
-	
+
 	// Create SSH server
 	s.sshServer = network.NewSSHServer(s.config.Server.Port, hostKeyPath, authKeysPath)
 	s.sshServer.SetMaxClients(s.config.Server.MaxClients)
-	
+
 	// Set up event handler
 	s.sshServer.OnMouseEvent = s.handleMouseEvent
-	
+
 	return nil
 }
-
 
 // runNetworkServer runs the SSH server
 func (s *Server) runNetworkServer(ctx context.Context) {
 	defer s.wg.Done()
-	
+
 	if err := s.sshServer.Start(ctx); err != nil {
 		logger.Errorf("Network server error: %v", err)
 	}
@@ -140,7 +139,7 @@ func (s *Server) handleMouseEvent(event *network.MouseEvent) error {
 	if s.inputHandler == nil {
 		return fmt.Errorf("input handler not initialized")
 	}
-	
+
 	// Log event details
 	switch event.MouseEvent.Type {
 	case waymonProto.EventType_EVENT_TYPE_ENTER:
@@ -158,7 +157,7 @@ func (s *Server) handleMouseEvent(event *network.MouseEvent) error {
 	case waymonProto.EventType_EVENT_TYPE_SCROLL:
 		logger.Debugf("Mouse scroll: %s", event.MouseEvent.Direction.String())
 	}
-	
+
 	// The network.MouseEvent wraps proto.MouseEvent, so we can pass it directly
 	return s.inputHandler.ProcessEvent(event.MouseEvent)
 }
@@ -168,15 +167,15 @@ func (s *Server) Stop() {
 	if s.sshServer != nil {
 		s.sshServer.Stop()
 	}
-	
+
 	if s.inputHandler != nil {
 		s.inputHandler.Close()
 	}
-	
+
 	if s.display != nil {
 		s.display.Close()
 	}
-	
+
 	s.wg.Wait()
 }
 

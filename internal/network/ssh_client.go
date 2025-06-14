@@ -54,6 +54,7 @@ func NewSSHClient(privateKeyPath string) *SSHClient {
 
 // Connect establishes an SSH connection to the server
 func (c *SSHClient) Connect(ctx context.Context, serverAddr string) error {
+
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
@@ -84,54 +85,117 @@ func (c *SSHClient) Connect(ctx context.Context, serverAddr string) error {
 			ssh.PublicKeys(signer),
 		},
 		HostKeyCallback: ssh.InsecureIgnoreHostKey(), // TODO: Implement proper host key checking
-		Timeout:         10 * time.Second,
+		// Don't set a timeout here - let the context handle it
+		// Add client version to help with debugging
+		ClientVersion: "SSH-2.0-Waymon-Client",
+		// Reduce banner timeout to fail faster if server is unresponsive
+		BannerCallback: func(message string) error {
+			logger.Debugf("SSH server banner: %s", message)
+			return nil
+		},
 	}
 
 	// Log connection attempt details
-	logger.Debugf("SSH client config: user=%s, timeout=%v, auth_method=publickey, key_path=%s", config.User, config.Timeout, c.privateKeyPath)
-	
-	// If serverAddr contains "localhost", try to use 127.0.0.1 explicitly
-	if strings.Contains(serverAddr, "localhost") {
-		originalAddr := serverAddr
-		serverAddr = strings.Replace(serverAddr, "localhost", "127.0.0.1", 1)
-		logger.Debugf("Replaced 'localhost' with '127.0.0.1' in server address: %s -> %s", originalAddr, serverAddr)
+	logger.Debugf("SSH client config: user=%s, auth_method=publickey, key_path=%s", config.User, c.privateKeyPath)
+
+	// Parse host and port
+	host, port, err := net.SplitHostPort(serverAddr)
+	if err != nil {
+		return fmt.Errorf("invalid server address format: %w", err)
 	}
-	
+
+	// If host is localhost, use 127.0.0.1 explicitly to avoid DNS issues
+	if host == "localhost" {
+		logger.Debugf("Replacing 'localhost' with '127.0.0.1' to avoid DNS delays")
+		host = "127.0.0.1"
+		serverAddr = net.JoinHostPort(host, port)
+	}
+
+	// If host is not an IP, resolve it first to catch DNS issues early
+	if net.ParseIP(host) == nil {
+		logger.Debugf("Resolving hostname '%s'...", host)
+		resolveStart := time.Now()
+		addrs, err := net.LookupHost(host)
+		resolveDuration := time.Since(resolveStart)
+		if err != nil {
+			logger.Errorf("Failed to resolve hostname '%s' after %v: %v", host, resolveDuration, err)
+			return fmt.Errorf("failed to resolve hostname: %w", err)
+		}
+		if len(addrs) == 0 {
+			return fmt.Errorf("no addresses found for hostname '%s'", host)
+		}
+		logger.Debugf("Resolved '%s' to %v in %v", host, addrs, resolveDuration)
+		// Use the first resolved address
+		serverAddr = net.JoinHostPort(addrs[0], port)
+		logger.Debugf("Using resolved address: %s", serverAddr)
+	}
+
 	logger.Debugf("Attempting SSH dial to %s", serverAddr)
 
 	// First, try a simple TCP connection to verify connectivity
 	logger.Debugf("Testing TCP connectivity to %s", serverAddr)
-	tcpConn, err := net.DialTimeout("tcp", serverAddr, 2*time.Second)
+	tcpStart := time.Now()
+	tcpConn, err := net.DialTimeout("tcp", serverAddr, 5*time.Second)
+	tcpDuration := time.Since(tcpStart)
 	if err != nil {
-		logger.Errorf("Failed to establish TCP connection to %s: %v", serverAddr, err)
+		logger.Errorf("Failed to establish TCP connection to %s after %v: %v", serverAddr, tcpDuration, err)
 		return fmt.Errorf("failed to establish TCP connection: %w", err)
 	}
 	tcpConn.Close()
-	logger.Debug("TCP connectivity test successful")
+	logger.Debugf("TCP connectivity test successful after %v", tcpDuration)
 
 	// Create a channel to track dial completion
 	dialDone := make(chan struct{})
 	var dialErr error
 	var client *ssh.Client
 
+	// Use context-aware dialer
+	var dialer net.Dialer
+
 	// Perform dial in a goroutine so we can add extra logging
 	go func() {
 		logger.Debug("Starting SSH dial...")
-		client, dialErr = ssh.Dial("tcp", serverAddr, config)
+		logger.Info("Waiting for server to approve connection...")
+
+		// Log start time for debugging
+		dialStart := time.Now()
+
+		// Create a TCP connection with context
+		conn, err := dialer.DialContext(ctx, "tcp", serverAddr)
+		if err != nil {
+			dialErr = fmt.Errorf("TCP dial failed: %w", err)
+			close(dialDone)
+			return
+		}
+
+		// Wrap the connection with the SSH client
+		sshConn, chans, reqs, err := ssh.NewClientConn(conn, serverAddr, config)
+		if err != nil {
+			conn.Close()
+			logger.Errorf("SSH handshake failed: %v", err)
+			dialErr = fmt.Errorf("SSH handshake failed: %w", err)
+			close(dialDone)
+			return
+		}
+
+		client = ssh.NewClient(sshConn, chans, reqs)
+		dialDuration := time.Since(dialStart)
+		logger.Debugf("SSH dial completed successfully after %v", dialDuration)
+
 		close(dialDone)
 	}()
 
-	// Wait for dial to complete or timeout
+	// Wait for dial to complete or context cancellation
 	select {
 	case <-dialDone:
 		if dialErr != nil {
-			logger.Errorf("SSH dial failed: %v", dialErr)
-			return fmt.Errorf("failed to connect to SSH server: %w", dialErr)
+			logger.Errorf("SSH connection failed: %v", dialErr)
+			return dialErr
 		}
 		logger.Debug("SSH dial successful, creating session...")
-	case <-time.After(15 * time.Second):
-		logger.Error("SSH dial timed out after 15 seconds (config timeout was 10s)")
-		return fmt.Errorf("SSH dial timed out")
+	case <-ctx.Done():
+		logger.Error("SSH connection cancelled or timed out")
+		return fmt.Errorf("SSH connection cancelled: %w", ctx.Err())
 	}
 
 	// Create session
@@ -172,7 +236,7 @@ func (c *SSHClient) Connect(ctx context.Context, serverAddr string) error {
 		n, _ := stdout.Read(buf)
 		readChan <- n
 	}()
-	
+
 	select {
 	case n := <-readChan:
 		if n > 0 {
