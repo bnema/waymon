@@ -41,14 +41,14 @@ func (sm *SwitchManager) SetOnSwitchCallback(callback func(int32, bool)) {
 func (sm *SwitchManager) AddComputer(name string) {
 	sm.mu.Lock()
 	defer sm.mu.Unlock()
-	
+
 	// Check if computer already exists
 	for _, existing := range sm.computers {
 		if existing == name {
 			return
 		}
 	}
-	
+
 	sm.computers = append(sm.computers, name)
 	logger.Infof("Added computer to rotation: %s (total: %d)", name, len(sm.computers))
 }
@@ -57,10 +57,10 @@ func (sm *SwitchManager) AddComputer(name string) {
 func (sm *SwitchManager) RemoveComputer(name string) {
 	sm.mu.Lock()
 	defer sm.mu.Unlock()
-	
+
 	var filtered []string
 	removedIndex := -1
-	
+
 	for i, computer := range sm.computers {
 		if computer == name {
 			removedIndex = i
@@ -68,13 +68,13 @@ func (sm *SwitchManager) RemoveComputer(name string) {
 			filtered = append(filtered, computer)
 		}
 	}
-	
+
 	if removedIndex == -1 {
 		return // Computer not found
 	}
-	
+
 	sm.computers = filtered
-	
+
 	// Adjust current computer index if necessary
 	if int32(removedIndex) == sm.currentComputer {
 		// If the current computer was removed, switch to server (index 0)
@@ -83,7 +83,7 @@ func (sm *SwitchManager) RemoveComputer(name string) {
 		// If a computer before the current one was removed, decrement index
 		sm.currentComputer--
 	}
-	
+
 	logger.Infof("Removed computer from rotation: %s (total: %d)", name, len(sm.computers))
 }
 
@@ -106,23 +106,23 @@ func (sm *SwitchManager) SetActiveState(active bool) {
 func (sm *SwitchManager) SwitchNext() error {
 	sm.mu.Lock()
 	defer sm.mu.Unlock()
-	
+
 	if len(sm.computers) <= 1 {
 		return fmt.Errorf("only one computer in rotation")
 	}
-	
+
 	previousComputer := sm.currentComputer
 	sm.currentComputer = (sm.currentComputer + 1) % int32(len(sm.computers))
-	
-	logger.Infof("Switched from %s to %s", 
-		sm.computers[previousComputer], 
+
+	logger.Infof("Switched from %s to %s",
+		sm.computers[previousComputer],
 		sm.computers[sm.currentComputer])
-	
+
 	// Trigger callback if set
 	if sm.onSwitchCallback != nil {
 		sm.onSwitchCallback(sm.currentComputer, sm.active)
 	}
-	
+
 	return nil
 }
 
@@ -130,23 +130,23 @@ func (sm *SwitchManager) SwitchNext() error {
 func (sm *SwitchManager) SwitchPrevious() error {
 	sm.mu.Lock()
 	defer sm.mu.Unlock()
-	
+
 	if len(sm.computers) <= 1 {
 		return fmt.Errorf("only one computer in rotation")
 	}
-	
+
 	previousComputer := sm.currentComputer
 	sm.currentComputer = (sm.currentComputer - 1 + int32(len(sm.computers))) % int32(len(sm.computers))
-	
-	logger.Infof("Switched from %s to %s", 
-		sm.computers[previousComputer], 
+
+	logger.Infof("Switched from %s to %s",
+		sm.computers[previousComputer],
 		sm.computers[sm.currentComputer])
-	
+
 	// Trigger callback if set
 	if sm.onSwitchCallback != nil {
 		sm.onSwitchCallback(sm.currentComputer, sm.active)
 	}
-	
+
 	return nil
 }
 
@@ -154,16 +154,16 @@ func (sm *SwitchManager) SwitchPrevious() error {
 func (sm *SwitchManager) GetStatus() (bool, bool, string, int32, int32, []string) {
 	sm.mu.RLock()
 	defer sm.mu.RUnlock()
-	
-	return sm.active, sm.connected, sm.serverHost, 
-		   sm.currentComputer, int32(len(sm.computers)), sm.computers
+
+	return sm.active, sm.connected, sm.serverHost,
+		sm.currentComputer, int32(len(sm.computers)), sm.computers
 }
 
 // CurrentComputerName returns the name of the currently active computer
 func (sm *SwitchManager) CurrentComputerName() string {
 	sm.mu.RLock()
 	defer sm.mu.RUnlock()
-	
+
 	if sm.currentComputer >= 0 && int(sm.currentComputer) < len(sm.computers) {
 		return sm.computers[sm.currentComputer]
 	}
@@ -185,30 +185,30 @@ func NewIPCHandler(switchManager *SwitchManager) *IPCHandler {
 // HandleSwitchCommand handles switch commands from IPC
 func (h *IPCHandler) HandleSwitchCommand(cmd *pb.SwitchCommand) (*pb.IPCMessage, error) {
 	logger.Debugf("Handling switch command: %s", cmd.Action)
-	
+
 	switch cmd.Action {
 	case pb.SwitchAction_SWITCH_ACTION_NEXT:
 		if err := h.switchManager.SwitchNext(); err != nil {
 			return ipc.NewErrorMessage(err.Error())
 		}
-		
+
 	case pb.SwitchAction_SWITCH_ACTION_PREVIOUS:
 		if err := h.switchManager.SwitchPrevious(); err != nil {
 			return ipc.NewErrorMessage(err.Error())
 		}
-		
+
 	case pb.SwitchAction_SWITCH_ACTION_ENABLE:
 		h.switchManager.SetActiveState(true)
 		logger.Info("Mouse sharing enabled via IPC")
-		
+
 	case pb.SwitchAction_SWITCH_ACTION_DISABLE:
 		h.switchManager.SetActiveState(false)
 		logger.Info("Mouse sharing disabled via IPC")
-		
+
 	default:
 		return ipc.NewErrorMessage(fmt.Sprintf("unknown switch action: %s", cmd.Action))
 	}
-	
+
 	// Return current status
 	active, connected, serverHost, currentComputer, totalComputers, computerNames := h.switchManager.GetStatus()
 	return ipc.NewStatusResponseMessage(active, connected, serverHost, currentComputer, totalComputers, computerNames)
@@ -217,7 +217,7 @@ func (h *IPCHandler) HandleSwitchCommand(cmd *pb.SwitchCommand) (*pb.IPCMessage,
 // HandleStatusQuery handles status queries from IPC
 func (h *IPCHandler) HandleStatusQuery(query *pb.StatusQuery) (*pb.IPCMessage, error) {
 	logger.Debug("Handling status query")
-	
+
 	active, connected, serverHost, currentComputer, totalComputers, computerNames := h.switchManager.GetStatus()
 	return ipc.NewStatusResponseMessage(active, connected, serverHost, currentComputer, totalComputers, computerNames)
 }
