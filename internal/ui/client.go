@@ -11,8 +11,8 @@ import (
 	"github.com/bnema/waymon/internal/client"
 )
 
-// ClientModelRedesigned represents the UI model for the redesigned client
-type ClientModelRedesigned struct {
+// ClientModel represents the UI model for the client
+type ClientModel struct {
 	serverAddr      string
 	inputReceiver   *client.InputReceiver
 	lastUpdate      time.Time
@@ -34,13 +34,13 @@ type ClientModelRedesigned struct {
 	windowWidth  int
 }
 
-// NewClientModelRedesigned creates a new client UI model with the redesigned architecture
-func NewClientModelRedesigned(serverAddr string, inputReceiver *client.InputReceiver, version string) *ClientModelRedesigned {
+// NewClientModel creates a new client UI model
+func NewClientModel(serverAddr string, inputReceiver *client.InputReceiver, version string) *ClientModel {
 	s := spinner.New()
 	s.Spinner = spinner.Dot
 	s.Style = lipgloss.NewStyle().Foreground(lipgloss.Color("205"))
 
-	model := &ClientModelRedesigned{
+	model := &ClientModel{
 		serverAddr:    serverAddr,
 		inputReceiver: inputReceiver,
 		spinner:       s,
@@ -63,7 +63,7 @@ func NewClientModelRedesigned(serverAddr string, inputReceiver *client.InputRece
 }
 
 // Init initializes the client model
-func (m *ClientModelRedesigned) Init() tea.Cmd {
+func (m *ClientModel) Init() tea.Cmd {
 	return tea.Batch(
 		m.spinner.Tick,
 		tea.EnterAltScreen,
@@ -71,7 +71,7 @@ func (m *ClientModelRedesigned) Init() tea.Cmd {
 }
 
 // Update handles messages for the client model
-func (m *ClientModelRedesigned) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+func (m *ClientModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var cmds []tea.Cmd
 
 	switch msg := msg.(type) {
@@ -138,7 +138,7 @@ func (m *ClientModelRedesigned) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 // View renders the client UI
-func (m *ClientModelRedesigned) View() string {
+func (m *ClientModel) View() string {
 	var output strings.Builder
 
 	// Calculate available space for logs
@@ -175,7 +175,7 @@ func (m *ClientModelRedesigned) View() string {
 }
 
 // renderClientStatusBar renders the status bar for the redesigned client
-func (m *ClientModelRedesigned) renderClientStatusBar() string {
+func (m *ClientModel) renderClientStatusBar() string {
 	var parts []string
 
 	// App name with version
@@ -201,7 +201,7 @@ func (m *ClientModelRedesigned) renderClientStatusBar() string {
 }
 
 // renderControlStatus renders the control status section
-func (m *ClientModelRedesigned) renderControlStatus() string {
+func (m *ClientModel) renderControlStatus() string {
 	var output strings.Builder
 
 	headerStyle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("39"))
@@ -247,7 +247,7 @@ func (m *ClientModelRedesigned) renderControlStatus() string {
 }
 
 // renderWaitingPrompt renders the waiting for approval prompt
-func (m *ClientModelRedesigned) renderWaitingPrompt() string {
+func (m *ClientModel) renderWaitingPrompt() string {
 	waitingStyle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("214"))
 	serverStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("205"))
 	infoStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("247"))
@@ -264,7 +264,7 @@ func (m *ClientModelRedesigned) renderWaitingPrompt() string {
 }
 
 // renderClientLogs renders the recent log entries for client
-func (m *ClientModelRedesigned) renderClientLogs(maxLines int) string {
+func (m *ClientModel) renderClientLogs(maxLines int) string {
 	if len(m.logBuffer) == 0 {
 		dimStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("240"))
 		return dimStyle.Render("No logs yet...")
@@ -288,7 +288,7 @@ func (m *ClientModelRedesigned) renderClientLogs(maxLines int) string {
 }
 
 // formatClientLogEntry formats a single log entry with colors for client
-func (m *ClientModelRedesigned) formatClientLogEntry(entry LogEntry) string {
+func (m *ClientModel) formatClientLogEntry(entry LogEntry) string {
 	timeStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("244"))
 
 	var levelStyle lipgloss.Style
@@ -314,7 +314,7 @@ func (m *ClientModelRedesigned) formatClientLogEntry(entry LogEntry) string {
 }
 
 // AddLogEntry adds a new log entry to the client buffer
-func (m *ClientModelRedesigned) AddLogEntry(entry LogEntry) {
+func (m *ClientModel) AddLogEntry(entry LogEntry) {
 	m.logBuffer = append(m.logBuffer, entry)
 
 	// Keep only the last maxLogLines entries
@@ -324,7 +324,7 @@ func (m *ClientModelRedesigned) AddLogEntry(entry LogEntry) {
 }
 
 // SetMessage sets a temporary message
-func (m *ClientModelRedesigned) SetMessage(msgType, message string) {
+func (m *ClientModel) SetMessage(msgType, message string) {
 	m.message = message
 	m.messageType = msgType
 	m.messageExpiry = time.Now().Add(3 * time.Second)
