@@ -120,7 +120,7 @@ func initializeServer(ctx context.Context, srv *server.Server, cfg *config.Confi
 	}
 
 	// Show server info
-	logger.Infof("\nStarting Waymon SSH server '%s' on %s:%d", cfg.Server.Name, bindAddress, serverPort)
+	logger.Infof("Starting Waymon SSH server '%s' on %s:%d", cfg.Server.Name, bindAddress, serverPort)
 	// Get the actual expanded paths from the server
 	if sshSrv := srv.GetNetworkServer(); sshSrv != nil {
 		logger.Infof("SSH Host Key: %s", srv.GetSSHHostKeyPath())
