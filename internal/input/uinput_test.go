@@ -37,7 +37,7 @@ func TestUInputHandler_Integration(t *testing.T) {
 	defer func() { _ = handler.Close() }()
 
 	t.Run("MouseMove", func(t *testing.T) {
-		// Test relative movement
+		// Test relative movement - X and Y are treated as delta values
 		events := []*proto.MouseEvent{
 			{
 				Type:        proto.EventType_EVENT_TYPE_MOVE,
@@ -47,8 +47,8 @@ func TestUInputHandler_Integration(t *testing.T) {
 			},
 			{
 				Type:        proto.EventType_EVENT_TYPE_MOVE,
-				X:           150,
-				Y:           120,
+				X:           50,  // Delta: move 50 more pixels right
+				Y:           20,  // Delta: move 20 more pixels down
 				TimestampMs: time.Now().UnixMilli(),
 			},
 		}
@@ -59,7 +59,9 @@ func TestUInputHandler_Integration(t *testing.T) {
 			}
 		}
 
-		// Verify internal position tracking
+		// Verify internal position tracking (cumulative)
+		// First move: 0 + 100 = 100, 0 + 100 = 100
+		// Second move: 100 + 50 = 150, 100 + 20 = 120
 		if handler.currentX != 150 || handler.currentY != 120 {
 			t.Errorf("Position not tracked correctly: got (%f, %f), want (150, 120)",
 				handler.currentX, handler.currentY)

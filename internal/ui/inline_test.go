@@ -95,7 +95,7 @@ func TestInlineClientModel(t *testing.T) {
 		
 		view := model.View()
 
-		if !strings.Contains(view, "Waiting for approval") {
+		if !strings.Contains(view, "WAITING FOR SERVER APPROVAL") {
 			t.Error("Should show waiting for approval status")
 		}
 		// Should show spinner while waiting

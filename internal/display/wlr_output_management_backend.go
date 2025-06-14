@@ -367,7 +367,7 @@ func (w *wlrOutputManagementBackend) GetMonitors() ([]*Monitor, error) {
 			Width:   int32(output.width),
 			Height:  int32(output.height),
 			Scale:   float64(output.scale),
-			Primary: i == 0, // First monitor is primary
+			Primary: false, // Will be set after all monitors are processed
 		}
 		
 		// Use description as name if it's more descriptive
@@ -377,6 +377,9 @@ func (w *wlrOutputManagementBackend) GetMonitors() ([]*Monitor, error) {
 		
 		monitors = append(monitors, monitor)
 	}
+	
+	// Determine which monitor should be primary
+	determinePrimaryMonitor(monitors)
 	
 	return monitors, nil
 }
