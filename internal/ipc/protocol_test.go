@@ -145,7 +145,7 @@ func TestNewErrorMessage(t *testing.T) {
 
 func TestGetSwitchCommandWrongType(t *testing.T) {
 	msg, _ := NewStatusMessage()
-	
+
 	_, err := GetSwitchCommand(msg)
 	if err == nil {
 		t.Error("Expected error when parsing status message as switch command")
@@ -154,7 +154,7 @@ func TestGetSwitchCommandWrongType(t *testing.T) {
 
 func TestGetStatusQueryWrongType(t *testing.T) {
 	msg, _ := NewSwitchMessage(pb.SwitchAction_SWITCH_ACTION_NEXT)
-	
+
 	_, err := GetStatusQuery(msg)
 	if err == nil {
 		t.Error("Expected error when parsing switch message as status query")
@@ -163,7 +163,7 @@ func TestGetStatusQueryWrongType(t *testing.T) {
 
 func TestGetStatusResponseWrongType(t *testing.T) {
 	msg, _ := NewSwitchMessage(pb.SwitchAction_SWITCH_ACTION_NEXT)
-	
+
 	_, err := GetStatusResponse(msg)
 	if err == nil {
 		t.Error("Expected error when parsing switch message as status response")
@@ -172,7 +172,7 @@ func TestGetStatusResponseWrongType(t *testing.T) {
 
 func TestGetErrorResponseWrongType(t *testing.T) {
 	msg, _ := NewSwitchMessage(pb.SwitchAction_SWITCH_ACTION_NEXT)
-	
+
 	_, err := GetErrorResponse(msg)
 	if err == nil {
 		t.Error("Expected error when parsing switch message as error response")

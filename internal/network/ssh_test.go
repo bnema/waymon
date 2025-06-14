@@ -105,7 +105,7 @@ func TestSSHAuthentication(t *testing.T) {
 	if len(fingerprint) < 40 || len(fingerprint) > 60 {
 		t.Errorf("Invalid fingerprint length: %d (expected ~50 chars)", len(fingerprint))
 	}
-	
+
 	// Should start with SHA256:
 	if fingerprint[:7] != "SHA256:" {
 		t.Errorf("Fingerprint should start with 'SHA256:', got %s", fingerprint[:7])

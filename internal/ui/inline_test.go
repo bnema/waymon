@@ -44,7 +44,7 @@ func TestInlineClientModel(t *testing.T) {
 
 	t.Run("handles connection message", func(t *testing.T) {
 		model := NewInlineClientModel("192.168.1.100:52525")
-		
+
 		updatedModel, _ := model.Update(ConnectedMsg{})
 		updated := updatedModel.(*InlineClientModel)
 
@@ -60,7 +60,7 @@ func TestInlineClientModel(t *testing.T) {
 		model := NewInlineClientModel("192.168.1.100:52525")
 		model.connected = true
 		model.capturing = true
-		
+
 		updatedModel, _ := model.Update(DisconnectedMsg{})
 		updated := updatedModel.(*InlineClientModel)
 
@@ -77,7 +77,7 @@ func TestInlineClientModel(t *testing.T) {
 
 	t.Run("handles waiting approval message", func(t *testing.T) {
 		model := NewInlineClientModel("192.168.1.100:52525")
-		
+
 		updatedModel, _ := model.Update(WaitingApprovalMsg{})
 		updated := updatedModel.(*InlineClientModel)
 
@@ -92,7 +92,7 @@ func TestInlineClientModel(t *testing.T) {
 	t.Run("renders waiting for approval view", func(t *testing.T) {
 		model := NewInlineClientModel("192.168.1.100:52525")
 		model.waitingApproval = true
-		
+
 		view := model.View()
 
 		if !strings.Contains(view, "WAITING FOR SERVER APPROVAL") {
@@ -107,7 +107,7 @@ func TestInlineClientModel(t *testing.T) {
 	t.Run("toggles capture with space key", func(t *testing.T) {
 		model := NewInlineClientModel("192.168.1.100:52525")
 		model.connected = true
-		
+
 		// Toggle on
 		updatedModel, _ := model.Update(tea.KeyMsg{Type: tea.KeySpace})
 		updated := updatedModel.(*InlineClientModel)
@@ -129,7 +129,7 @@ func TestInlineClientModel(t *testing.T) {
 		model := NewInlineClientModel("192.168.1.100:52525")
 		model.connected = true
 		model.capturing = true
-		
+
 		view := model.View()
 
 		if !strings.Contains(view, "● Connected") {
@@ -144,7 +144,7 @@ func TestInlineClientModel(t *testing.T) {
 		model := NewInlineClientModel("192.168.1.100:52525")
 		model.SetMessage("info", "Test message")
 		model.messageExpiry = time.Now().Add(-1 * time.Second) // Already expired
-		
+
 		updatedModel, _ := model.Update(tea.WindowSizeMsg{})
 		updated := updatedModel.(*InlineClientModel)
 
@@ -155,9 +155,9 @@ func TestInlineClientModel(t *testing.T) {
 
 	t.Run("quits on q key", func(t *testing.T) {
 		model := NewInlineClientModel("192.168.1.100:52525")
-		
+
 		_, cmd := model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'q'}})
-		
+
 		if cmd == nil {
 			t.Error("Should return quit command")
 		}
@@ -200,7 +200,7 @@ func TestInlineServerModel(t *testing.T) {
 
 	t.Run("handles client connected message", func(t *testing.T) {
 		model := NewInlineServerModel(52525, "test-server")
-		
+
 		updatedModel, _ := model.Update(ClientConnectedMsg{ClientAddr: "192.168.1.100:12345"})
 		updated := updatedModel.(*InlineServerModel)
 
@@ -215,7 +215,7 @@ func TestInlineServerModel(t *testing.T) {
 	t.Run("handles client disconnected message", func(t *testing.T) {
 		model := NewInlineServerModel(52525, "test-server")
 		model.clientCount = 2
-		
+
 		updatedModel, _ := model.Update(ClientDisconnectedMsg{ClientAddr: "192.168.1.100:12345"})
 		updated := updatedModel.(*InlineServerModel)
 
@@ -230,7 +230,7 @@ func TestInlineServerModel(t *testing.T) {
 	t.Run("renders view with multiple clients", func(t *testing.T) {
 		model := NewInlineServerModel(52525, "test-server")
 		model.clientCount = 3
-		
+
 		view := model.View()
 
 		if !strings.Contains(view, "3 clients") {
@@ -241,7 +241,7 @@ func TestInlineServerModel(t *testing.T) {
 	t.Run("renders view with single client", func(t *testing.T) {
 		model := NewInlineServerModel(52525, "test-server")
 		model.clientCount = 1
-		
+
 		view := model.View()
 
 		if !strings.Contains(view, "1 client") {
@@ -255,7 +255,7 @@ func TestInlineServerModel(t *testing.T) {
 	t.Run("handles temporary messages", func(t *testing.T) {
 		model := NewInlineServerModel(52525, "test-server")
 		model.SetMessage("error", "Test error")
-		
+
 		view := model.View()
 
 		if !strings.Contains(view, "Test error") {
@@ -268,9 +268,9 @@ func TestInlineServerModel(t *testing.T) {
 
 	t.Run("quits on q key", func(t *testing.T) {
 		model := NewInlineServerModel(52525, "test-server")
-		
+
 		_, cmd := model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'q'}})
-		
+
 		if cmd == nil {
 			t.Error("Should return quit command")
 		}
@@ -279,7 +279,7 @@ func TestInlineServerModel(t *testing.T) {
 	t.Run("handles SSH auth request", func(t *testing.T) {
 		model := NewInlineServerModel(52525, "test-server")
 		responseChan := make(chan bool, 1)
-		
+
 		updatedModel, _ := model.Update(SSHAuthRequestMsg{
 			ClientAddr:   "192.168.1.100:12345",
 			PublicKey:    "ssh-ed25519 AAAAC...",
@@ -302,7 +302,7 @@ func TestInlineServerModel(t *testing.T) {
 			ClientAddr:  "192.168.1.100:12345",
 			Fingerprint: "SHA256:abc123",
 		}
-		
+
 		view := model.View()
 
 		if !strings.Contains(view, "⚠️  NEW CONNECTION:") {
@@ -328,7 +328,7 @@ func TestInlineServerModel(t *testing.T) {
 			ResponseChan: responseChan,
 		}
 		model.authChannel = responseChan
-		
+
 		updatedModel, _ := model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'Y'}})
 		updated := updatedModel.(*InlineServerModel)
 
@@ -359,7 +359,7 @@ func TestInlineServerModel(t *testing.T) {
 			ResponseChan: responseChan,
 		}
 		model.authChannel = responseChan
-		
+
 		updatedModel, _ := model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'n'}})
 		updated := updatedModel.(*InlineServerModel)
 

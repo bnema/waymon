@@ -11,12 +11,12 @@ import (
 
 // MockHandler implements MessageHandler for testing
 type MockHandler struct {
-	switchCalled bool
-	statusCalled bool
+	switchCalled   bool
+	statusCalled   bool
 	switchResponse *pb.IPCMessage
 	statusResponse *pb.IPCMessage
-	switchError error
-	statusError error
+	switchError    error
+	statusError    error
 }
 
 func (m *MockHandler) HandleSwitchCommand(cmd *pb.SwitchCommand) (*pb.IPCMessage, error) {
@@ -196,9 +196,9 @@ func TestSocketServerContextCancellation(t *testing.T) {
 
 // Helper function to check if string contains substring
 func contains(s, substr string) bool {
-	return len(s) >= len(substr) && (s == substr || (len(s) > len(substr) && 
-		(s[:len(substr)] == substr || s[len(s)-len(substr):] == substr || 
-		 containsInMiddle(s, substr))))
+	return len(s) >= len(substr) && (s == substr || (len(s) > len(substr) &&
+		(s[:len(substr)] == substr || s[len(s)-len(substr):] == substr ||
+			containsInMiddle(s, substr))))
 }
 
 func containsInMiddle(s, substr string) bool {

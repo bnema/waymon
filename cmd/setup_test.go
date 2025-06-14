@@ -14,7 +14,7 @@ import (
 func TestCheckAndLoadUinput(t *testing.T) {
 	// Test if uinput module check works
 	err := checkAndLoadUinput()
-	
+
 	// This test might fail on systems without uinput or without sudo
 	// We'll just check that the function doesn't panic
 	if err != nil {
@@ -25,7 +25,7 @@ func TestCheckAndLoadUinput(t *testing.T) {
 func TestCheckUinputDevice(t *testing.T) {
 	// Test if /dev/uinput exists check works
 	err := checkUinputDevice()
-	
+
 	// This might fail on systems without uinput
 	if err != nil {
 		t.Logf("checkUinputDevice failed (expected on systems without uinput): %v", err)
@@ -35,7 +35,7 @@ func TestCheckUinputDevice(t *testing.T) {
 func TestShowCurrentPermissions(t *testing.T) {
 	// Test that showCurrentPermissions doesn't panic
 	err := showCurrentPermissions()
-	
+
 	// This might fail if /dev/uinput doesn't exist, which is fine for testing
 	if err != nil {
 		t.Logf("showCurrentPermissions failed (expected on systems without uinput): %v", err)
@@ -45,11 +45,11 @@ func TestShowCurrentPermissions(t *testing.T) {
 func TestEnsureWaymonGroup(t *testing.T) {
 	// We can't actually test group creation without sudo
 	// But we can test the check logic
-	
+
 	// Check if waymon group exists
 	cmd := exec.Command("getent", "group", "waymon")
 	err := cmd.Run()
-	
+
 	if err == nil {
 		t.Log("waymon group already exists")
 	} else {
@@ -59,25 +59,25 @@ func TestEnsureWaymonGroup(t *testing.T) {
 
 func TestSetupInputCapture(t *testing.T) {
 	// Test the logic without actually modifying groups
-	
+
 	// Check current user groups
 	cmd := exec.Command("groups")
 	output, err := cmd.Output()
 	require.NoError(t, err)
-	
+
 	groups := string(output)
 	t.Logf("Current user groups: %s", strings.TrimSpace(groups))
-	
+
 	hasInputGroup := strings.Contains(groups, "input")
 	t.Logf("User has input group: %v", hasInputGroup)
-	
+
 	// The actual setupInputCapture function would modify groups,
 	// but we don't want to do that in a test
 }
 
 func TestCheckUinputAvailable(t *testing.T) {
 	err := CheckUinputAvailable()
-	
+
 	if err != nil {
 		t.Logf("CheckUinputAvailable failed: %v", err)
 		// This is expected on many systems, so we don't fail the test
@@ -88,7 +88,7 @@ func TestCheckUinputAvailable(t *testing.T) {
 
 func TestVerifyWaymonSetup(t *testing.T) {
 	err := VerifyWaymonSetup()
-	
+
 	if err != nil {
 		t.Logf("VerifyWaymonSetup failed (expected on unconfigured systems): %v", err)
 		// This is expected if setup hasn't been run
@@ -140,7 +140,7 @@ func TestGroupMembershipCheck(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			for group, expectedPresent := range tc.expected {
 				actual := strings.Contains(tc.groups, group)
-				assert.Equal(t, expectedPresent, actual, 
+				assert.Equal(t, expectedPresent, actual,
 					"Group %s presence mismatch in groups: %s", group, tc.groups)
 			}
 		})
@@ -150,11 +150,11 @@ func TestGroupMembershipCheck(t *testing.T) {
 func TestDevicePermissionCheck(t *testing.T) {
 	// Test checking permissions on common input devices
 	inputDevices := []string{"/dev/input/event0", "/dev/input/event1", "/dev/input/event2"}
-	
+
 	for _, device := range inputDevices {
 		if _, err := os.Stat(device); err == nil {
 			t.Logf("Device %s exists", device)
-			
+
 			// Try to open read-only (this will fail without proper permissions)
 			file, err := os.OpenFile(device, os.O_RDONLY, 0)
 			if err != nil {
@@ -177,7 +177,7 @@ func TestUinputPermissionCheck(t *testing.T) {
 	// Test checking permissions on /dev/uinput
 	if _, err := os.Stat("/dev/uinput"); err == nil {
 		t.Log("/dev/uinput exists")
-		
+
 		// Try to open write-only (this will fail without proper permissions)
 		file, err := os.OpenFile("/dev/uinput", os.O_WRONLY, 0)
 		if err != nil {
@@ -225,7 +225,7 @@ func TestSetupModeValidation(t *testing.T) {
 			description:    "User with waymon group can run server mode",
 		},
 		{
-			name:           "client only setup", 
+			name:           "client only setup",
 			hasWaymonGroup: false,
 			hasInputGroup:  true,
 			shouldPass:     true,
@@ -304,9 +304,9 @@ func TestSetupFormattingOutput(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			// Check for trailing newlines
-			assert.False(t, strings.HasSuffix(tc.output, "\n"), 
+			assert.False(t, strings.HasSuffix(tc.output, "\n"),
 				"Output should not end with newline: %q", tc.output)
-			
+
 			// Check for embedded double newlines
 			assert.False(t, strings.Contains(tc.output, "\n\n"),
 				"Output should not contain double newlines: %q", tc.output)
@@ -327,12 +327,12 @@ func TestPrintPhaseOutput(t *testing.T) {
 
 	// Create a simple test that checks the formatting without actual stdout capture
 	// which can be unreliable in test environments
-	
+
 	// Test that phase formatting doesn't include trailing newlines
 	phaseHeader := ui.FormatSetupPhase(phase.name)
-	assert.False(t, strings.HasSuffix(phaseHeader, "\n"), 
+	assert.False(t, strings.HasSuffix(phaseHeader, "\n"),
 		"Phase header should not end with newline")
-	
+
 	// Test that result formatting doesn't include trailing newlines
 	for _, result := range phase.results {
 		formatted := ui.FormatSetupResult(result.success, result.step, result.message)

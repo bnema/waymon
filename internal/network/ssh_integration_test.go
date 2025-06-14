@@ -21,7 +21,7 @@ func TestSSHIntegration(t *testing.T) {
 	if testing.Short() {
 		t.Skip("Skipping integration test in short mode")
 	}
-	
+
 	// Set up test config to disable whitelist-only mode
 	viper.Reset()
 	config.Init()
@@ -59,22 +59,22 @@ func TestSSHIntegration(t *testing.T) {
 
 	// Start SSH server
 	server := NewSSHServer(52527, hostKeyPath, authKeysPath)
-	
+
 	// Set up a simple auth handler for testing
 	server.OnAuthRequest = func(addr, publicKey, fingerprint string) bool {
 		// Accept all keys for testing
 		return true
 	}
-	
+
 	// Track connections
 	connected := make(chan string, 1)
 	disconnected := make(chan string, 1)
-	
+
 	server.OnClientConnected = func(addr, pubKey string) {
 		t.Logf("Client connected: %s with key %s", addr, pubKey)
 		connected <- addr
 	}
-	
+
 	server.OnClientDisconnected = func(addr string) {
 		t.Logf("Client disconnected: %s", addr)
 		disconnected <- addr
@@ -93,7 +93,7 @@ func TestSSHIntegration(t *testing.T) {
 
 	// Create SSH client
 	client := NewSSHClient(clientKeyPath)
-	
+
 	// Connect to server
 	if err := client.Connect(ctx, "localhost:52527"); err != nil {
 		t.Fatalf("Failed to connect SSH client: %v", err)
@@ -158,6 +158,6 @@ func generateTestClientKeys(privateKeyPath, publicKeyPath string) error {
 
 	// Format as authorized_keys line
 	authorizedKey := ssh.MarshalAuthorizedKey(pub)
-	
+
 	return os.WriteFile(publicKeyPath, authorizedKey, 0644)
 }

@@ -62,7 +62,7 @@ func TestClientModel(t *testing.T) {
 	t.Run("toggles mouse capture", func(t *testing.T) {
 		cfg := ClientConfig{ServerAddress: "192.168.1.50:52525"}
 		model := NewClientModel(cfg)
-		
+
 		// Connect first so we can toggle capture
 		model.connected = true
 

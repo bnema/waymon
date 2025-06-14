@@ -17,8 +17,13 @@ import (
 func TestSSHMultipleClients(t *testing.T) {
 	// Set up test config to disable whitelist-only mode
 	viper.Reset()
-	config.Init()
 	viper.Set("server.ssh_whitelist_only", false)
+	config.Init()
+
+	// Also set OnAuthRequest handler to ensure keys are accepted
+	authHandler := func(addr, publicKey, fingerprint string) bool {
+		return true // Accept all keys for testing
+	}
 
 	// Setup test environment
 	tmpDir, err := os.MkdirTemp("", "waymon-ssh-multi")
@@ -60,7 +65,8 @@ func TestSSHMultipleClients(t *testing.T) {
 
 	// Start SSH server
 	server := NewSSHServer(52528, hostKeyPath, filepath.Join(tmpDir, "authorized_keys"))
-	server.SetMaxClients(1) // Explicitly set to only allow 1 client
+	server.SetMaxClients(1)             // Explicitly set to only allow 1 client
+	server.SetAuthHandlers(authHandler) // Set the auth handler
 
 	// Track events
 	events := make(chan string, 10)
@@ -203,17 +209,43 @@ func TestSSHMultipleClients(t *testing.T) {
 
 	// Test case 5: Client reconnection
 	t.Run("client_reconnection", func(t *testing.T) {
+		// Drain any leftover events from previous tests
+		for len(events) > 0 {
+			<-events
+		}
+
 		client := NewSSHClient(clientKeys[0])
 
 		// Connect
 		if err := client.Connect(ctx, "localhost:52528"); err != nil {
 			t.Fatalf("Failed to connect: %v", err)
 		}
-		<-events // connection event
+
+		// Wait for connection event
+		select {
+		case event := <-events:
+			if !strings.HasPrefix(event, "connected:") {
+				t.Errorf("Expected connection event, got %s", event)
+			}
+		case <-time.After(2 * time.Second):
+			t.Fatal("Timeout waiting for connection event")
+		}
 
 		// Disconnect
 		client.Disconnect()
-		<-events // disconnection event
+
+		// Wait for disconnection event
+		select {
+		case event := <-events:
+			if !strings.HasPrefix(event, "disconnected:") {
+				t.Errorf("Expected disconnection event, got %s", event)
+			}
+		case <-time.After(2 * time.Second):
+			t.Fatal("Timeout waiting for disconnection event")
+		}
+
+		// Give a small delay to ensure disconnect is fully processed
+		time.Sleep(100 * time.Millisecond)
 
 		// Reconnect
 		if err := client.Reconnect(ctx, "localhost:52528"); err != nil {
@@ -231,7 +263,16 @@ func TestSSHMultipleClients(t *testing.T) {
 		}
 
 		client.Disconnect()
-		<-events // final disconnection
+
+		// Wait for final disconnection
+		select {
+		case event := <-events:
+			if !strings.HasPrefix(event, "disconnected:") {
+				t.Errorf("Expected final disconnection event, got %s", event)
+			}
+		case <-time.After(2 * time.Second):
+			t.Fatal("Timeout waiting for final disconnection")
+		}
 	})
 }
 
