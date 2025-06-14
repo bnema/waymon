@@ -224,7 +224,7 @@ func runServer(cmd *cobra.Command, args []string) error {
 			p = tea.NewProgram(debugModel)
 		} else {
 			// Create redesigned full-screen TUI model
-			model := ui.NewServerModelRedesigned(serverPort, cfg.Server.Name, Version)
+			model := ui.NewServerModel(serverPort, cfg.Server.Name, Version)
 			p = tea.NewProgram(model, tea.WithAltScreen())
 		}
 

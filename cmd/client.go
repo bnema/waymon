@@ -106,7 +106,7 @@ func runClient(cmd *cobra.Command, args []string) error {
 	defer inputReceiver.Disconnect()
 
 	// Create redesigned client TUI model
-	model := ui.NewClientModelRedesigned(serverAddr, inputReceiver, Version)
+	model := ui.NewClientModel(serverAddr, inputReceiver, Version)
 	logger.Debug("Created redesigned client UI model")
 
 	// Create the program with alt screen mode for proper full-screen UI

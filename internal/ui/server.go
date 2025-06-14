@@ -16,8 +16,8 @@ import (
 // refreshClientListMsg is an internal message to trigger a client list refresh
 type refreshClientListMsg struct{}
 
-// ServerModelRedesigned represents the redesigned server UI model where server is the controller
-type ServerModelRedesigned struct {
+// ServerModel represents the redesigned server UI model where server is the controller
+type ServerModel struct {
 	// Server info
 	port        int
 	serverName  string
@@ -60,13 +60,13 @@ type ServerModelRedesigned struct {
 	logStyle         lipgloss.Style
 }
 
-// NewServerModelRedesigned creates a new redesigned server UI model
-func NewServerModelRedesigned(port int, serverName, version string) *ServerModelRedesigned {
+// NewServerModel creates a new redesigned server UI model
+func NewServerModel(port int, serverName, version string) *ServerModel {
 	s := spinner.New()
 	s.Spinner = spinner.Dot
 	s.Style = lipgloss.NewStyle().Foreground(lipgloss.Color("205"))
 
-	return &ServerModelRedesigned{
+	return &ServerModel{
 		port:                port,
 		serverName:          serverName,
 		version:             version,
@@ -113,12 +113,12 @@ func NewServerModelRedesigned(port int, serverName, version string) *ServerModel
 }
 
 // SetClientManager sets the client manager for real-time updates
-func (m *ServerModelRedesigned) SetClientManager(cm *server.ClientManager) {
+func (m *ServerModel) SetClientManager(cm *server.ClientManager) {
 	m.clientManager = cm
 }
 
 // Init initializes the redesigned model
-func (m *ServerModelRedesigned) Init() tea.Cmd {
+func (m *ServerModel) Init() tea.Cmd {
 	return tea.Batch(
 		m.spinner.Tick,
 		tea.EnterAltScreen,
@@ -126,7 +126,7 @@ func (m *ServerModelRedesigned) Init() tea.Cmd {
 }
 
 // Update handles messages for the redesigned server UI
-func (m *ServerModelRedesigned) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+func (m *ServerModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var cmds []tea.Cmd
 
 	switch msg := msg.(type) {
@@ -359,7 +359,7 @@ func (m *ServerModelRedesigned) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 // View renders the redesigned server UI
-func (m *ServerModelRedesigned) View() string {
+func (m *ServerModel) View() string {
 	if !m.ready {
 		return "\n\n   " + m.spinner.View() + " Initializing server..."
 	}
@@ -391,7 +391,7 @@ func (m *ServerModelRedesigned) View() string {
 }
 
 // renderHeader renders the header showing server status
-func (m *ServerModelRedesigned) renderHeader() string {
+func (m *ServerModel) renderHeader() string {
 	title := fmt.Sprintf("WAYMON %s - SERVER MODE", m.version)
 	status := fmt.Sprintf("Status: ● Active | Port: %d", m.port)
 	
@@ -403,7 +403,7 @@ func (m *ServerModelRedesigned) renderHeader() string {
 }
 
 // renderClientList renders the connected clients list with current control status
-func (m *ServerModelRedesigned) renderClientList() string {
+func (m *ServerModel) renderClientList() string {
 	var output strings.Builder
 
 	output.WriteString("Connected Clients:\n")
@@ -455,7 +455,7 @@ func (m *ServerModelRedesigned) renderClientList() string {
 }
 
 // renderControls renders the control instructions
-func (m *ServerModelRedesigned) renderControls() string {
+func (m *ServerModel) renderControls() string {
 	var controlsText string
 	
 	if m.localControl {
@@ -475,7 +475,7 @@ func (m *ServerModelRedesigned) renderControls() string {
 }
 
 // renderAuthPrompt renders the SSH authentication prompt
-func (m *ServerModelRedesigned) renderAuthPrompt() string {
+func (m *ServerModel) renderAuthPrompt() string {
 	if m.pendingAuth == nil {
 		return ""
 	}
@@ -495,13 +495,13 @@ func (m *ServerModelRedesigned) renderAuthPrompt() string {
 }
 
 // updateViewport updates the viewport content with current logs
-func (m *ServerModelRedesigned) updateViewport() {
+func (m *ServerModel) updateViewport() {
 	m.viewport.SetContent(m.renderLogs())
 	m.viewport.GotoBottom()
 }
 
 // renderLogs renders the log entries
-func (m *ServerModelRedesigned) renderLogs() string {
+func (m *ServerModel) renderLogs() string {
 	if len(m.logBuffer) == 0 {
 		return m.logStyle.Render("No logs yet...")
 	}
@@ -516,7 +516,7 @@ func (m *ServerModelRedesigned) renderLogs() string {
 }
 
 // formatLogEntry formats a single log entry with colors
-func (m *ServerModelRedesigned) formatLogEntry(entry LogEntry) string {
+func (m *ServerModel) formatLogEntry(entry LogEntry) string {
 	timeStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("244"))
 	
 	var levelStyle lipgloss.Style
@@ -542,7 +542,7 @@ func (m *ServerModelRedesigned) formatLogEntry(entry LogEntry) string {
 }
 
 // AddLogEntry adds a new log entry to the buffer
-func (m *ServerModelRedesigned) AddLogEntry(entry LogEntry) {
+func (m *ServerModel) AddLogEntry(entry LogEntry) {
 	m.logBuffer = append(m.logBuffer, entry)
 
 	// Keep only the last maxLogLines entries
@@ -554,7 +554,7 @@ func (m *ServerModelRedesigned) AddLogEntry(entry LogEntry) {
 }
 
 // refreshClientList updates the client list from the client manager
-func (m *ServerModelRedesigned) refreshClientList() {
+func (m *ServerModel) refreshClientList() {
 	if m.clientManager != nil {
 		// Add timeout protection to prevent hanging
 		done := make(chan bool, 1)
