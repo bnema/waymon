@@ -35,30 +35,30 @@ Download the latest release from [GitHub Releases](https://github.com/bnema/waym
 
 ```bash
 # Download the package
-wget https://github.com/bnema/waymon/releases/download/v0.2.0/waymon_0.2.0_linux_amd64.pkg.tar.zst
+wget https://github.com/bnema/waymon/releases/download/v0.3/waymon_0.3_linux_amd64.pkg.tar.zst
 
 # Install with pacman
-sudo pacman -U waymon_0.2.0_linux_amd64.pkg.tar.zst
+sudo pacman -U waymon_0.3_linux_amd64.pkg.tar.zst
 ```
 
 #### Debian/Ubuntu
 
 ```bash
 # Download the package
-wget https://github.com/bnema/waymon/releases/download/v0.2.0/waymon_0.2.0_linux_amd64.deb
+wget https://github.com/bnema/waymon/releases/download/v0.3/waymon_0.3_linux_amd64.deb
 
 # Install with dpkg
-sudo dpkg -i waymon_0.2.0_linux_amd64.deb
+sudo dpkg -i waymon_0.3_linux_amd64.deb
 ```
 
 #### Fedora/RHEL/CentOS
 
 ```bash
 # Download the package
-wget https://github.com/bnema/waymon/releases/download/v0.2.0/waymon_0.2.0_linux_amd64.rpm
+wget https://github.com/bnema/waymon/releases/download/v0.3/waymon_0.3_linux_amd64.rpm
 
 # Install with rpm
-sudo rpm -i waymon_0.2.0_linux_amd64.rpm
+sudo rpm -i waymon_0.3_linux_amd64.rpm
 ```
 
 
@@ -66,7 +66,7 @@ sudo rpm -i waymon_0.2.0_linux_amd64.rpm
 
 ```bash
 # Download the tarball
-wget https://github.com/bnema/waymon/releases/download/v0.2.0/waymon_Linux_x86_64.tar.gz
+wget https://github.com/bnema/waymon/releases/download/v0.3/waymon_Linux_x86_64.tar.gz
 
 # Extract
 tar -xzf waymon_Linux_x86_64.tar.gz
