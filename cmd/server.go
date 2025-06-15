@@ -12,6 +12,7 @@ import (
 	"github.com/bnema/waymon/internal/logger"
 	"github.com/bnema/waymon/internal/protocol"
 	"github.com/bnema/waymon/internal/server"
+	"github.com/bnema/waymon/internal/setup"
 	"github.com/bnema/waymon/internal/ui"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/spf13/cobra"
@@ -200,7 +201,33 @@ func runServer(cmd *cobra.Command, args []string) error {
 	// Get configuration
 	cfg := config.Get()
 
-	// Device setup is no longer needed - libei handles device access automatically
+	// Run device setup for evdev input capture
+	deviceSetup := setup.NewDeviceSetup()
+	
+	// Validate existing devices first
+	if err := deviceSetup.ValidateDevices(); err != nil {
+		logger.Warnf("Device validation failed: %v", err)
+		
+		// If we have invalid devices, run interactive setup
+		if !noTUI {
+			fmt.Println("⚠️  Device configuration issue detected.")
+			if err := deviceSetup.RunInteractiveSetup(); err != nil {
+				return fmt.Errorf("device setup failed: %w", err)
+			}
+		} else {
+			logger.Error("Invalid device configuration. Run 'waymon setup --devices' to fix.")
+			return fmt.Errorf("invalid device configuration: %w", err)
+		}
+	} else {
+		// Check if devices need initial setup
+		if err := deviceSetup.RunInteractiveSetup(); err != nil {
+			if !noTUI {
+				return fmt.Errorf("device setup failed: %w", err)
+			}
+			// In no-TUI mode, warn but continue (devices will be auto-detected)
+			logger.Warnf("Device setup failed, will use auto-detection: %v", err)
+		}
+	}
 
 	// Show log location if not using TUI
 	if noTUI {
