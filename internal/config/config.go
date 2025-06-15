@@ -70,8 +70,8 @@ type InputConfig struct {
 	ScrollSpeed      float64 `mapstructure:"scroll_speed"`
 	EnableKeyboard   bool    `mapstructure:"enable_keyboard"`
 	KeyboardLayout   string  `mapstructure:"keyboard_layout"`
-	MouseDevice      string  `mapstructure:"mouse_device"`     // Path to mouse device
-	KeyboardDevice   string  `mapstructure:"keyboard_device"`  // Path to keyboard device
+	MouseDevice      string  `mapstructure:"mouse_device"`    // Path to mouse device
+	KeyboardDevice   string  `mapstructure:"keyboard_device"` // Path to keyboard device
 }
 
 // HostConfig represents a known host for quick connections
