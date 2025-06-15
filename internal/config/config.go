@@ -100,8 +100,8 @@ var (
 			BindAddress:      "0.0.0.0",
 			Name:             getHostname(),
 			MaxClients:       1,
-			SSHHostKeyPath:   "~/.config/waymon/host_key",
-			SSHAuthKeysPath:  "~/.config/waymon/authorized_keys",
+			SSHHostKeyPath:   "/etc/waymon/host_key",
+			SSHAuthKeysPath:  "/etc/waymon/authorized_keys",
 			SSHWhitelist:     []string{},
 			SSHWhitelistOnly: true,
 		},
@@ -131,7 +131,15 @@ var (
 
 	// Global config instance
 	cfg *Config
+	
+	// Override config path if set
+	configPathOverride string
 )
+
+// SetConfigPath allows overriding the config path
+func SetConfigPath(path string) {
+	configPathOverride = path
+}
 
 // Init initializes the configuration system
 func Init() error {
@@ -139,19 +147,24 @@ func Init() error {
 	viper.SetConfigName("waymon")
 	viper.SetConfigType("toml")
 
-	// Add config paths in order of precedence
-	viper.AddConfigPath("/etc/waymon") // System config directory (primary)
+	// If a specific path is set, use only that
+	if configPathOverride != "" {
+		viper.SetConfigFile(configPathOverride)
+	} else {
+		// Add config paths in order of precedence
+		viper.AddConfigPath("/etc/waymon") // System config directory (primary)
 
-	// If running with sudo, try the real user's config
-	if sudoUser := os.Getenv("SUDO_USER"); sudoUser != "" {
-		userConfigPath := fmt.Sprintf("/home/%s/.config/waymon", sudoUser)
-		viper.AddConfigPath(userConfigPath)
-	} else if home := os.Getenv("HOME"); home != "" && home != "/root" {
-		// Normal user config
-		viper.AddConfigPath(filepath.Join(home, ".config", "waymon"))
+		// If running with sudo, try the real user's config
+		if sudoUser := os.Getenv("SUDO_USER"); sudoUser != "" {
+			userConfigPath := fmt.Sprintf("/home/%s/.config/waymon", sudoUser)
+			viper.AddConfigPath(userConfigPath)
+		} else if home := os.Getenv("HOME"); home != "" && home != "/root" {
+			// Normal user config
+			viper.AddConfigPath(filepath.Join(home, ".config", "waymon"))
+		}
+
+		viper.AddConfigPath(".") // Current directory (lowest priority)
 	}
-
-	viper.AddConfigPath(".") // Current directory (lowest priority)
 
 	// Set defaults - need to set individual fields for proper merging
 	viper.SetDefault("server.port", DefaultConfig.Server.Port)
@@ -239,6 +252,11 @@ func Save() error {
 
 // GetConfigPath returns the path to the config file
 func GetConfigPath() string {
+	// If override is set, use that
+	if configPathOverride != "" {
+		return configPathOverride
+	}
+	
 	// Check if config file is already loaded
 	if viper.ConfigFileUsed() != "" {
 		return viper.ConfigFileUsed()

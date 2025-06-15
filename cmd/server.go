@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"syscall"
 	"time"
 
@@ -213,6 +214,14 @@ func initializeServer(ctx context.Context, srv *server.Server, cfg *config.Confi
 }
 
 func runServer(cmd *cobra.Command, args []string) error {
+	// Check if running with sudo
+	if os.Geteuid() != 0 {
+		return fmt.Errorf("waymon server must be run with sudo")
+	}
+
+	// Set config path to system-wide location for server mode
+	config.SetConfigPath("/etc/waymon/waymon.toml")
+
 	// Set up file logging since Bubble Tea will hide terminal output
 	logFile, err := logger.SetupFileLogging("SERVER")
 	if err != nil {
@@ -392,6 +401,12 @@ func ensureServerConfig() error {
 	// Check if config file exists
 	if _, err := os.Stat(configPath); os.IsNotExist(err) {
 		logger.Infof("No config file found. Creating default config at %s", configPath)
+
+		// Create /etc/waymon directory if it doesn't exist
+		configDir := filepath.Dir(configPath)
+		if err := os.MkdirAll(configDir, 0755); err != nil {
+			return fmt.Errorf("failed to create config directory %s: %w", configDir, err)
+		}
 
 		// Save default config
 		if err := config.Save(); err != nil {
