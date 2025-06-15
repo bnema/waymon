@@ -23,6 +23,7 @@ type InputReceiver struct {
 	inputBackend   input.InputBackend
 	controlStatus  ControlStatus
 	onStatusChange func(ControlStatus)
+	clientID       string // The client identifier (hostname)
 
 	// Reconnection state
 	reconnectEnabled    bool
@@ -53,10 +54,17 @@ func NewInputReceiver(serverAddress string) (*InputReceiver, error) {
 		return nil, fmt.Errorf("failed to create input backend: %w", err)
 	}
 
+	// Get hostname for client ID
+	hostname, err := os.Hostname()
+	if err != nil {
+		hostname = "unknown-client"
+	}
+
 	return &InputReceiver{
 		serverAddress:      serverAddress,
 		inputBackend:       backend,
 		connected:          false,
+		clientID:           hostname,
 		healthCheckTimeout: 30 * time.Second, // 30 second timeout for health checks
 	}, nil
 }
@@ -287,11 +295,6 @@ func (ir *InputReceiver) RequestControlRelease() error {
 
 // sendClientConfiguration sends the client's monitor and capability information to the server
 func (ir *InputReceiver) sendClientConfiguration() error {
-	// Get hostname for client ID
-	hostname, err := os.Hostname()
-	if err != nil {
-		hostname = "unknown-client"
-	}
 
 	// Get display information
 	disp, err := display.New()
@@ -328,8 +331,8 @@ func (ir *InputReceiver) sendClientConfiguration() error {
 
 	// Create client configuration
 	clientConfig := &protocol.ClientConfig{
-		ClientId:     hostname,
-		ClientName:   hostname,
+		ClientId:     ir.clientID,
+		ClientName:   ir.clientID,
 		Monitors:     protocolMonitors,
 		Capabilities: capabilities,
 	}
@@ -346,7 +349,7 @@ func (ir *InputReceiver) sendClientConfiguration() error {
 			Control: controlEvent,
 		},
 		Timestamp: time.Now().UnixNano(),
-		SourceId:  hostname,
+		SourceId:  ir.clientID,
 	}
 
 	// Send via SSH connection
@@ -602,7 +605,7 @@ func (ir *InputReceiver) sendHealthCheckPing() error {
 			Control: controlEvent,
 		},
 		Timestamp: time.Now().UnixNano(),
-		SourceId:  "client",
+		SourceId:  ir.clientID,
 	}
 
 	// Send via SSH connection
