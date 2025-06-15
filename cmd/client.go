@@ -133,10 +133,6 @@ func runClient(cmd *cobra.Command, args []string) error {
 		// Small delay to ensure TUI is fully ready
 		time.Sleep(100 * time.Millisecond)
 
-		// Create a context with a 30-second timeout for the connection
-		connCtx, connCancel := context.WithTimeout(ctx, 30*time.Second)
-		defer connCancel()
-
 		logger.Infof("Attempting to connect to server at %s", serverAddr)
 
 		// Start connection with smart approval detection
@@ -150,7 +146,9 @@ func runClient(cmd *cobra.Command, args []string) error {
 		})
 		defer approvalTimer.Stop() // Ensure timer is cleaned up
 
-		if err := inputReceiver.Connect(connCtx, privateKeyPath); err != nil {
+		// Use the parent context for the actual connection
+		// The input backend and SSH receive loop need to stay alive after connection
+		if err := inputReceiver.Connect(ctx, privateKeyPath); err != nil {
 			if strings.Contains(err.Error(), "waiting for server approval") {
 				// Keep showing the waiting message
 				logger.Info("Connection pending server approval")
