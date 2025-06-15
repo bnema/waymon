@@ -342,6 +342,9 @@ func (e *EvdevCapture) captureMouseEvents() {
 				case evdev.EV_SYN:
 					// Synchronization event - indicates end of a set of events
 					// Removed debug log to reduce spam
+				case evdev.EV_MSC:
+					// Miscellaneous events (like scan codes) - ignore them
+					continue
 				default:
 					logger.Debugf("❓ Unknown event type: %d, code: %d, value: %d", event.Type, event.Code, event.Value)
 				}
