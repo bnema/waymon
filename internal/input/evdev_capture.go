@@ -7,9 +7,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/gvalkov/golang-evdev"
 	"github.com/bnema/waymon/internal/logger"
 	"github.com/bnema/waymon/internal/protocol"
+	"github.com/gvalkov/golang-evdev"
 )
 
 // EvdevCapture captures input events from evdev devices

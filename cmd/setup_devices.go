@@ -46,24 +46,24 @@ var devicesShowCmd = &cobra.Command{
 		}
 
 		cfg := config.Get()
-		
+
 		fmt.Println("\n📋 Current Device Configuration")
 		fmt.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
-		
+
 		if cfg.Input.MouseDevice != "" {
 			fmt.Printf("🖱️  Mouse Device:    %s\n", cfg.Input.MouseDevice)
 		} else {
 			fmt.Println("🖱️  Mouse Device:    (not configured)")
 		}
-		
+
 		if cfg.Input.KeyboardDevice != "" {
 			fmt.Printf("⌨️  Keyboard Device: %s\n", cfg.Input.KeyboardDevice)
 		} else {
 			fmt.Println("⌨️  Keyboard Device: (not configured)")
 		}
-		
+
 		fmt.Printf("\n📁 Config File: %s\n", config.GetConfigPath())
-		
+
 		return nil
 	},
 }
