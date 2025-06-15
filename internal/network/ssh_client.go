@@ -59,6 +59,11 @@ func NewSSHClient(privateKeyPath string) *SSHClient {
 
 // Connect establishes an SSH connection to the server
 func (c *SSHClient) Connect(ctx context.Context, serverAddr string) error {
+	return c.ConnectWithTimeout(ctx, serverAddr, 30*time.Second)
+}
+
+// ConnectWithTimeout establishes an SSH connection to the server with a specific timeout
+func (c *SSHClient) ConnectWithTimeout(ctx context.Context, serverAddr string, timeout time.Duration) error {
 
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -154,6 +159,10 @@ func (c *SSHClient) Connect(ctx context.Context, serverAddr string) error {
 	var dialErr error
 	var client *ssh.Client
 
+	// Create a timeout context only for the dial operation
+	dialCtx, dialCancel := context.WithTimeout(ctx, timeout)
+	defer dialCancel()
+
 	// Use context-aware dialer
 	var dialer net.Dialer
 
@@ -165,8 +174,8 @@ func (c *SSHClient) Connect(ctx context.Context, serverAddr string) error {
 		// Log start time for debugging
 		dialStart := time.Now()
 
-		// Create a TCP connection with context
-		conn, err := dialer.DialContext(ctx, "tcp", serverAddr)
+		// Create a TCP connection with timeout context
+		conn, err := dialer.DialContext(dialCtx, "tcp", serverAddr)
 		if err != nil {
 			dialErr = fmt.Errorf("TCP dial failed: %w", err)
 			close(dialDone)
@@ -190,7 +199,7 @@ func (c *SSHClient) Connect(ctx context.Context, serverAddr string) error {
 		close(dialDone)
 	}()
 
-	// Wait for dial to complete or context cancellation
+	// Wait for dial to complete or timeout
 	select {
 	case <-dialDone:
 		if dialErr != nil {
@@ -198,9 +207,9 @@ func (c *SSHClient) Connect(ctx context.Context, serverAddr string) error {
 			return dialErr
 		}
 		logger.Debug("SSH dial successful, creating session...")
-	case <-ctx.Done():
+	case <-dialCtx.Done():
 		logger.Error("SSH connection cancelled or timed out")
-		return fmt.Errorf("SSH connection cancelled: %w", ctx.Err())
+		return fmt.Errorf("SSH connection cancelled: %w", dialCtx.Err())
 	}
 
 	// Create session
