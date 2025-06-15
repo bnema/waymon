@@ -10,7 +10,6 @@ import (
 	"sync"
 
 	"github.com/bnema/waymon/internal/config"
-	"github.com/bnema/waymon/internal/display"
 	"github.com/bnema/waymon/internal/input"
 	"github.com/bnema/waymon/internal/logger"
 	"github.com/bnema/waymon/internal/network"
@@ -20,7 +19,6 @@ import (
 // Server represents the main server
 type Server struct {
 	config        *config.Config
-	display       *display.Display
 	inputBackend  input.InputBackend
 	sshServer     *network.SSHServer
 	clientManager *ClientManager
@@ -43,12 +41,6 @@ func New(cfg *config.Config) (*Server, error) {
 // Start starts the server with appropriate privilege separation
 func (s *Server) Start(ctx context.Context) error {
 	logger.Debug("Server.Start: Starting server initialization")
-
-	// Initialize display detection (runs as normal user if possible)
-	logger.Debug("Server.Start: Initializing display")
-	if err := s.initDisplay(); err != nil {
-		return fmt.Errorf("failed to initialize display: %w", err)
-	}
 
 	// Initialize input handler (requires root)
 	if err := s.initInput(); err != nil {
@@ -105,20 +97,6 @@ func (s *Server) initClientManager() error {
 	return nil
 }
 
-// initDisplay initializes display detection, running as normal user if possible
-func (s *Server) initDisplay() error {
-	logger.Debug("Server.initDisplay: Starting display detection")
-	// The display.New() function will automatically use the sudo backend
-	// when running with sudo, which handles privilege separation
-	disp, err := display.New()
-	if err != nil {
-		logger.Errorf("Server.initDisplay: Failed to create display: %v", err)
-		return err
-	}
-	logger.Debug("Server.initDisplay: Display created successfully")
-	s.display = disp
-	return nil
-}
 
 // initInput initializes the input handler
 func (s *Server) initInput() error {
@@ -195,17 +173,9 @@ func (s *Server) Stop() {
 		s.inputBackend.Stop()
 	}
 
-	if s.display != nil {
-		s.display.Close()
-	}
-
 	s.wg.Wait()
 }
 
-// GetDisplay returns the display manager
-func (s *Server) GetDisplay() *display.Display {
-	return s.display
-}
 
 // GetPort returns the server port
 func (s *Server) GetPort() int {
