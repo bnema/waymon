@@ -209,91 +209,48 @@ func (e *EvdevCapture) ungrabDevices() {
 
 // findMouseDevice finds the first available mouse device
 func (e *EvdevCapture) findMouseDevice() (*evdev.InputDevice, error) {
-	devices, err := evdev.ListInputDevices("/dev/input/event*")
+	// Use the device selector to get all devices, we'll use the first one
+	selector := NewDeviceSelector()
+	devices, err := selector.ListDevices(DeviceTypeMouse) // deviceType ignored now
 	if err != nil {
 		return nil, err
 	}
 
-	for _, dev := range devices {
-		// Check if device has relative axes (mouse movement)
-		if dev.Capabilities != nil {
-			// Check in the flat capabilities map instead
-			if relAxes, ok := dev.CapabilitiesFlat[evdev.EV_REL]; ok && len(relAxes) > 0 {
-				// Check for X and Y axes
-				hasX := false
-				hasY := false
-				for _, axis := range relAxes {
-					if axis == evdev.REL_X {
-						hasX = true
-					}
-					if axis == evdev.REL_Y {
-						hasY = true
-					}
-				}
-				if hasX && hasY {
-					// Also check for mouse buttons
-					if btns, ok := dev.CapabilitiesFlat[evdev.EV_KEY]; ok && len(btns) > 0 {
-						// Check for standard mouse buttons
-						for _, btn := range btns {
-							if btn == evdev.BTN_LEFT || btn == evdev.BTN_RIGHT || btn == evdev.BTN_MIDDLE {
-								logger.Infof("Found mouse device: %s at %s", dev.Name, dev.Fn)
-								device, err := evdev.Open(dev.Fn)
-								if err != nil {
-									logger.Warnf("Failed to open device %s: %v", dev.Fn, err)
-									continue
-								}
-								return device, nil
-							}
-						}
-					}
-				}
-			}
-		}
+	if len(devices) == 0 {
+		return nil, fmt.Errorf("no suitable mouse device found")
 	}
 
-	return nil, fmt.Errorf("no suitable mouse device found")
+	// Use the first found device
+	device, err := evdev.Open(devices[0].Path)
+	if err != nil {
+		return nil, fmt.Errorf("failed to open mouse device %s: %w", devices[0].Path, err)
+	}
+
+	logger.Infof("Found mouse device: %s at %s", devices[0].Name, devices[0].Path)
+	return device, nil
 }
 
 // findKeyboardDevice finds the first available keyboard device
 func (e *EvdevCapture) findKeyboardDevice() (*evdev.InputDevice, error) {
-	devices, err := evdev.ListInputDevices("/dev/input/event*")
+	// Use the device selector to get all devices, we'll use the first one
+	selector := NewDeviceSelector()
+	devices, err := selector.ListDevices(DeviceTypeKeyboard) // deviceType ignored now
 	if err != nil {
 		return nil, err
 	}
 
-	for _, dev := range devices {
-		// Skip devices that are likely power buttons or other special devices
-		if strings.Contains(strings.ToLower(dev.Name), "power") ||
-			strings.Contains(strings.ToLower(dev.Name), "video") ||
-			strings.Contains(strings.ToLower(dev.Name), "sleep") {
-			continue
-		}
-
-		// Check if device has key events
-		if dev.Capabilities != nil {
-			if keys, ok := dev.CapabilitiesFlat[evdev.EV_KEY]; ok && len(keys) > 0 {
-				// Check for standard keyboard keys (KEY_A to KEY_Z)
-				hasAlphaKeys := false
-				for _, key := range keys {
-					if key >= evdev.KEY_A && key <= evdev.KEY_Z {
-						hasAlphaKeys = true
-						break
-					}
-				}
-				if hasAlphaKeys {
-					logger.Infof("Found keyboard device: %s at %s", dev.Name, dev.Fn)
-					device, err := evdev.Open(dev.Fn)
-					if err != nil {
-						logger.Warnf("Failed to open device %s: %v", dev.Fn, err)
-						continue
-					}
-					return device, nil
-				}
-			}
-		}
+	if len(devices) == 0 {
+		return nil, fmt.Errorf("no suitable keyboard device found")
 	}
 
-	return nil, fmt.Errorf("no suitable keyboard device found")
+	// Use the first found device
+	device, err := evdev.Open(devices[0].Path)
+	if err != nil {
+		return nil, fmt.Errorf("failed to open keyboard device %s: %w", devices[0].Path, err)
+	}
+
+	logger.Infof("Found keyboard device: %s at %s", devices[0].Name, devices[0].Path)
+	return device, nil
 }
 
 // captureMouseEvents captures mouse events from the device

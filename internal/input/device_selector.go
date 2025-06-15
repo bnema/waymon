@@ -8,7 +8,6 @@ import (
 
 	"github.com/bnema/waymon/internal/logger"
 	"github.com/charmbracelet/huh"
-	"github.com/gvalkov/golang-evdev"
 )
 
 // DeviceType represents the type of input device
@@ -37,13 +36,14 @@ func NewDeviceSelector() *DeviceSelector {
 
 // SelectMouseDevice presents an interactive selection for mouse devices
 func (s *DeviceSelector) SelectMouseDevice() (string, error) {
-	devices, err := s.listDevices(DeviceTypeMouse)
+	// Get all available input devices
+	devices, err := s.ListDevices(DeviceTypeMouse) // deviceType ignored
 	if err != nil {
 		return "", err
 	}
 
 	if len(devices) == 0 {
-		return "", fmt.Errorf("no mouse devices found")
+		return "", fmt.Errorf("no input devices found")
 	}
 
 	// If only one device, use it automatically
@@ -63,7 +63,7 @@ func (s *DeviceSelector) SelectMouseDevice() (string, error) {
 		huh.NewGroup(
 			huh.NewSelect[string]().
 				Title("Select Mouse Device").
-				Description("Choose the mouse device to capture input from").
+				Description("Choose which device you want to use for MOUSE input capture").
 				Options(options...).
 				Value(&selected),
 		),
@@ -78,13 +78,14 @@ func (s *DeviceSelector) SelectMouseDevice() (string, error) {
 
 // SelectKeyboardDevice presents an interactive selection for keyboard devices
 func (s *DeviceSelector) SelectKeyboardDevice() (string, error) {
-	devices, err := s.listDevices(DeviceTypeKeyboard)
+	// Get all available input devices (same list as mouse)
+	devices, err := s.ListDevices(DeviceTypeKeyboard) // deviceType ignored
 	if err != nil {
 		return "", err
 	}
 
 	if len(devices) == 0 {
-		return "", fmt.Errorf("no keyboard devices found")
+		return "", fmt.Errorf("no input devices found")
 	}
 
 	// If only one device, use it automatically
@@ -104,7 +105,7 @@ func (s *DeviceSelector) SelectKeyboardDevice() (string, error) {
 		huh.NewGroup(
 			huh.NewSelect[string]().
 				Title("Select Keyboard Device").
-				Description("Choose the keyboard device to capture input from").
+				Description("Choose which device you want to use for KEYBOARD input capture").
 				Options(options...).
 				Value(&selected),
 		),
@@ -117,145 +118,155 @@ func (s *DeviceSelector) SelectKeyboardDevice() (string, error) {
 	return selected, nil
 }
 
-// listDevices lists available input devices of the specified type
-func (s *DeviceSelector) listDevices(deviceType DeviceType) ([]DeviceInfo, error) {
-	evdevices, err := evdev.ListInputDevices("/dev/input/event*")
-	if err != nil {
-		return nil, fmt.Errorf("failed to list input devices: %w", err)
-	}
-
+// ListDevices returns a list of all available input devices (ignoring deviceType for simplicity)
+func (s *DeviceSelector) ListDevices(deviceType DeviceType) ([]DeviceInfo, error) {
 	var devices []DeviceInfo
-	for _, dev := range evdevices {
-		if s.isDeviceType(dev, deviceType) {
-			info := DeviceInfo{
-				Path: dev.Fn,
-				Name: dev.Name,
+	detector := NewDeviceDetector()
+
+	// First try to find devices via symlinks (more descriptive names)
+	symlinkDevices := s.findDevicesBySymlinks()
+	devices = append(devices, symlinkDevices...)
+
+	// Also find devices by capabilities (might catch some that symlinks miss)
+	capDevices, err := s.findDevicesByCapabilities(detector)
+	if err == nil {
+		// Add only devices not already in the list
+		for _, capDev := range capDevices {
+			found := false
+			for _, existing := range devices {
+				if existing.Path == capDev.Path {
+					found = true
+					break
+				}
 			}
-
-			// Try to find symlink
-			info.Symlink = s.findSymlink(dev.Fn)
-
-			// Create descriptive name
-			if info.Symlink != "" {
-				info.Descriptive = fmt.Sprintf("%s (%s → %s)", dev.Name, info.Symlink, dev.Fn)
-			} else {
-				info.Descriptive = fmt.Sprintf("%s (%s)", dev.Name, dev.Fn)
+			if !found {
+				devices = append(devices, capDev)
 			}
-
-			devices = append(devices, info)
 		}
 	}
 
 	return devices, nil
 }
 
-// isDeviceType checks if a device matches the requested type
-func (s *DeviceSelector) isDeviceType(dev *evdev.InputDevice, deviceType DeviceType) bool {
-	if dev.Capabilities == nil {
-		return false
-	}
+// findDevicesBySymlinks finds all input devices using symlinks for better names
+func (s *DeviceSelector) findDevicesBySymlinks() []DeviceInfo {
+	var devices []DeviceInfo
+	detector := NewDeviceDetector()
 
-	switch deviceType {
-	case DeviceTypeMouse:
-		// Check for relative axes (mouse movement)
-		if relAxes, ok := dev.CapabilitiesFlat[evdev.EV_REL]; ok && len(relAxes) > 0 {
-			// Check for X and Y axes
-			hasX := false
-			hasY := false
-			for _, axis := range relAxes {
-				if axis == evdev.REL_X {
-					hasX = true
-				}
-				if axis == evdev.REL_Y {
-					hasY = true
+	// Check /dev/input/by-id first (most descriptive)
+	byIdDir := "/dev/input/by-id"
+	if entries, err := os.ReadDir(byIdDir); err == nil {
+		for _, entry := range entries {
+			if !entry.IsDir() && strings.Contains(strings.ToLower(entry.Name()), "event") {
+				symlinkPath := filepath.Join(byIdDir, entry.Name())
+				if targetPath, err := os.Readlink(symlinkPath); err == nil {
+					// Resolve to absolute path
+					realPath := filepath.Clean(filepath.Join(byIdDir, targetPath))
+
+					// Verify the device is accessible
+					if file, err := os.OpenFile(realPath, os.O_RDONLY, 0); err == nil {
+						if detector.isValidInputDevice(file) {
+							// Extract device name from symlink
+							name := entry.Name()
+							// Remove common prefixes/suffixes for cleaner display
+							cleanName := strings.TrimSuffix(name, "-event-kbd")
+							cleanName = strings.TrimSuffix(cleanName, "-event-mouse")
+							cleanName = strings.TrimPrefix(cleanName, "usb-")
+
+							devices = append(devices, DeviceInfo{
+								Path:        realPath,
+								Name:        cleanName,
+								Symlink:     symlinkPath,
+								Descriptive: fmt.Sprintf("%s (%s)", cleanName, filepath.Base(realPath)),
+							})
+						}
+						file.Close()
+					}
 				}
 			}
-			if hasX && hasY {
-				// Also check for mouse buttons
-				if btns, ok := dev.CapabilitiesFlat[evdev.EV_KEY]; ok && len(btns) > 0 {
-					// Check for standard mouse buttons
-					for _, btn := range btns {
-						if btn == evdev.BTN_LEFT || btn == evdev.BTN_RIGHT || btn == evdev.BTN_MIDDLE {
-							return true
+		}
+	}
+
+	// Also check /dev/input/by-path if by-id didn't find anything
+	if len(devices) == 0 {
+		byPathDir := "/dev/input/by-path"
+		if entries, err := os.ReadDir(byPathDir); err == nil {
+			for _, entry := range entries {
+				if !entry.IsDir() && strings.Contains(strings.ToLower(entry.Name()), "event") {
+					symlinkPath := filepath.Join(byPathDir, entry.Name())
+					if targetPath, err := os.Readlink(symlinkPath); err == nil {
+						realPath := filepath.Clean(filepath.Join(byPathDir, targetPath))
+
+						if file, err := os.OpenFile(realPath, os.O_RDONLY, 0); err == nil {
+							if detector.isValidInputDevice(file) {
+								name := entry.Name()
+								cleanName := strings.TrimSuffix(name, "-event-kbd")
+								cleanName = strings.TrimSuffix(cleanName, "-event-mouse")
+
+								devices = append(devices, DeviceInfo{
+									Path:        realPath,
+									Name:        cleanName,
+									Symlink:     symlinkPath,
+									Descriptive: fmt.Sprintf("%s (%s)", cleanName, filepath.Base(realPath)),
+								})
+							}
+							file.Close()
 						}
 					}
 				}
 			}
 		}
-		return false
-
-	case DeviceTypeKeyboard:
-		// Skip devices that are likely power buttons or other special devices
-		nameLower := strings.ToLower(dev.Name)
-		if strings.Contains(nameLower, "power") ||
-			strings.Contains(nameLower, "video") ||
-			strings.Contains(nameLower, "sleep") ||
-			strings.Contains(nameLower, "button") {
-			return false
-		}
-
-		// Check for key events
-		if keys, ok := dev.CapabilitiesFlat[evdev.EV_KEY]; ok && len(keys) > 0 {
-			// Check for standard keyboard keys (KEY_A to KEY_Z)
-			hasAlphaKeys := false
-			for _, key := range keys {
-				if key >= evdev.KEY_A && key <= evdev.KEY_Z {
-					hasAlphaKeys = true
-					break
-				}
-			}
-			return hasAlphaKeys
-		}
-		return false
-
-	default:
-		return false
 	}
+
+	return devices
 }
 
-// findSymlink finds the symlink for a device path in /dev/input/by-id or /dev/input/by-path
-func (s *DeviceSelector) findSymlink(devicePath string) string {
-	// Check /dev/input/by-id first
-	byIDPath := "/dev/input/by-id"
-	if symlink := s.findSymlinkInDir(devicePath, byIDPath); symlink != "" {
-		return symlink
-	}
-
-	// Then check /dev/input/by-path
-	byPathPath := "/dev/input/by-path"
-	if symlink := s.findSymlinkInDir(devicePath, byPathPath); symlink != "" {
-		return symlink
-	}
-
-	return ""
-}
-
-// findSymlinkInDir finds a symlink pointing to devicePath in the given directory
-func (s *DeviceSelector) findSymlinkInDir(devicePath, dir string) string {
-	entries, err := os.ReadDir(dir)
+// findDevicesByCapabilities finds all valid input devices by scanning capabilities
+func (s *DeviceSelector) findDevicesByCapabilities(detector *DeviceDetector) ([]DeviceInfo, error) {
+	eventDir := "/dev/input"
+	entries, err := os.ReadDir(eventDir)
 	if err != nil {
-		return ""
+		return nil, err
 	}
 
+	var devices []DeviceInfo
 	for _, entry := range entries {
-		if entry.Type()&os.ModeSymlink != 0 {
-			fullPath := filepath.Join(dir, entry.Name())
-			target, err := os.Readlink(fullPath)
-			if err != nil {
-				continue
-			}
+		if !entry.IsDir() && strings.HasPrefix(entry.Name(), "event") {
+			path := filepath.Join(eventDir, entry.Name())
 
-			// Resolve relative paths
-			if !filepath.IsAbs(target) {
-				target = filepath.Join(dir, target)
-			}
-			target = filepath.Clean(target)
+			if file, err := os.OpenFile(path, os.O_RDONLY, 0); err == nil {
+				if detector.isValidInputDevice(file) {
+					// Try to get a better name from the device
+					name := s.getDeviceName(path)
+					if name == "" {
+						name = entry.Name()
+					}
 
-			// Check if this symlink points to our device
-			if target == devicePath {
-				return fullPath
+					devices = append(devices, DeviceInfo{
+						Path:        path,
+						Name:        name,
+						Symlink:     "",
+						Descriptive: fmt.Sprintf("%s (%s)", name, entry.Name()),
+					})
+				}
+				file.Close()
 			}
 		}
+	}
+
+	logger.Infof("Found %d devices by capabilities", len(devices))
+
+	return devices, nil
+}
+
+// getDeviceName tries to get a descriptive name for the device
+func (s *DeviceSelector) getDeviceName(path string) string {
+	// Try to read the device name from /sys/class/input/eventX/device/name
+	eventName := filepath.Base(path)
+	sysPath := fmt.Sprintf("/sys/class/input/%s/device/name", eventName)
+
+	if data, err := os.ReadFile(sysPath); err == nil {
+		return strings.TrimSpace(string(data))
 	}
 
 	return ""
