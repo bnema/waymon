@@ -13,15 +13,15 @@ import (
 
 // WaylandClient represents a Wayland client for input capture and injection
 type WaylandClient struct {
-	display      *client.Display
-	registry     *client.Registry
-	connected    bool
-	
+	display   *client.Display
+	registry  *client.Registry
+	connected bool
+
 	// Display and cursor tracking
-	outputs      map[uint32]*OutputInfo
-	seats        map[uint32]*SeatInfo
-	cursorX      int32
-	cursorY      int32
+	outputs map[uint32]*OutputInfo
+	seats   map[uint32]*SeatInfo
+	cursorX int32
+	cursorY int32
 }
 
 // OutputInfo contains information about a Wayland output (monitor)
@@ -39,11 +39,11 @@ type OutputInfo struct {
 
 // SeatInfo contains information about a Wayland seat (input device group)
 type SeatInfo struct {
-	ID           uint32
-	Name         string
-	HasPointer   bool
-	HasKeyboard  bool
-	HasTouch     bool
+	ID          uint32
+	Name        string
+	HasPointer  bool
+	HasKeyboard bool
+	HasTouch    bool
 }
 
 // InputCapture interface defines methods for capturing input from Wayland (server-side)
@@ -144,17 +144,17 @@ func (w *WaylandInputCapture) Start(ctx context.Context) error {
 	}
 
 	w.capturing = true
-	
+
 	logger.Debug("Started Wayland input capture (test mode)")
-	
+
 	// Start a test input simulator for testing the event flow
 	go w.simulateInputEvents(ctx)
-	
+
 	// TODO: Implement proper Wayland input capture using:
 	// - zwp_relative_pointer_v1 for mouse capture
 	// - zwp_pointer_constraints_v1 for pointer confinement
 	// - seat listeners for keyboard/pointer events
-	
+
 	return nil
 }
 
@@ -223,6 +223,8 @@ func (w *WaylandInputInjector) InjectInputEvent(event *protocol.InputEvent) erro
 	switch e := event.Event.(type) {
 	case *protocol.InputEvent_MouseMove:
 		return w.injectMouseMove(e.MouseMove.Dx, e.MouseMove.Dy)
+	case *protocol.InputEvent_MousePosition:
+		return w.injectMousePosition(e.MousePosition.X, e.MousePosition.Y)
 	case *protocol.InputEvent_MouseButton:
 		return w.injectMouseButton(e.MouseButton.Button, e.MouseButton.Pressed)
 	case *protocol.InputEvent_MouseScroll:
@@ -240,6 +242,27 @@ func (w *WaylandInputInjector) injectMouseMove(dx, dy float64) error {
 	return w.mouse.Move(int32(dx), int32(dy))
 }
 
+func (w *WaylandInputInjector) injectMousePosition(x, y int32) error {
+	// For absolute positioning, we need to calculate the delta from current position
+	// Since uinput only supports relative movement, we'll calculate the delta
+	currentX, currentY := w.client.GetCursorPosition()
+
+	// Calculate delta to reach target position
+	deltaX := x - currentX
+	deltaY := y - currentY
+
+	// Update client's tracked cursor position
+	w.client.SetCursorPosition(x, y)
+
+	// Apply the movement
+	if deltaX != 0 || deltaY != 0 {
+		logger.Debugf("Positioning cursor at (%d, %d), moving by delta (%d, %d)", x, y, deltaX, deltaY)
+		return w.mouse.Move(deltaX, deltaY)
+	}
+
+	return nil
+}
+
 func (w *WaylandInputInjector) injectMouseButton(button uint32, pressed bool) error {
 	switch button {
 	case 1: // Left button
@@ -248,7 +271,7 @@ func (w *WaylandInputInjector) injectMouseButton(button uint32, pressed bool) er
 		} else {
 			return w.mouse.LeftRelease()
 		}
-	case 2: // Middle button  
+	case 2: // Middle button
 		if pressed {
 			return w.mouse.MiddlePress()
 		} else {
@@ -272,14 +295,14 @@ func (w *WaylandInputInjector) injectMouseScroll(dx, dy float64) error {
 			return err
 		}
 	}
-	
-	// Handle horizontal scrolling  
+
+	// Handle horizontal scrolling
 	if dx != 0 {
 		if err := w.mouse.Wheel(true, int32(dx)); err != nil {
 			return err
 		}
 	}
-	
+
 	return nil
 }
 
@@ -287,7 +310,7 @@ func (w *WaylandInputInjector) injectKeyboard(key uint32, pressed bool, modifier
 	// Convert the key code to uinput key code
 	// Note: This assumes Linux input event codes are being used
 	// You may need to add key mapping logic here if needed
-	
+
 	if pressed {
 		return w.keyboard.KeyDown(int(key))
 	} else {
@@ -333,12 +356,12 @@ func (w *WaylandClient) IsAtScreenEdge(threshold int32) (bool, string) {
 	for _, output := range w.outputs {
 		// Check if cursor is within this output bounds
 		if w.cursorX >= output.X && w.cursorX < output.X+output.Width &&
-		   w.cursorY >= output.Y && w.cursorY < output.Y+output.Height {
-			
+			w.cursorY >= output.Y && w.cursorY < output.Y+output.Height {
+
 			// Calculate relative position within this output
 			relX := w.cursorX - output.X
 			relY := w.cursorY - output.Y
-			
+
 			// Check edges
 			if relX <= threshold {
 				return true, "left"
@@ -458,7 +481,7 @@ func (w *WaylandInputCapture) simulateInputEvents(ctx context.Context) {
 // RegisterOutput adds or updates output information
 func (w *WaylandClient) RegisterOutput(id uint32, info *OutputInfo) {
 	w.outputs[id] = info
-	logger.Debugf("Registered output %d: %s (%dx%d at %d,%d)", 
+	logger.Debugf("Registered output %d: %s (%dx%d at %d,%d)",
 		id, info.Name, info.Width, info.Height, info.X, info.Y)
 }
 
@@ -473,7 +496,7 @@ func (w *WaylandClient) UnregisterOutput(id uint32) {
 // RegisterSeat adds or updates seat information
 func (w *WaylandClient) RegisterSeat(id uint32, info *SeatInfo) {
 	w.seats[id] = info
-	logger.Debugf("Registered seat %d: %s (pointer: %v, keyboard: %v)", 
+	logger.Debugf("Registered seat %d: %s (pointer: %v, keyboard: %v)",
 		id, info.Name, info.HasPointer, info.HasKeyboard)
 }
 

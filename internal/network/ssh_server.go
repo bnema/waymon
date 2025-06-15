@@ -9,8 +9,8 @@ import (
 
 	"github.com/bnema/waymon/internal/config"
 	"github.com/bnema/waymon/internal/logger"
-	"github.com/bnema/waymon/internal/protocol"
 	Proto "github.com/bnema/waymon/internal/proto"
+	"github.com/bnema/waymon/internal/protocol"
 	"github.com/charmbracelet/ssh"
 	"github.com/charmbracelet/wish"
 	"github.com/charmbracelet/wish/activeterm"
@@ -118,7 +118,7 @@ func (s *SSHServer) Start(ctx context.Context) error {
 func (s *SSHServer) SendEventToClient(clientAddr string, event *protocol.InputEvent) error {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	
+
 	// Find client by address
 	for _, client := range s.clients {
 		if client.addr == clientAddr {
@@ -126,11 +126,11 @@ func (s *SSHServer) SendEventToClient(clientAddr string, event *protocol.InputEv
 			if err := writeInputMessage(client.writer, event); err != nil {
 				return fmt.Errorf("failed to send event to client: %w", err)
 			}
-			
+
 			return nil
 		}
 	}
-	
+
 	return fmt.Errorf("client not found: %s", clientAddr)
 }
 
@@ -254,7 +254,7 @@ func (s *SSHServer) sessionHandler() wish.Middleware {
 
 			// Get session writer for sending input events to client
 			writer := sess
-			
+
 			// Create and register client entry
 			client := &sshClient{
 				session:   sess,
