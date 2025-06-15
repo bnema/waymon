@@ -117,6 +117,23 @@ func initializeServer(ctx context.Context, srv *server.Server, cfg *config.Confi
 			}
 		}
 		
+		// Set up client connection handlers
+		sshSrv.OnClientConnected = func(addr, publicKey string) {
+			if cm := srv.GetClientManager(); cm != nil {
+				// Use address as both ID and name initially
+				// The client will send its actual configuration later
+				cm.RegisterClient(addr, addr, addr)
+				logger.Infof("Client connected and registered: %s", addr)
+			}
+		}
+		
+		sshSrv.OnClientDisconnected = func(addr string) {
+			if cm := srv.GetClientManager(); cm != nil {
+				cm.UnregisterClient(addr)
+				logger.Infof("Client disconnected and unregistered: %s", addr)
+			}
+		}
+		
 		// Set up input event handler to forward events from SSH to ClientManager
 		sshSrv.OnInputEvent = func(event *protocol.InputEvent) {
 			if cm := srv.GetClientManager(); cm != nil {
@@ -156,22 +173,6 @@ func initializeServer(ctx context.Context, srv *server.Server, cfg *config.Confi
 		// Set SSH server for sending events to clients
 		if sshSrv := srv.GetNetworkServer(); sshSrv != nil {
 			cm.SetSSHServer(sshSrv)
-		}
-	}
-
-	// Show monitor configuration
-	if disp := srv.GetDisplay(); disp != nil {
-		monitors := disp.GetMonitors()
-		logger.Infof("Detected %d monitor(s):", len(monitors))
-		for _, mon := range monitors {
-			monitorInfo := fmt.Sprintf("  %s: %dx%d at (%d,%d)", mon.Name, mon.Width, mon.Height, mon.X, mon.Y)
-			if mon.Primary {
-				monitorInfo += " [PRIMARY]"
-			}
-			if mon.Scale != 1.0 {
-				monitorInfo += fmt.Sprintf(" scale=%.1f", mon.Scale)
-			}
-			logger.Info(monitorInfo)
 		}
 	}
 

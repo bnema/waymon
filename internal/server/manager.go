@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"sort"
+	"strings"
 	"sync"
 	"time"
 
@@ -526,14 +527,18 @@ func (cm *ClientManager) updateClientConfiguration(config *protocol.ClientConfig
 	// 1. Exact ID match
 	// 2. Exact name match
 	// 3. Address-based match (since registration uses address as ID)
-	// 4. If only one client connected, assume it's that client
+	// 4. Source ID match (the SSH session ID)
+	// 5. If only one client connected, assume it's that client
 	var targetClient *ConnectedClient
 
 	// Try exact matches first
-	for _, client := range cm.clients {
-		if client.ID == config.ClientId || client.Name == config.ClientName {
+	for id, client := range cm.clients {
+		// Check if the client ID matches the config ID, name, or source ID
+		if client.ID == config.ClientId || client.Name == config.ClientName || 
+		   id == config.ClientId || id == sourceID || client.Address == sourceID {
 			targetClient = client
-			logger.Debugf("[SERVER-MANAGER] Found client by exact match: %s", client.Address)
+			logger.Debugf("[SERVER-MANAGER] Found client by match: id=%s, name=%s, address=%s", 
+				client.ID, client.Name, client.Address)
 			break
 		}
 	}
@@ -704,17 +709,39 @@ func (cm *ClientManager) handleHealthCheckPing(sourceID string) {
 		return
 	}
 
-	// Find the client by source ID
+	// Find the client by source ID (checking ID, name, and address)
 	var clientAddr string
 	for _, client := range cm.clients {
-		if client.ID == sourceID || client.Address == sourceID {
+		if client.ID == sourceID || client.Name == sourceID || client.Address == sourceID {
 			clientAddr = client.Address
 			break
 		}
 	}
 
+	// Also check if sourceID matches just the client name without address
+	if clientAddr == "" {
+		for _, client := range cm.clients {
+			// Extract just the name part if the client name includes address info
+			clientName := client.Name
+			if idx := strings.Index(clientName, " ("); idx > 0 {
+				clientName = clientName[:idx]
+			}
+			if clientName == sourceID {
+				clientAddr = client.Address
+				break
+			}
+		}
+	}
+
 	if clientAddr == "" {
 		logger.Warnf("Received health check ping from unknown client: %s", sourceID)
+		logger.Debugf("Available clients: %v", func() []string {
+			var info []string
+			for _, c := range cm.clients {
+				info = append(info, fmt.Sprintf("id=%s, name=%s, addr=%s", c.ID, c.Name, c.Address))
+			}
+			return info
+		}())
 		return
 	}
 
