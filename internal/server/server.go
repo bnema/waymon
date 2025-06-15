@@ -21,7 +21,7 @@ import (
 type Server struct {
 	config        *config.Config
 	display       *display.Display
-	inputHandler  input.Handler
+	inputBackend  input.InputBackend
 	sshServer     *network.SSHServer
 	clientManager *ClientManager
 
@@ -113,11 +113,11 @@ func (s *Server) initDisplay() error {
 // initInput initializes the input handler
 func (s *Server) initInput() error {
 	// Input handler will use privileged helper if needed
-	handler, err := input.NewHandler()
+	backend, err := input.CreateBackend()
 	if err != nil {
 		return err
 	}
-	s.inputHandler = handler
+	s.inputBackend = backend
 	return nil
 }
 

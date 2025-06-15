@@ -8,10 +8,10 @@ import (
 	"time"
 
 	"github.com/bnema/waymon/internal/display"
+	"github.com/bnema/waymon/internal/input"
 	"github.com/bnema/waymon/internal/logger"
 	"github.com/bnema/waymon/internal/network"
 	"github.com/bnema/waymon/internal/protocol"
-	"github.com/bnema/waymon/internal/wayland"
 )
 
 // InputReceiver manages receiving and injecting input from the server
@@ -20,7 +20,7 @@ type InputReceiver struct {
 	connected      bool
 	serverAddress  string
 	sshConnection  *network.SSHClient
-	inputInjector  wayland.InputInjector
+	inputBackend   input.InputBackend
 	controlStatus  ControlStatus
 	onStatusChange func(ControlStatus)
 
@@ -47,19 +47,17 @@ type ControlStatus struct {
 
 // NewInputReceiver creates a new input receiver for the client
 func NewInputReceiver(serverAddress string) (*InputReceiver, error) {
-	// Create Wayland client for input injection
-	waylandClient, err := wayland.NewWaylandClient()
+	// Create input backend for injection
+	backend, err := input.CreateBackend()
 	if err != nil {
-		return nil, fmt.Errorf("failed to create wayland client: %w", err)
+		return nil, fmt.Errorf("failed to create input backend: %w", err)
 	}
-
-	inputInjector := waylandClient.NewInputInjector()
 
 	return &InputReceiver{
 		serverAddress:      serverAddress,
-		inputInjector:      inputInjector,
+		inputBackend:       backend,
 		connected:          false,
-		healthCheckTimeout: 15 * time.Second, // Consider connection lost if no response for 15 seconds
+		healthCheckTimeout: 30 * time.Second, // 30 second timeout for health checks
 	}, nil
 }
 
@@ -75,9 +73,9 @@ func (ir *InputReceiver) Connect(ctx context.Context, privateKeyPath string) err
 	// Store private key path for reconnection
 	ir.privateKeyPath = privateKeyPath
 
-	// Initialize input injector (creates uinput devices)
-	if err := ir.inputInjector.Connect(); err != nil {
-		return fmt.Errorf("failed to initialize input injector: %w", err)
+	// Initialize input backend
+	if err := ir.inputBackend.Start(ctx); err != nil {
+		return fmt.Errorf("failed to initialize input backend: %w", err)
 	}
 
 	// Create SSH connection to server
@@ -85,7 +83,7 @@ func (ir *InputReceiver) Connect(ctx context.Context, privateKeyPath string) err
 
 	// Connect to server
 	if err := sshConnection.Connect(ctx, ir.serverAddress); err != nil {
-		ir.inputInjector.Disconnect()
+		ir.inputBackend.Stop()
 		return fmt.Errorf("failed to connect to server: %w", err)
 	}
 
@@ -132,8 +130,8 @@ func (ir *InputReceiver) Disconnect() error {
 		ir.sshConnection = nil
 	}
 
-	// Disconnect input injector
-	ir.inputInjector.Disconnect()
+	// Stop input backend
+	ir.inputBackend.Stop()
 
 	ir.connected = false
 	ir.controlStatus = ControlStatus{}
@@ -187,8 +185,8 @@ func (ir *InputReceiver) processInputEvent(event *protocol.InputEvent) {
 		return
 	}
 
-	// Inject the input event
-	if err := ir.inputInjector.InjectInputEvent(event); err != nil {
+	// Inject the input event based on type
+	if err := ir.injectEvent(event); err != nil {
 		logger.Errorf("Failed to inject input event: %v", err)
 	}
 }
@@ -308,7 +306,7 @@ func (ir *InputReceiver) sendClientConfiguration() error {
 		CanReceiveMouse:    true,
 		CanReceiveScroll:   true,
 		WaylandCompositor:  getWaylandCompositor(),
-		UinputVersion:      "1.9.0", // ThomasT75/uinput version
+		UinputVersion: "wayland-virtual-input-v0.1.3", // Using Wayland virtual input
 	}
 
 	// Create client configuration
@@ -595,4 +593,26 @@ func (ir *InputReceiver) sendHealthCheckPing() error {
 	}
 
 	return nil
+}
+
+// injectEvent injects an input event using the Wayland virtual input backend
+func (ir *InputReceiver) injectEvent(event *protocol.InputEvent) error {
+	// Cast to WaylandVirtualInput to access injection methods
+	backend, ok := ir.inputBackend.(*input.WaylandVirtualInput)
+	if !ok {
+		return fmt.Errorf("input backend does not support injection")
+	}
+
+	switch e := event.Event.(type) {
+	case *protocol.InputEvent_MouseMove:
+		return backend.InjectMouseMove(e.MouseMove.Dx, e.MouseMove.Dy)
+	case *protocol.InputEvent_MouseButton:
+		return backend.InjectMouseButton(e.MouseButton.Button, e.MouseButton.Pressed)
+	case *protocol.InputEvent_MouseScroll:
+		return backend.InjectMouseScroll(e.MouseScroll.Dx, e.MouseScroll.Dy)
+	case *protocol.InputEvent_Keyboard:
+		return backend.InjectKeyEvent(e.Keyboard.Key, e.Keyboard.Pressed)
+	default:
+		return fmt.Errorf("unsupported input event type: %T", event.Event)
+	}
 }
