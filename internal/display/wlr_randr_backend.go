@@ -28,6 +28,8 @@ func (w *wlrRandrBackend) GetMonitors() ([]*Monitor, error) {
 
 	// If running with sudo, we need to set the environment variables
 	if sudoUser := os.Getenv("SUDO_USER"); sudoUser != "" && os.Geteuid() == 0 {
+		logger.Debugf("Running wlr-randr with sudo, SUDO_USER=%s", sudoUser)
+		
 		sudoUID := os.Getenv("SUDO_UID")
 		if sudoUID == "" {
 			// Try to get UID from the user
@@ -39,7 +41,9 @@ func (w *wlrRandrBackend) GetMonitors() ([]*Monitor, error) {
 
 		// Set the required environment variables for wlr-randr
 		cmd.Env = os.Environ()
-		cmd.Env = append(cmd.Env, fmt.Sprintf("XDG_RUNTIME_DIR=/run/user/%s", sudoUID))
+		xdgRuntimeDir := fmt.Sprintf("/run/user/%s", sudoUID)
+		cmd.Env = append(cmd.Env, fmt.Sprintf("XDG_RUNTIME_DIR=%s", xdgRuntimeDir))
+		logger.Debugf("Setting XDG_RUNTIME_DIR=%s", xdgRuntimeDir)
 
 		// Detect WAYLAND_DISPLAY by looking at the socket files
 		waylandDisplay := ""
@@ -51,9 +55,21 @@ func (w *wlrRandrBackend) GetMonitors() ([]*Monitor, error) {
 					break
 				}
 			}
+		} else {
+			logger.Warnf("Could not read socket directory %s: %v", socketPath, err)
 		}
+		
 		if waylandDisplay != "" {
 			cmd.Env = append(cmd.Env, fmt.Sprintf("WAYLAND_DISPLAY=%s", waylandDisplay))
+			logger.Debugf("Detected WAYLAND_DISPLAY=%s", waylandDisplay)
+		} else {
+			// Try to use the existing WAYLAND_DISPLAY from the environment
+			if existingDisplay := os.Getenv("WAYLAND_DISPLAY"); existingDisplay != "" {
+				cmd.Env = append(cmd.Env, fmt.Sprintf("WAYLAND_DISPLAY=%s", existingDisplay))
+				logger.Debugf("Using existing WAYLAND_DISPLAY=%s", existingDisplay)
+			} else {
+				logger.Warn("Could not detect WAYLAND_DISPLAY for sudo session")
+			}
 		}
 	}
 
@@ -61,11 +77,14 @@ func (w *wlrRandrBackend) GetMonitors() ([]*Monitor, error) {
 	if err != nil {
 		// Log the error output for debugging
 		if len(output) > 0 {
-			logger.Errorf("wlr-randr error: %s", string(output))
+			logger.Errorf("wlr-randr --json error: %s", string(output))
 		}
+		logger.Debug("JSON mode failed, falling back to text parsing")
 		// If JSON flag doesn't work, try parsing text output
 		return w.getMonitorsText()
 	}
+	
+	logger.Debugf("wlr-randr --json output: %s", string(output))
 
 	// Parse JSON output
 	var outputs []struct {
@@ -109,6 +128,10 @@ func (w *wlrRandrBackend) GetMonitors() ([]*Monitor, error) {
 			width = output.CurrentMode.Width
 			height = output.CurrentMode.Height
 		}
+		
+		logger.Debugf("Monitor %s: base dimensions %dx%d, current mode %dx%d", 
+			output.Name, output.Width, output.Height, 
+			output.CurrentMode.Width, output.CurrentMode.Height)
 
 		// Use position if available
 		x := output.X
@@ -121,6 +144,12 @@ func (w *wlrRandrBackend) GetMonitors() ([]*Monitor, error) {
 		scale := output.Scale
 		if scale == 0 {
 			scale = 1.0
+		}
+
+		// Skip monitors with invalid dimensions
+		if width == 0 || height == 0 {
+			logger.Warnf("Skipping monitor %s with invalid dimensions: %dx%d", output.Name, width, height)
+			continue
 		}
 
 		monitor := &Monitor{
@@ -171,6 +200,8 @@ func (w *wlrRandrBackend) getMonitorsText() ([]*Monitor, error) {
 
 	// If running with sudo, we need to set the environment variables
 	if sudoUser := os.Getenv("SUDO_USER"); sudoUser != "" && os.Geteuid() == 0 {
+		logger.Debugf("Running wlr-randr with sudo, SUDO_USER=%s", sudoUser)
+		
 		sudoUID := os.Getenv("SUDO_UID")
 		if sudoUID == "" {
 			// Try to get UID from the user
@@ -182,7 +213,9 @@ func (w *wlrRandrBackend) getMonitorsText() ([]*Monitor, error) {
 
 		// Set the required environment variables for wlr-randr
 		cmd.Env = os.Environ()
-		cmd.Env = append(cmd.Env, fmt.Sprintf("XDG_RUNTIME_DIR=/run/user/%s", sudoUID))
+		xdgRuntimeDir := fmt.Sprintf("/run/user/%s", sudoUID)
+		cmd.Env = append(cmd.Env, fmt.Sprintf("XDG_RUNTIME_DIR=%s", xdgRuntimeDir))
+		logger.Debugf("Setting XDG_RUNTIME_DIR=%s", xdgRuntimeDir)
 
 		// Detect WAYLAND_DISPLAY by looking at the socket files
 		waylandDisplay := ""
@@ -194,9 +227,21 @@ func (w *wlrRandrBackend) getMonitorsText() ([]*Monitor, error) {
 					break
 				}
 			}
+		} else {
+			logger.Warnf("Could not read socket directory %s: %v", socketPath, err)
 		}
+		
 		if waylandDisplay != "" {
 			cmd.Env = append(cmd.Env, fmt.Sprintf("WAYLAND_DISPLAY=%s", waylandDisplay))
+			logger.Debugf("Detected WAYLAND_DISPLAY=%s", waylandDisplay)
+		} else {
+			// Try to use the existing WAYLAND_DISPLAY from the environment
+			if existingDisplay := os.Getenv("WAYLAND_DISPLAY"); existingDisplay != "" {
+				cmd.Env = append(cmd.Env, fmt.Sprintf("WAYLAND_DISPLAY=%s", existingDisplay))
+				logger.Debugf("Using existing WAYLAND_DISPLAY=%s", existingDisplay)
+			} else {
+				logger.Warn("Could not detect WAYLAND_DISPLAY for sudo session")
+			}
 		}
 	}
 

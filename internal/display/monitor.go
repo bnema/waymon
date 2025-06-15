@@ -49,6 +49,7 @@ func New() (*Display, error) {
 
 	// Try different backends in order of preference
 	backends := []func() (Backend, error){
+		newSudoBackend,                // Special backend for sudo that runs as original user
 		newWlrOutputManagementBackend, // Native wlr-output-management protocol
 		newWlrCgoBackend,              // Basic Wayland via CGO (limited info)
 		newWlrRandrBackend,            // wlr-randr command (fallback)
@@ -59,7 +60,7 @@ func New() (*Display, error) {
 	var backend Backend
 	var err error
 
-	backendNames := []string{"wlrOutputManagementBackend", "wlrCgoBackend", "wlrRandrBackend", "portalBackend", "randrBackend"}
+	backendNames := []string{"sudoBackend", "wlrOutputManagementBackend", "wlrCgoBackend", "wlrRandrBackend", "portalBackend", "randrBackend"}
 
 	for i, createBackend := range backends {
 		// Only show debug if not running as monitors --json
