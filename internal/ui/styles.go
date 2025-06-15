@@ -329,3 +329,22 @@ func CreateSeparator(width int, char string) string {
 		Foreground(ColorSubtle).
 		Render(strings.Repeat(char, width))
 }
+
+// FormatAppHeader creates a uniform header in format: WAYMON | MODE | STATUS
+func FormatAppHeader(mode, status string) string {
+	var parts []string
+
+	// App name with secondary color (pink/magenta) and bold
+	nameStyle := lipgloss.NewStyle().Bold(true).Foreground(ColorSecondary)
+	parts = append(parts, nameStyle.Render("WAYMON"))
+
+	// Mode (e.g., "CLIENT MODE", "SERVER MODE", "DEBUG MODE")
+	parts = append(parts, mode)
+
+	// Status (e.g., "Connected to localhost:52525", "Active on port 52525")
+	parts = append(parts, status)
+
+	// Join with styled separators
+	separator := lipgloss.NewStyle().Foreground(ColorMuted).Render(" │ ")
+	return strings.Join(parts, separator)
+}

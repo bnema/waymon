@@ -184,6 +184,11 @@ func (s *Server) handleMouseEvent(event *network.MouseEvent) error {
 
 // Stop stops the server
 func (s *Server) Stop() {
+	// Notify clients about shutdown before stopping services
+	if s.clientManager != nil {
+		s.clientManager.NotifyShutdown()
+	}
+
 	if s.sshServer != nil {
 		s.sshServer.Stop()
 	}

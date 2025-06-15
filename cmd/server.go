@@ -63,7 +63,7 @@ func initializeServer(ctx context.Context, srv *server.Server, cfg *config.Confi
 				clientName := addr // Use address as name for now
 				cm.RegisterClient(clientID, clientName, addr)
 			}
-			
+
 			// Send UI notification
 			if p != nil {
 				p.Send(ui.ClientConnectedMsg{ClientAddr: addr})
@@ -77,7 +77,7 @@ func initializeServer(ctx context.Context, srv *server.Server, cfg *config.Confi
 				clientID := addr
 				cm.UnregisterClient(clientID)
 			}
-			
+
 			// Send UI notification
 			if p != nil {
 				p.Send(ui.ClientDisconnectedMsg{ClientAddr: addr})
@@ -124,7 +124,10 @@ func initializeServer(ctx context.Context, srv *server.Server, cfg *config.Confi
 	if cm := srv.GetClientManager(); cm != nil && p != nil {
 		// Send a message to set the client manager
 		p.Send(ui.SetClientManagerMsg{ClientManager: cm})
-		
+
+		// Send a message to set the server instance for proper shutdown
+		p.Send(ui.SetServerMsg{Server: srv})
+
 		// Set up activity callback to send logs to UI
 		cm.SetOnActivity(func(level, message string) {
 			if p != nil {
@@ -136,7 +139,7 @@ func initializeServer(ctx context.Context, srv *server.Server, cfg *config.Confi
 				p.Send(ui.LogMsg{Entry: logEntry})
 			}
 		})
-		
+
 		// Set SSH server for sending events to clients
 		if sshSrv := srv.GetNetworkServer(); sshSrv != nil {
 			cm.SetSSHServer(sshSrv)

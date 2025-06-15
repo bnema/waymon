@@ -5,25 +5,26 @@ import (
 	"strings"
 	"time"
 
+	"github.com/bnema/waymon/internal/client"
 	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
-	"github.com/bnema/waymon/internal/client"
 )
 
 // ClientModel represents the UI model for the client
 type ClientModel struct {
-	serverAddr      string
-	inputReceiver   *client.InputReceiver
-	lastUpdate      time.Time
-	spinner         spinner.Model
-	message         string
-	messageType     string
-	messageExpiry   time.Time
-	version         string
+	serverAddr    string
+	inputReceiver *client.InputReceiver
+	lastUpdate    time.Time
+	spinner       spinner.Model
+	message       string
+	messageType   string
+	messageExpiry time.Time
+	version       string
 
 	// Connection state
 	connected       bool
+	reconnecting    bool
 	waitingApproval bool
 	controlStatus   client.ControlStatus
 
@@ -105,14 +106,23 @@ func (m *ClientModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case ConnectedMsg:
 		m.connected = true
+		m.reconnecting = false
 		m.waitingApproval = false
 		m.SetMessage("success", "Connected to server")
 
 	case DisconnectedMsg:
 		m.connected = false
+		m.reconnecting = false
 		m.waitingApproval = false
 		m.controlStatus = client.ControlStatus{}
 		m.SetMessage("error", "Disconnected from server")
+
+	case ReconnectingMsg:
+		m.connected = false
+		m.reconnecting = true
+		m.waitingApproval = false
+		m.controlStatus = client.ControlStatus{}
+		m.SetMessage("info", msg.Status)
 
 	case WaitingApprovalMsg:
 		m.waitingApproval = true
@@ -176,28 +186,17 @@ func (m *ClientModel) View() string {
 
 // renderClientStatusBar renders the status bar for the redesigned client
 func (m *ClientModel) renderClientStatusBar() string {
-	var parts []string
-
-	// App name with version
-	nameStyle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("205"))
-	parts = append(parts, nameStyle.Render("WAYMON "+m.version+" - CLIENT MODE"))
-
 	// Connection status
+	var statusText string
 	if m.connected {
-		connStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("42"))
-		parts = append(parts, connStyle.Render("● Connected"))
+		statusText = fmt.Sprintf("Connected to %s", m.serverAddr)
+	} else if m.reconnecting {
+		statusText = fmt.Sprintf("Reconnecting to %s", m.serverAddr)
 	} else {
-		connStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("196"))
-		parts = append(parts, connStyle.Render(m.spinner.View()+" Connecting"))
+		statusText = fmt.Sprintf("Disconnected from %s", m.serverAddr)
 	}
 
-	// Server address
-	addrStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("247"))
-	parts = append(parts, addrStyle.Render(fmt.Sprintf("to %s", m.serverAddr)))
-
-	// Join with separators
-	separator := lipgloss.NewStyle().Foreground(lipgloss.Color("238")).Render(" │ ")
-	return strings.Join(parts, separator)
+	return FormatAppHeader("CLIENT MODE", statusText)
 }
 
 // renderControlStatus renders the control status section

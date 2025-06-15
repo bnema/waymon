@@ -6,24 +6,24 @@ import (
 	"sync"
 	"time"
 
-	"github.com/bnema/waymon/internal/protocol"
-	"github.com/bnema/waymon/internal/input"
-	"github.com/bnema/waymon/internal/network"
 	"github.com/bnema/waymon/internal/config"
+	"github.com/bnema/waymon/internal/input"
 	"github.com/bnema/waymon/internal/logger"
+	"github.com/bnema/waymon/internal/network"
+	"github.com/bnema/waymon/internal/protocol"
 )
 
 // ClientManager manages connected clients and input routing
 type ClientManager struct {
-	mu              sync.RWMutex
-	clients         map[string]*ConnectedClient
-	activeClientID  string // Currently being controlled
-	evdevCapture    *input.EvdevCapture
-	inputEventsCtx  context.Context
-	inputCancel     context.CancelFunc
-	sshServer       *network.SSHServer
+	mu               sync.RWMutex
+	clients          map[string]*ConnectedClient
+	activeClientID   string // Currently being controlled
+	evdevCapture     *input.EvdevCapture
+	inputEventsCtx   context.Context
+	inputCancel      context.CancelFunc
+	sshServer        *network.SSHServer
 	controllingLocal bool // Whether server is controlling local system
-	
+
 	// UI notification callback and throttling
 	onActivity      func(level, message string)
 	lastActivityLog time.Time
@@ -37,7 +37,7 @@ type ConnectedClient struct {
 	Address     string
 	Status      protocol.ClientStatus
 	ConnectedAt time.Time
-	
+
 	// Client configuration received on connect
 	Monitors     []*protocol.Monitor
 	Capabilities *protocol.ClientCapabilities
@@ -47,7 +47,7 @@ type ConnectedClient struct {
 func NewClientManager() (*ClientManager, error) {
 	// Get config to check for configured devices
 	cfg := config.Get()
-	
+
 	// Create evdev capture with configured devices if available
 	var evdevCapture *input.EvdevCapture
 	if cfg.Input.MouseDevice != "" || cfg.Input.KeyboardDevice != "" {
@@ -57,8 +57,8 @@ func NewClientManager() (*ClientManager, error) {
 	}
 
 	return &ClientManager{
-		clients:         make(map[string]*ConnectedClient),
-		evdevCapture:    evdevCapture,
+		clients:          make(map[string]*ConnectedClient),
+		evdevCapture:     evdevCapture,
 		controllingLocal: true, // Start by controlling local system
 	}, nil
 }
@@ -67,7 +67,7 @@ func NewClientManager() (*ClientManager, error) {
 func (cm *ClientManager) Start(ctx context.Context, port int) error {
 	// Get config for SSH server
 	cfg := config.Get()
-	
+
 	// Start SSH server to accept client connections
 	sshServer := network.NewSSHServer(port, cfg.Server.SSHHostKeyPath, cfg.Server.SSHAuthKeysPath)
 	cm.sshServer = sshServer
@@ -164,15 +164,20 @@ func (cm *ClientManager) SwitchToClient(clientID string) error {
 		} else {
 			logger.Debugf("Sent control request to client %s", client.Name)
 		}
+
+		// Position cursor at center of main monitor (monitor at 0,0)
+		if err := cm.positionCursorOnMainMonitor(client); err != nil {
+			logger.Warnf("Failed to position cursor on main monitor: %v", err)
+		}
 	}
 
 	logger.Infof("Switched control to client: %s (%s)", client.Name, client.Address)
-	
+
 	// Notify UI if callback is set
 	if cm.onActivity != nil {
 		cm.onActivity("INFO", fmt.Sprintf("Started controlling client: %s (%s)", client.Name, client.Address))
 	}
-	
+
 	return nil
 }
 
@@ -185,7 +190,7 @@ func (cm *ClientManager) SwitchToLocal() error {
 	if cm.activeClientID != "" {
 		if prevClient, exists := cm.clients[cm.activeClientID]; exists {
 			prevClient.Status = protocol.ClientStatus_CLIENT_IDLE
-			
+
 			// Send release control event to previous client
 			if cm.sshServer != nil {
 				controlEvent := &protocol.ControlEvent{
@@ -216,12 +221,12 @@ func (cm *ClientManager) SwitchToLocal() error {
 	// (input will naturally go to local system)
 
 	logger.Info("Switched control to local system")
-	
+
 	// Notify UI if callback is set
 	if cm.onActivity != nil {
 		cm.onActivity("INFO", "Released client control - now controlling local system")
 	}
-	
+
 	return nil
 }
 
@@ -329,17 +334,17 @@ func (cm *ClientManager) handleInputEvent(event *protocol.InputEvent) {
 				eventType = "keyboard"
 			}
 			message := fmt.Sprintf("Injecting %s input into %s (%s)", eventType, client.Name, client.Address)
-			logger.Debugf(message)
-			
+			logger.Debug(message)
+
 			// Send to UI with throttling to avoid spam
 			if cm.onActivity != nil {
 				now := time.Now()
 				cm.activityCount++
-				
+
 				// Log activity every 2 seconds or every 50 events
 				if now.Sub(cm.lastActivityLog) > 2*time.Second || cm.activityCount >= 50 {
 					if cm.activityCount > 1 {
-						summary := fmt.Sprintf("Actively controlling %s (%s) - %d input events sent", 
+						summary := fmt.Sprintf("Actively controlling %s (%s) - %d input events sent",
 							client.Name, client.Address, cm.activityCount)
 						cm.onActivity("INFO", summary)
 					} else {
@@ -364,6 +369,9 @@ func (cm *ClientManager) handleControlEvent(controlEvent *protocol.ControlEvent,
 		logger.Infof("Client %s requested control", sourceID)
 	case protocol.ControlEvent_RELEASE_CONTROL:
 		logger.Infof("Client %s released control", sourceID)
+	case protocol.ControlEvent_HEALTH_CHECK_PING:
+		// Respond to health check ping
+		cm.handleHealthCheckPing(sourceID)
 	default:
 		logger.Warnf("Unknown control event type from %s: %v", sourceID, controlEvent.Type)
 	}
@@ -394,13 +402,13 @@ func (cm *ClientManager) updateClientConfiguration(config *protocol.ClientConfig
 			targetClient.ID = config.ClientId
 		}
 
-		logger.Infof("Updated client configuration for %s: %d monitors, compositor: %s", 
+		logger.Infof("Updated client configuration for %s: %d monitors, compositor: %s",
 			targetClient.Name, len(config.Monitors), config.Capabilities.WaylandCompositor)
-		
+
 		// Log monitor details
 		for i, monitor := range config.Monitors {
-			logger.Debugf("  Monitor %d: %s (%dx%d at %d,%d) primary=%v scale=%.1f", 
-				i+1, monitor.Name, monitor.Width, monitor.Height, 
+			logger.Debugf("  Monitor %d: %s (%dx%d at %d,%d) primary=%v scale=%.1f",
+				i+1, monitor.Name, monitor.Width, monitor.Height,
 				monitor.X, monitor.Y, monitor.Primary, monitor.Scale)
 		}
 	} else {
@@ -414,16 +422,16 @@ func (cm *ClientManager) RegisterClient(id, name, address string) {
 	defer cm.mu.Unlock()
 
 	client := &ConnectedClient{
-		ID:         id,
-		Name:       name,
-		Address:    address,
-		Status:     protocol.ClientStatus_CLIENT_IDLE,
+		ID:          id,
+		Name:        name,
+		Address:     address,
+		Status:      protocol.ClientStatus_CLIENT_IDLE,
 		ConnectedAt: time.Now(),
 	}
 
 	cm.clients[id] = client
 	logger.Infof("Registered client: %s (%s) from %s", name, id, address)
-	
+
 	// Notify UI if callback is set
 	if cm.onActivity != nil {
 		cm.onActivity("INFO", fmt.Sprintf("Client registered: %s (%s)", name, address))
@@ -467,4 +475,146 @@ func (cm *ClientManager) SetSSHServer(sshServer *network.SSHServer) {
 	cm.sshServer = sshServer
 }
 
+// NotifyShutdown sends shutdown notification to all connected clients
+func (cm *ClientManager) NotifyShutdown() {
+	cm.mu.RLock()
+	defer cm.mu.RUnlock()
 
+	if cm.sshServer == nil {
+		logger.Warn("Cannot notify clients of shutdown - SSH server not available")
+		return
+	}
+
+	// Create shutdown control event
+	controlEvent := &protocol.ControlEvent{
+		Type: protocol.ControlEvent_SERVER_SHUTDOWN,
+	}
+	inputEvent := &protocol.InputEvent{
+		Event: &protocol.InputEvent_Control{
+			Control: controlEvent,
+		},
+		Timestamp: time.Now().UnixNano(),
+		SourceId:  "server",
+	}
+
+	// Send to all connected clients
+	for _, client := range cm.clients {
+		if err := cm.sshServer.SendEventToClient(client.Address, inputEvent); err != nil {
+			logger.Errorf("Failed to send shutdown notification to client %s: %v", client.Name, err)
+		} else {
+			logger.Infof("Sent shutdown notification to client %s (%s)", client.Name, client.Address)
+		}
+	}
+
+	// Give clients a moment to process the shutdown notification
+	if len(cm.clients) > 0 {
+		logger.Info("Waiting for clients to process shutdown notification...")
+		time.Sleep(1 * time.Second)
+	}
+}
+
+// handleHealthCheckPing responds to a health check ping from a client
+func (cm *ClientManager) handleHealthCheckPing(sourceID string) {
+	cm.mu.RLock()
+	defer cm.mu.RUnlock()
+
+	if cm.sshServer == nil {
+		logger.Warn("Cannot respond to health check - SSH server not available")
+		return
+	}
+
+	// Find the client by source ID
+	var clientAddr string
+	for _, client := range cm.clients {
+		if client.ID == sourceID || client.Address == sourceID {
+			clientAddr = client.Address
+			break
+		}
+	}
+
+	if clientAddr == "" {
+		logger.Warnf("Received health check ping from unknown client: %s", sourceID)
+		return
+	}
+
+	// Create health check pong response
+	controlEvent := &protocol.ControlEvent{
+		Type: protocol.ControlEvent_HEALTH_CHECK_PONG,
+	}
+	inputEvent := &protocol.InputEvent{
+		Event: &protocol.InputEvent_Control{
+			Control: controlEvent,
+		},
+		Timestamp: time.Now().UnixNano(),
+		SourceId:  "server",
+	}
+
+	// Send response to the client
+	if err := cm.sshServer.SendEventToClient(clientAddr, inputEvent); err != nil {
+		logger.Errorf("Failed to send health check response to client %s: %v", sourceID, err)
+	} else {
+		logger.Debug("Sent health check response to client %s", sourceID)
+	}
+}
+
+// positionCursorOnMainMonitor positions the cursor at the center of the main monitor (monitor at 0,0)
+func (cm *ClientManager) positionCursorOnMainMonitor(client *ConnectedClient) error {
+	if len(client.Monitors) == 0 {
+		return fmt.Errorf("client has no monitors configured")
+	}
+
+	// Find the main monitor (primary or the one at position 0,0)
+	var mainMonitor *protocol.Monitor
+
+	// First try to find primary monitor
+	for _, monitor := range client.Monitors {
+		if monitor.Primary {
+			mainMonitor = monitor
+			break
+		}
+	}
+
+	// If no primary monitor found, find monitor at position 0,0
+	if mainMonitor == nil {
+		for _, monitor := range client.Monitors {
+			if monitor.X == 0 && monitor.Y == 0 {
+				mainMonitor = monitor
+				break
+			}
+		}
+	}
+
+	// If still no monitor found, use the first one
+	if mainMonitor == nil {
+		mainMonitor = client.Monitors[0]
+	}
+
+	// Calculate center position of the main monitor
+	centerX := mainMonitor.X + (mainMonitor.Width / 2)
+	centerY := mainMonitor.Y + (mainMonitor.Height / 2)
+
+	// Create cursor position event
+	positionEvent := &protocol.MousePositionEvent{
+		X: centerX,
+		Y: centerY,
+	}
+
+	inputEvent := &protocol.InputEvent{
+		Event: &protocol.InputEvent_MousePosition{
+			MousePosition: positionEvent,
+		},
+		Timestamp: time.Now().UnixNano(),
+		SourceId:  "server",
+	}
+
+	// Send the positioning event to the client
+	if err := cm.sshServer.SendEventToClient(client.Address, inputEvent); err != nil {
+		return fmt.Errorf("failed to send cursor position event: %w", err)
+	}
+
+	logger.Infof("Positioned cursor at center of main monitor: %s (%dx%d at %d,%d) -> cursor at (%d,%d)",
+		mainMonitor.Name, mainMonitor.Width, mainMonitor.Height,
+		mainMonitor.X, mainMonitor.Y, centerX, centerY)
+
+	return nil
+}

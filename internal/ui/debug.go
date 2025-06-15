@@ -72,12 +72,10 @@ func (m *DebugServerModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 func (m *DebugServerModel) View() string {
 	var b strings.Builder
 
-	// Header
+	// Header - uniform format using common styling
 	elapsed := time.Since(m.startTime).Round(time.Second)
-	header := lipgloss.NewStyle().
-		Bold(true).
-		Foreground(lipgloss.Color("205")).
-		Render(fmt.Sprintf("WAYMON DEBUG UI - Running for %s", elapsed))
+	statusText := fmt.Sprintf("Running for %s", elapsed)
+	header := FormatAppHeader("DEBUG MODE", statusText)
 	b.WriteString(header)
 	b.WriteString("\n\n")
 
