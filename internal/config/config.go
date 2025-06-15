@@ -70,6 +70,8 @@ type InputConfig struct {
 	ScrollSpeed      float64 `mapstructure:"scroll_speed"`
 	EnableKeyboard   bool    `mapstructure:"enable_keyboard"`
 	KeyboardLayout   string  `mapstructure:"keyboard_layout"`
+	MouseDevice      string  `mapstructure:"mouse_device"`     // Path to mouse device
+	KeyboardDevice   string  `mapstructure:"keyboard_device"`  // Path to keyboard device
 }
 
 // HostConfig represents a known host for quick connections
@@ -121,6 +123,8 @@ var (
 			ScrollSpeed:      1.0,
 			EnableKeyboard:   true,
 			KeyboardLayout:   "us",
+			MouseDevice:      "",
+			KeyboardDevice:   "",
 		},
 		Hosts: []HostConfig{},
 	}
@@ -177,6 +181,8 @@ func Init() error {
 	viper.SetDefault("input.scroll_speed", DefaultConfig.Input.ScrollSpeed)
 	viper.SetDefault("input.enable_keyboard", DefaultConfig.Input.EnableKeyboard)
 	viper.SetDefault("input.keyboard_layout", DefaultConfig.Input.KeyboardLayout)
+	viper.SetDefault("input.mouse_device", DefaultConfig.Input.MouseDevice)
+	viper.SetDefault("input.keyboard_device", DefaultConfig.Input.KeyboardDevice)
 
 	viper.SetDefault("hosts", DefaultConfig.Hosts)
 

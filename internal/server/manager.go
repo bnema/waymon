@@ -7,7 +7,7 @@ import (
 	"time"
 
 	"github.com/bnema/waymon/internal/protocol"
-	"github.com/bnema/waymon/internal/wayland"
+	"github.com/bnema/waymon/internal/input"
 	"github.com/bnema/waymon/internal/network"
 	"github.com/bnema/waymon/internal/config"
 	"github.com/bnema/waymon/internal/logger"
@@ -18,7 +18,9 @@ type ClientManager struct {
 	mu              sync.RWMutex
 	clients         map[string]*ConnectedClient
 	activeClientID  string // Currently being controlled
-	inputCapture    wayland.InputCapture
+	evdevCapture    *input.EvdevCapture
+	inputEventsCtx  context.Context
+	inputCancel     context.CancelFunc
 	sshServer       *network.SSHServer
 	controllingLocal bool // Whether server is controlling local system
 	
@@ -43,17 +45,20 @@ type ConnectedClient struct {
 
 // NewClientManager creates a new client manager for the server
 func NewClientManager() (*ClientManager, error) {
-	// Create Wayland input capture for server-side input
-	waylandClient, err := wayland.NewWaylandClient()
-	if err != nil {
-		return nil, fmt.Errorf("failed to create wayland client: %w", err)
+	// Get config to check for configured devices
+	cfg := config.Get()
+	
+	// Create evdev capture with configured devices if available
+	var evdevCapture *input.EvdevCapture
+	if cfg.Input.MouseDevice != "" || cfg.Input.KeyboardDevice != "" {
+		evdevCapture = input.NewEvdevCaptureWithDevices(cfg.Input.MouseDevice, cfg.Input.KeyboardDevice)
+	} else {
+		evdevCapture = input.NewEvdevCapture()
 	}
-
-	inputCapture := waylandClient.NewInputCapture()
 
 	return &ClientManager{
 		clients:         make(map[string]*ConnectedClient),
-		inputCapture:    inputCapture,
+		evdevCapture:    evdevCapture,
 		controllingLocal: true, // Start by controlling local system
 	}, nil
 }
@@ -67,12 +72,15 @@ func (cm *ClientManager) Start(ctx context.Context, port int) error {
 	sshServer := network.NewSSHServer(port, cfg.Server.SSHHostKeyPath, cfg.Server.SSHAuthKeysPath)
 	cm.sshServer = sshServer
 
-	// Set up input capture callback
-	cm.inputCapture.OnInputEvent(cm.handleInputEvent)
+	// Create context for input event processing
+	cm.inputEventsCtx, cm.inputCancel = context.WithCancel(ctx)
 
-	// Start input capture
-	if err := cm.inputCapture.Start(ctx); err != nil {
-		return fmt.Errorf("failed to start input capture: %w", err)
+	// Set up event handler
+	cm.evdevCapture.OnInputEvent(cm.handleInputEvent)
+
+	// Start evdev capture
+	if err := cm.evdevCapture.Start(ctx); err != nil {
+		return fmt.Errorf("failed to start evdev capture: %w", err)
 	}
 
 	// Start SSH server
@@ -91,9 +99,9 @@ func (cm *ClientManager) Stop() error {
 	cm.mu.Lock()
 	defer cm.mu.Unlock()
 
-	// Stop input capture
-	if err := cm.inputCapture.Stop(); err != nil {
-		logger.Errorf("Error stopping input capture: %v", err)
+	// Stop evdev capture
+	if err := cm.evdevCapture.Stop(); err != nil {
+		logger.Errorf("Error stopping evdev capture: %v", err)
 	}
 
 	// Stop SSH server
@@ -128,8 +136,8 @@ func (cm *ClientManager) SwitchToClient(clientID string) error {
 		}
 	}
 
-	// Update target in input capture
-	if err := cm.inputCapture.SetTarget(clientID); err != nil {
+	// Update target in evdev capture
+	if err := cm.evdevCapture.SetTarget(clientID); err != nil {
 		return fmt.Errorf("failed to set input target: %w", err)
 	}
 
@@ -204,10 +212,8 @@ func (cm *ClientManager) SwitchToLocal() error {
 	cm.activeClientID = ""
 	cm.controllingLocal = true
 
-	// Set input capture target to empty (local)
-	if err := cm.inputCapture.SetTarget(""); err != nil {
-		return fmt.Errorf("failed to set input target to local: %w", err)
-	}
+	// Stop routing input events to clients
+	// (input will naturally go to local system)
 
 	logger.Info("Switched control to local system")
 	
@@ -438,11 +444,7 @@ func (cm *ClientManager) UnregisterClient(id string) {
 	if cm.activeClientID == id {
 		cm.activeClientID = ""
 		cm.controllingLocal = true
-		go func() {
-			if err := cm.inputCapture.SetTarget(""); err != nil {
-				logger.Errorf("Error setting input target to local: %v", err)
-			}
-		}()
+		// Input will automatically go to local system when not actively routing
 	}
 
 	// Remove client
@@ -464,3 +466,5 @@ func (cm *ClientManager) SetSSHServer(sshServer *network.SSHServer) {
 	defer cm.mu.Unlock()
 	cm.sshServer = sshServer
 }
+
+

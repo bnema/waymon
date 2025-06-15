@@ -11,6 +11,7 @@ import (
 	"github.com/bnema/waymon/internal/config"
 	"github.com/bnema/waymon/internal/logger"
 	"github.com/bnema/waymon/internal/server"
+	"github.com/bnema/waymon/internal/setup"
 	"github.com/bnema/waymon/internal/ui"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/spf13/cobra"
@@ -183,6 +184,38 @@ func runServer(cmd *cobra.Command, args []string) error {
 	}
 	defer logFile.Close()
 
+	// Get configuration
+	cfg := config.Get()
+
+	// Run device setup if devices are not configured
+	if cfg.Input.MouseDevice == "" || cfg.Input.KeyboardDevice == "" {
+		// Import setup package
+		deviceSetup := setup.NewDeviceSetup()
+		if err := deviceSetup.RunInteractiveSetup(); err != nil {
+			return fmt.Errorf("device setup failed: %w", err)
+		}
+		// Reload config after setup
+		if err := config.Init(); err != nil {
+			return fmt.Errorf("failed to reload config: %w", err)
+		}
+		cfg = config.Get()
+	} else {
+		// Validate existing devices
+		deviceSetup := setup.NewDeviceSetup()
+		if err := deviceSetup.ValidateDevices(); err != nil {
+			logger.Warnf("Device validation failed: %v", err)
+			// Prompt for reselection
+			if err := deviceSetup.PromptDeviceReselection(); err != nil {
+				return fmt.Errorf("device reselection failed: %w", err)
+			}
+			// Reload config after reselection
+			if err := config.Init(); err != nil {
+				return fmt.Errorf("failed to reload config: %w", err)
+			}
+			cfg = config.Get()
+		}
+	}
+
 	// Show log location if not using TUI
 	if noTUI {
 		fmt.Printf("Logging to: %s\n", logFile.Name())
@@ -201,8 +234,8 @@ func runServer(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("failed to initialize config: %w", err)
 	}
 
-	// Get configuration
-	cfg := config.Get()
+	// Get configuration again after ensuring config
+	cfg = config.Get()
 
 	// Use flag values if provided, otherwise use config
 	if serverPort == 0 {
