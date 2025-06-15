@@ -6,28 +6,34 @@ import (
 	"strings"
 	"time"
 
+	"github.com/bnema/waymon/internal/server"
 	"github.com/charmbracelet/bubbles/spinner"
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
-	"github.com/bnema/waymon/internal/server"
 )
 
 // refreshClientListMsg is an internal message to trigger a client list refresh
 type refreshClientListMsg struct{}
 
+// serverShutdownMsg is an internal message to trigger proper server shutdown
+type serverShutdownMsg struct{}
+
 // ServerModel represents the redesigned server UI model where server is the controller
 type ServerModel struct {
 	// Server info
-	port        int
-	serverName  string
-	version     string
-	
+	port       int
+	serverName string
+	version    string
+
 	// Client management
 	clientManager *server.ClientManager
 	clients       []*server.ConnectedClient
 	activeClient  *server.ConnectedClient
 	localControl  bool
+
+	// Server reference for proper shutdown
+	serverInstance interface{ Stop() }
 
 	// UI components
 	viewport viewport.Model
@@ -43,21 +49,21 @@ type ServerModel struct {
 	authChannel chan bool
 
 	// Log buffer
-	logBuffer    []LogEntry
-	maxLogLines  int
+	logBuffer   []LogEntry
+	maxLogLines int
 
 	// UI state
 	selectedClientIndex int
 	lastUpdate          time.Time
 
 	// Styles
-	headerStyle      lipgloss.Style
-	statusStyle      lipgloss.Style
-	clientListStyle  lipgloss.Style
-	activeStyle      lipgloss.Style
-	idleStyle        lipgloss.Style
-	controlsStyle    lipgloss.Style
-	logStyle         lipgloss.Style
+	headerStyle     lipgloss.Style
+	statusStyle     lipgloss.Style
+	clientListStyle lipgloss.Style
+	activeStyle     lipgloss.Style
+	idleStyle       lipgloss.Style
+	controlsStyle   lipgloss.Style
+	logStyle        lipgloss.Style
 }
 
 // NewServerModel creates a new redesigned server UI model
@@ -117,6 +123,11 @@ func (m *ServerModel) SetClientManager(cm *server.ClientManager) {
 	m.clientManager = cm
 }
 
+// SetServer sets the server instance for proper shutdown handling
+func (m *ServerModel) SetServer(srv interface{ Stop() }) {
+	m.serverInstance = srv
+}
+
 // Init initializes the redesigned model
 func (m *ServerModel) Init() tea.Cmd {
 	return tea.Batch(
@@ -161,7 +172,8 @@ func (m *ServerModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// ALWAYS handle quit first - should work regardless of state
 		switch msg.String() {
 		case "q", "ctrl+c":
-			return m, tea.Quit
+			// Send shutdown message instead of direct tea.Quit to ensure proper cleanup
+			return m, func() tea.Msg { return serverShutdownMsg{} }
 		}
 
 		// Handle auth approval if pending
@@ -216,21 +228,21 @@ func (m *ServerModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 						})
 					}
 				}()
-				
+
 				// Immediately update our local state for responsive UI
 				m.localControl = true
 				m.selectedClientIndex = -1
 				m.activeClient = nil
-				
+
 				m.AddLogEntry(LogEntry{
 					Timestamp: time.Now(),
 					Level:     "INFO",
 					Message:   "Released client control - now controlling local system",
 				})
-				
+
 				// Force immediate UI update
 				m.updateViewport()
-				
+
 				// Schedule a delayed refresh
 				cmd := tea.Tick(200*time.Millisecond, func(t time.Time) tea.Msg {
 					return refreshClientListMsg{}
@@ -254,7 +266,7 @@ func (m *ServerModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 						Level:     "INFO",
 						Message:   "Switched to next client",
 					})
-					// Refresh client list to update status indicators  
+					// Refresh client list to update status indicators
 					m.refreshClientList()
 				}
 			}
@@ -264,7 +276,7 @@ func (m *ServerModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			clientNum, _ := strconv.Atoi(msg.String())
 			if m.clientManager != nil && clientNum <= len(m.clients) && clientNum > 0 {
 				client := m.clients[clientNum-1]
-				
+
 				// Do the switch in a goroutine to prevent UI blocking
 				go func() {
 					if err := m.clientManager.SwitchToClient(client.ID); err != nil {
@@ -275,22 +287,22 @@ func (m *ServerModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 						})
 					}
 				}()
-				
+
 				// Immediately update our local state for responsive UI
 				m.localControl = false
 				m.selectedClientIndex = clientNum - 1
 				m.activeClient = client
-				
+
 				// Log the switch attempt
 				m.AddLogEntry(LogEntry{
 					Timestamp: time.Now(),
 					Level:     "INFO",
 					Message:   fmt.Sprintf("Switching to control %s (%s)...", client.Name, client.Address),
 				})
-				
+
 				// Force immediate UI update
 				m.updateViewport()
-				
+
 				// Schedule a refresh to ensure state is synced
 				cmd := tea.Tick(200*time.Millisecond, func(t time.Time) tea.Msg {
 					return refreshClientListMsg{}
@@ -346,10 +358,36 @@ func (m *ServerModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				Message:   "Client manager connected to UI",
 			})
 		}
-		
+
+	case SetServerMsg:
+		m.SetServer(msg.Server)
+		m.AddLogEntry(LogEntry{
+			Timestamp: time.Now(),
+			Level:     "INFO",
+			Message:   "Server instance connected to UI",
+		})
+
 	case refreshClientListMsg:
 		// Handle the delayed refresh
 		m.refreshClientList()
+
+	case serverShutdownMsg:
+		// Handle proper server shutdown
+		m.AddLogEntry(LogEntry{
+			Timestamp: time.Now(),
+			Level:     "INFO",
+			Message:   "Server shutting down...",
+		})
+
+		// Perform proper shutdown sequence
+		if m.serverInstance != nil {
+			go func() {
+				m.serverInstance.Stop()
+			}()
+		}
+
+		// Now quit the UI
+		return m, tea.Quit
 	}
 
 	// Update viewport content
@@ -392,14 +430,11 @@ func (m *ServerModel) View() string {
 
 // renderHeader renders the header showing server status
 func (m *ServerModel) renderHeader() string {
-	title := fmt.Sprintf("WAYMON %s - SERVER MODE", m.version)
-	status := fmt.Sprintf("Status: ● Active | Port: %d", m.port)
-	
-	headerLine1 := m.headerStyle.Render(title)
+	statusText := fmt.Sprintf("Active on port %d", m.port)
+	title := FormatAppHeader("SERVER MODE", statusText)
 	headerLine2 := "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-	headerLine3 := m.statusStyle.Render(status)
 
-	return headerLine1 + "\n" + headerLine2 + "\n" + headerLine3
+	return title + "\n" + headerLine2
 }
 
 // renderClientList renders the connected clients list with current control status
@@ -413,15 +448,15 @@ func (m *ServerModel) renderClientList() string {
 	} else {
 		for i, client := range m.clients {
 			prefix := fmt.Sprintf("  [%d] ", i+1)
-			
+
 			// Add monitor count if available
 			monitorInfo := ""
 			if len(client.Monitors) > 0 {
 				monitorInfo = fmt.Sprintf(" [%dm]", len(client.Monitors))
 			}
-			
+
 			clientInfo := fmt.Sprintf("%s (%s)%s", client.Name, client.Address, monitorInfo)
-			
+
 			// Show status - check if this client is being controlled
 			var status string
 			if !m.localControl && m.activeClient != nil && client.ID == m.activeClient.ID {
@@ -457,7 +492,7 @@ func (m *ServerModel) renderClientList() string {
 // renderControls renders the control instructions
 func (m *ServerModel) renderControls() string {
 	var controlsText string
-	
+
 	if m.localControl {
 		// When controlling local, emphasize client switching
 		controlsText = "Controls:\n" +
@@ -470,7 +505,7 @@ func (m *ServerModel) renderControls() string {
 			"  [1-5] Switch to client • " + escapeStyle.Render("[Esc/0] RELEASE CONTROL") + " • [Tab] Next client\n" +
 			"  [g] Top of logs • [G] Bottom of logs • [q] Quit"
 	}
-	
+
 	return m.controlsStyle.Render(controlsText)
 }
 
@@ -518,7 +553,7 @@ func (m *ServerModel) renderLogs() string {
 // formatLogEntry formats a single log entry with colors
 func (m *ServerModel) formatLogEntry(entry LogEntry) string {
 	timeStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("244"))
-	
+
 	var levelStyle lipgloss.Style
 	switch strings.ToUpper(entry.Level) {
 	case "ERROR":
@@ -564,7 +599,7 @@ func (m *ServerModel) refreshClientList() {
 			m.localControl = m.clientManager.IsControllingLocal()
 			done <- true
 		}()
-		
+
 		select {
 		case <-done:
 			// Success

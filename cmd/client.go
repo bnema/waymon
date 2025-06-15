@@ -145,7 +145,7 @@ func runClient(cmd *cobra.Command, args []string) error {
 		// Start connection with smart approval detection
 		// Only show "waiting for approval" if connection takes longer than expected
 		connectionStart := time.Now()
-		
+
 		// Create a timer to show approval message if connection takes too long
 		approvalTimer := time.AfterFunc(3*time.Second, func() {
 			// If connection is still in progress after 3 seconds, likely waiting for approval
@@ -168,11 +168,35 @@ func runClient(cmd *cobra.Command, args []string) error {
 			connectionDuration := time.Since(connectionStart)
 			logger.Infof("Successfully connected to server at %s in %v", serverAddr, connectionDuration)
 			p.Send(ui.ConnectedMsg{})
-			
+
 			// In redesigned architecture, client is now ready to receive input from server
 			logger.Info("Client ready to receive input from server")
 		}
 	}
+
+	// Set up reconnection status callback now that TUI program is created
+	inputReceiver.SetOnReconnectStatus(func(status string) {
+		logEntry := ui.LogEntry{
+			Timestamp: time.Now(),
+			Level:     "INFO",
+			Message:   status,
+		}
+		p.Send(ui.LogMsg{Entry: logEntry})
+
+		// Also send appropriate UI messages based on status
+		if strings.Contains(status, "Reconnection attempt") ||
+			strings.Contains(status, "Reconnecting") ||
+			strings.Contains(status, "retrying") ||
+			strings.Contains(status, "attempting to reconnect") {
+			p.Send(ui.ReconnectingMsg{Status: status})
+		} else if strings.Contains(status, "Reconnected successfully") {
+			p.Send(ui.ConnectedMsg{})
+		} else if strings.Contains(status, "Server shutdown") ||
+			strings.Contains(status, "Connection lost") {
+			p.Send(ui.DisconnectedMsg{})
+			p.Send(ui.ReconnectingMsg{Status: status})
+		}
+	})
 
 	// Start connection in background AFTER TUI starts
 	go func() {

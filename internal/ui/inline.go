@@ -13,6 +13,7 @@ import (
 // InlineClientModel represents the inline UI model for the client
 type InlineClientModel struct {
 	connected       bool
+	reconnecting    bool
 	waitingApproval bool
 	capturing       bool
 	serverAddr      string
@@ -93,14 +94,23 @@ func (m *InlineClientModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case ConnectedMsg:
 		m.connected = true
+		m.reconnecting = false
 		m.waitingApproval = false
 		m.SetMessage("success", "Connected to server")
 
 	case DisconnectedMsg:
 		m.connected = false
+		m.reconnecting = false
 		m.waitingApproval = false
 		m.capturing = false
 		m.SetMessage("error", "Disconnected from server")
+
+	case ReconnectingMsg:
+		m.connected = false
+		m.reconnecting = true
+		m.waitingApproval = false
+		m.capturing = false
+		m.SetMessage("info", msg.Status)
 
 	case WaitingApprovalMsg:
 		m.waitingApproval = true
@@ -180,9 +190,12 @@ func (m *InlineClientModel) renderClientStatusBar() string {
 	if m.connected {
 		connStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("42"))
 		parts = append(parts, connStyle.Render("● Connected"))
+	} else if m.reconnecting {
+		connStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("214"))
+		parts = append(parts, connStyle.Render(m.spinner.View()+" Reconnecting"))
 	} else {
 		connStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("196"))
-		parts = append(parts, connStyle.Render(m.spinner.View()+" Connecting"))
+		parts = append(parts, connStyle.Render("✗ Disconnected"))
 	}
 
 	// Server address
@@ -603,6 +616,7 @@ func pluralize(count int) string {
 type (
 	ConnectedMsg          struct{}
 	DisconnectedMsg       struct{}
+	ReconnectingMsg       struct{ Status string }
 	WaitingApprovalMsg    struct{}
 	CaptureStartMsg       struct{}
 	CaptureStopMsg        struct{}
@@ -614,8 +628,9 @@ type (
 		Fingerprint  string
 		ResponseChan chan bool
 	}
-	SSHAuthApprovedMsg struct{ Fingerprint string }
-	SSHAuthDeniedMsg   struct{ Fingerprint string }
-	LogMsg             struct{ Entry LogEntry }
+	SSHAuthApprovedMsg  struct{ Fingerprint string }
+	SSHAuthDeniedMsg    struct{ Fingerprint string }
+	LogMsg              struct{ Entry LogEntry }
 	SetClientManagerMsg struct{ ClientManager interface{} }
+	SetServerMsg        struct{ Server interface{ Stop() } }
 )
