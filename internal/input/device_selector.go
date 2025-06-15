@@ -6,8 +6,8 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/charmbracelet/huh"
 	"github.com/bnema/waymon/internal/logger"
+	"github.com/charmbracelet/huh"
 )
 
 // DeviceInfo represents information about an input device
@@ -152,7 +152,7 @@ func (s *DeviceSelector) findDevicesBySymlinks(deviceType DeviceType) []DeviceIn
 				if targetPath, err := os.Readlink(symlinkPath); err == nil {
 					// Resolve to absolute path
 					realPath := filepath.Clean(filepath.Join(byIdDir, targetPath))
-					
+
 					// Verify the device is accessible and correct type
 					if file, err := os.OpenFile(realPath, os.O_RDONLY, 0); err == nil {
 						defer file.Close()
@@ -163,7 +163,7 @@ func (s *DeviceSelector) findDevicesBySymlinks(deviceType DeviceType) []DeviceIn
 							cleanName := strings.TrimSuffix(name, "-event-kbd")
 							cleanName = strings.TrimSuffix(cleanName, "-event-mouse")
 							cleanName = strings.TrimPrefix(cleanName, "usb-")
-							
+
 							devices = append(devices, DeviceInfo{
 								Path:        realPath,
 								Name:        cleanName,
@@ -186,14 +186,14 @@ func (s *DeviceSelector) findDevicesBySymlinks(deviceType DeviceType) []DeviceIn
 					symlinkPath := filepath.Join(byPathDir, entry.Name())
 					if targetPath, err := os.Readlink(symlinkPath); err == nil {
 						realPath := filepath.Clean(filepath.Join(byPathDir, targetPath))
-						
+
 						if file, err := os.OpenFile(realPath, os.O_RDONLY, 0); err == nil {
 							defer file.Close()
 							if detector.isCorrectDeviceType(file) {
 								name := entry.Name()
 								cleanName := strings.TrimSuffix(name, "-event-kbd")
 								cleanName = strings.TrimSuffix(cleanName, "-event-mouse")
-								
+
 								devices = append(devices, DeviceInfo{
 									Path:        realPath,
 									Name:        cleanName,
@@ -223,7 +223,7 @@ func (s *DeviceSelector) findDevicesByCapabilities(detector *DeviceDetector) ([]
 	for _, entry := range entries {
 		if !entry.IsDir() && strings.HasPrefix(entry.Name(), "event") {
 			path := filepath.Join(eventDir, entry.Name())
-			
+
 			if file, err := os.OpenFile(path, os.O_RDONLY, 0); err == nil {
 				defer file.Close()
 				if detector.isCorrectDeviceType(file) {
@@ -232,7 +232,7 @@ func (s *DeviceSelector) findDevicesByCapabilities(detector *DeviceDetector) ([]
 					if name == "" {
 						name = entry.Name()
 					}
-					
+
 					devices = append(devices, DeviceInfo{
 						Path:        path,
 						Name:        name,
@@ -252,10 +252,10 @@ func (s *DeviceSelector) getDeviceName(path string) string {
 	// Try to read the device name from /sys/class/input/eventX/device/name
 	eventName := filepath.Base(path)
 	sysPath := fmt.Sprintf("/sys/class/input/%s/device/name", eventName)
-	
+
 	if data, err := os.ReadFile(sysPath); err == nil {
 		return strings.TrimSpace(string(data))
 	}
-	
+
 	return ""
 }

@@ -4,10 +4,10 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/charmbracelet/huh"
 	"github.com/bnema/waymon/internal/config"
 	"github.com/bnema/waymon/internal/input"
 	"github.com/bnema/waymon/internal/logger"
+	"github.com/charmbracelet/huh"
 	"github.com/spf13/viper"
 )
 
@@ -26,7 +26,7 @@ func NewDeviceSetup() *DeviceSetup {
 // RunInteractiveSetup runs the interactive device selection if devices are not configured
 func (ds *DeviceSetup) RunInteractiveSetup() error {
 	cfg := config.Get()
-	
+
 	// Check if devices are already configured
 	if cfg.Input.MouseDevice != "" && cfg.Input.KeyboardDevice != "" {
 		logger.Info("Input devices already configured")
@@ -78,7 +78,7 @@ func (ds *DeviceSetup) RunInteractiveSetup() error {
 
 	fmt.Println("✅ Device configuration saved!")
 	fmt.Printf("📁 Config file: %s\n\n", config.GetConfigPath())
-	
+
 	return nil
 }
 
@@ -135,7 +135,7 @@ func (ds *DeviceSetup) hasInputPermission() bool {
 // ValidateDevices checks if configured devices are still valid
 func (ds *DeviceSetup) ValidateDevices() error {
 	cfg := config.Get()
-	
+
 	// Validate mouse device
 	if cfg.Input.MouseDevice != "" {
 		if _, err := os.Stat(cfg.Input.MouseDevice); os.IsNotExist(err) {
