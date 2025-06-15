@@ -12,15 +12,22 @@ message InputEvent {
     MouseScrollEvent mouse_scroll = 3;
     KeyboardEvent keyboard = 4;
     ControlEvent control = 5;
+    MousePositionEvent mouse_position = 6;
   }
-  int64 timestamp = 6;
-  string source_id = 7;  // Which server sent this
+  int64 timestamp = 7;
+  string source_id = 8;  // Which server sent this
 }
 
 // Mouse movement with relative coordinates
 message MouseMoveEvent {
   double dx = 1;
   double dy = 2;
+}
+
+// Absolute mouse positioning
+message MousePositionEvent {
+  int32 x = 1;           // Absolute X coordinate
+  int32 y = 2;           // Absolute Y coordinate
 }
 
 // Mouse button press/release
@@ -63,6 +70,9 @@ message ControlEvent {
     CLIENT_LIST_REQUEST = 4;
     CLIENT_LIST_RESPONSE = 5;
     CLIENT_CONFIG = 6;  // Client sends its configuration
+    SERVER_SHUTDOWN = 7;  // Server is shutting down gracefully
+    HEALTH_CHECK_PING = 8;  // Client health check ping
+    HEALTH_CHECK_PONG = 9;  // Server health check response
   }
 }
 
