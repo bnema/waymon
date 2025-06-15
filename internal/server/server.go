@@ -156,8 +156,8 @@ func (s *Server) runNetworkServer(ctx context.Context) {
 
 // handleMouseEvent processes incoming mouse events
 func (s *Server) handleMouseEvent(event *network.MouseEvent) error {
-	if s.inputHandler == nil {
-		return fmt.Errorf("input handler not initialized")
+	if s.inputBackend == nil {
+		return fmt.Errorf("input backend not initialized")
 	}
 
 	// Log event details
@@ -178,8 +178,9 @@ func (s *Server) handleMouseEvent(event *network.MouseEvent) error {
 		logger.Debugf("Mouse scroll: %s", event.MouseEvent.Direction.String())
 	}
 
-	// The network.MouseEvent wraps proto.MouseEvent, so we can pass it directly
-	return s.inputHandler.ProcessEvent(event.MouseEvent)
+	// Note: Server-side input processing would be implemented here if needed
+	// For now, the server primarily captures and forwards events to clients
+	return nil
 }
 
 // Stop stops the server
@@ -193,8 +194,8 @@ func (s *Server) Stop() {
 		s.sshServer.Stop()
 	}
 
-	if s.inputHandler != nil {
-		s.inputHandler.Close()
+	if s.inputBackend != nil {
+		s.inputBackend.Stop()
 	}
 
 	if s.display != nil {
