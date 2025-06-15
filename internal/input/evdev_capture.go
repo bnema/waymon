@@ -299,7 +299,10 @@ func (e *EvdevCapture) captureMouseEvents() {
 					SourceId:  "evdev-capture",
 				}
 				callback(event)
-				logger.Infof("📤 Sent mouse movement: dx=%d, dy=%d (total events: %d)", accX, accY, eventCount)
+				// Rate limit logging - only log every 10th movement event
+				if eventCount%10 == 0 {
+					logger.Infof("📤 Sent mouse movement: dx=%d, dy=%d (total events: %d)", accX, accY, eventCount)
+				}
 				accX, accY = 0, 0
 			}
 		default:
@@ -320,10 +323,10 @@ func (e *EvdevCapture) captureMouseEvents() {
 					switch event.Code {
 					case evdev.REL_X:
 						accX += event.Value
-						logger.Debugf("📍 Mouse X movement: %d (accumulated: %d)", event.Value, accX)
+						// Removed debug log to reduce spam
 					case evdev.REL_Y:
 						accY += event.Value
-						logger.Debugf("📍 Mouse Y movement: %d (accumulated: %d)", event.Value, accY)
+						// Removed debug log to reduce spam
 					case evdev.REL_WHEEL:
 						logger.Debugf("🖱️ Mouse wheel: %d", event.Value)
 						e.handleMouseScroll(0, float64(event.Value))
@@ -338,7 +341,7 @@ func (e *EvdevCapture) captureMouseEvents() {
 					}
 				case evdev.EV_SYN:
 					// Synchronization event - indicates end of a set of events
-					logger.Debugf("📋 Event sync (accumulated: dx=%d, dy=%d)", accX, accY)
+					// Removed debug log to reduce spam
 				default:
 					logger.Debugf("❓ Unknown event type: %d, code: %d, value: %d", event.Type, event.Code, event.Value)
 				}
