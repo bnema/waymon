@@ -279,6 +279,7 @@ func (c *SSHClient) Connect(ctx context.Context, serverAddr string) error {
 	c.connected = true
 
 	// Start receiving input events from server
+	logger.Info("[SSH-CLIENT] Starting receiveInputEvents goroutine")
 	go c.receiveInputEvents(ctx)
 
 	// Monitor connection
@@ -379,9 +380,12 @@ func (c *SSHClient) OnInputEvent(callback func(*protocol.InputEvent)) {
 
 // receiveInputEvents continuously receives input events from the server
 func (c *SSHClient) receiveInputEvents(ctx context.Context) {
+	logger.Info("[SSH-CLIENT] Starting receiveInputEvents goroutine")
+	
 	for {
 		select {
 		case <-ctx.Done():
+			logger.Info("[SSH-CLIENT] Context cancelled, stopping receiveInputEvents")
 			return
 		default:
 			c.mu.Lock()
@@ -390,41 +394,51 @@ func (c *SSHClient) receiveInputEvents(ctx context.Context) {
 			c.mu.Unlock()
 
 			if !connected || reader == nil {
+				logger.Info("[SSH-CLIENT] Connection lost or reader nil, stopping receiveInputEvents")
 				return
 			}
 
 			// Read length prefix (4 bytes)
 			lengthBuf := make([]byte, 4)
+			logger.Debug("[SSH-CLIENT] Reading length prefix (4 bytes)...")
 			_, err := io.ReadFull(reader, lengthBuf)
 			if err != nil {
 				if err == io.EOF || err == io.ErrClosedPipe {
+					logger.Info("[SSH-CLIENT] Connection closed (EOF/ErrClosedPipe)")
 					return // Connection closed
 				}
-				logger.Errorf("Failed to read message length: %v", err)
+				logger.Errorf("[SSH-CLIENT] Failed to read message length: %v", err)
 				continue
 			}
 
 			// Decode length
 			length := int(lengthBuf[0])<<24 | int(lengthBuf[1])<<16 | int(lengthBuf[2])<<8 | int(lengthBuf[3])
+			logger.Debugf("[SSH-CLIENT] Decoded message length: %d bytes", length)
+			
 			if length <= 0 || length > 4096 {
-				logger.Errorf("Invalid message length: %d", length)
+				logger.Errorf("[SSH-CLIENT] Invalid message length: %d", length)
 				continue
 			}
 
 			// Read message data
 			msgBuf := make([]byte, length)
+			logger.Debugf("[SSH-CLIENT] Reading message data (%d bytes)...", length)
 			_, err = io.ReadFull(reader, msgBuf)
 			if err != nil {
-				logger.Errorf("Failed to read message data: %v", err)
+				logger.Errorf("[SSH-CLIENT] Failed to read message data: %v", err)
 				continue
 			}
 
 			// Unmarshal input event
 			var inputEvent protocol.InputEvent
+			logger.Debug("[SSH-CLIENT] Unmarshaling protocol buffer...")
 			if err := proto.Unmarshal(msgBuf, &inputEvent); err != nil {
-				logger.Errorf("Failed to unmarshal input event: %v", err)
+				logger.Errorf("[SSH-CLIENT] Failed to unmarshal input event: %v", err)
 				continue
 			}
+
+			logger.Debugf("[SSH-CLIENT] Received event: type=%T, timestamp=%d, sourceId=%s", 
+				inputEvent.Event, inputEvent.Timestamp, inputEvent.SourceId)
 
 			// Call the callback if set
 			c.mu.Lock()
@@ -432,7 +446,10 @@ func (c *SSHClient) receiveInputEvents(ctx context.Context) {
 			c.mu.Unlock()
 
 			if callback != nil {
+				logger.Debug("[SSH-CLIENT] Calling onInputEvent callback")
 				callback(&inputEvent)
+			} else {
+				logger.Warn("[SSH-CLIENT] No onInputEvent callback set")
 			}
 		}
 	}
