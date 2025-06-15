@@ -40,6 +40,10 @@ type ServerConfig struct {
 	SSHAuthKeysPath  string   `mapstructure:"ssh_authorized_keys_path"`
 	SSHWhitelist     []string `mapstructure:"ssh_whitelist"`      // List of allowed SSH key fingerprints
 	SSHWhitelistOnly bool     `mapstructure:"ssh_whitelist_only"` // Only allow whitelisted keys
+
+	// Input device configuration (for evdev backend)
+	MouseDevice    string `mapstructure:"mouse_device"`    // Path to mouse device (e.g., /dev/input/event3)
+	KeyboardDevice string `mapstructure:"keyboard_device"` // Path to keyboard device (e.g., /dev/input/event4)
 }
 
 // ClientConfig contains client-specific settings

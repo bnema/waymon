@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/bnema/waymon/internal/config"
+	"github.com/bnema/waymon/internal/logger"
 	"github.com/bnema/waymon/internal/protocol"
 )
 
@@ -24,12 +26,54 @@ type InputBackend interface {
 }
 
 // CreateBackend creates an appropriate input backend based on availability
-// Uses Wayland virtual input protocols for wlroots-based compositors (Hyprland, Sway)
+// For servers: tries evdev first (actual input capture), then falls back to Wayland virtual input
+// For clients: Wayland virtual input is used for injection
 func CreateBackend() (InputBackend, error) {
-	// Use Wayland virtual input for Hyprland/wlroots compositors
+	// First, try evdev backend (for server-side input capture)
+	if IsEvdevAvailable() {
+		logger.Info("Using evdev backend for input capture")
+		return NewEvdevCapture(), nil
+	}
+
+	// Fall back to Wayland virtual input (primarily for client-side injection)
 	if backend, err := NewWaylandVirtualInput(); err == nil {
+		logger.Info("Using Wayland virtual input backend")
 		return backend, nil
 	}
 
-	return nil, fmt.Errorf("no suitable input backend available - Wayland virtual input protocols not supported by compositor")
+	return nil, fmt.Errorf("no suitable input backend available")
+}
+
+// CreateServerBackend creates an input backend specifically for server mode
+// Always tries evdev first since servers need actual input capture
+func CreateServerBackend() (InputBackend, error) {
+	// For servers, we MUST have evdev for actual input capture
+	if IsEvdevAvailable() {
+		logger.Info("Using evdev backend for server input capture")
+		
+		// Check if devices are configured
+		cfg := config.Get()
+		if cfg != nil && (cfg.Server.MouseDevice != "" || cfg.Server.KeyboardDevice != "") {
+			logger.Infof("Using configured devices - Mouse: %s, Keyboard: %s", 
+				cfg.Server.MouseDevice, cfg.Server.KeyboardDevice)
+			return NewEvdevCaptureWithDevices(cfg.Server.MouseDevice, cfg.Server.KeyboardDevice), nil
+		}
+		
+		return NewEvdevCapture(), nil
+	}
+
+	return nil, fmt.Errorf("evdev not available - server requires evdev for input capture. " +
+		"Make sure you have access to /dev/input/event* devices")
+}
+
+// CreateClientBackend creates an input backend specifically for client mode
+// Uses Wayland virtual input for injection
+func CreateClientBackend() (InputBackend, error) {
+	// For clients, use Wayland virtual input for injection
+	if backend, err := NewWaylandVirtualInput(); err == nil {
+		logger.Info("Using Wayland virtual input backend for client injection")
+		return backend, nil
+	}
+
+	return nil, fmt.Errorf("Wayland virtual input protocols not supported by compositor")
 }
