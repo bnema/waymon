@@ -90,7 +90,7 @@ func (m *SimpleClientModel) View() string {
 		status = fmt.Sprintf("✓ Connected to %s", m.serverAddress)
 		status = SuccessStyle.Render(status)
 	} else {
-		status = fmt.Sprintf("✗ Disconnected from server")
+		status = "✗ Disconnected from server"
 		status = ErrorStyle.Render(status)
 	}
 
