@@ -129,6 +129,9 @@ const (
 	ControlEvent_CLIENT_LIST_REQUEST  ControlEvent_Type = 4
 	ControlEvent_CLIENT_LIST_RESPONSE ControlEvent_Type = 5
 	ControlEvent_CLIENT_CONFIG        ControlEvent_Type = 6 // Client sends its configuration
+	ControlEvent_SERVER_SHUTDOWN      ControlEvent_Type = 7 // Server is shutting down gracefully
+	ControlEvent_HEALTH_CHECK_PING    ControlEvent_Type = 8 // Client health check ping
+	ControlEvent_HEALTH_CHECK_PONG    ControlEvent_Type = 9 // Server health check response
 )
 
 // Enum value maps for ControlEvent_Type.
@@ -141,6 +144,9 @@ var (
 		4: "CLIENT_LIST_REQUEST",
 		5: "CLIENT_LIST_RESPONSE",
 		6: "CLIENT_CONFIG",
+		7: "SERVER_SHUTDOWN",
+		8: "HEALTH_CHECK_PING",
+		9: "HEALTH_CHECK_PONG",
 	}
 	ControlEvent_Type_value = map[string]int32{
 		"SWITCH_TO_LOCAL":      0,
@@ -150,6 +156,9 @@ var (
 		"CLIENT_LIST_REQUEST":  4,
 		"CLIENT_LIST_RESPONSE": 5,
 		"CLIENT_CONFIG":        6,
+		"SERVER_SHUTDOWN":      7,
+		"HEALTH_CHECK_PING":    8,
+		"HEALTH_CHECK_PONG":    9,
 	}
 )
 
@@ -177,7 +186,7 @@ func (x ControlEvent_Type) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use ControlEvent_Type.Descriptor instead.
 func (ControlEvent_Type) EnumDescriptor() ([]byte, []int) {
-	return file_internal_protocol_events_proto_rawDescGZIP(), []int{5, 0}
+	return file_internal_protocol_events_proto_rawDescGZIP(), []int{6, 0}
 }
 
 // InputEvent is the main event message sent between server and clients
@@ -190,9 +199,10 @@ type InputEvent struct {
 	//	*InputEvent_MouseScroll
 	//	*InputEvent_Keyboard
 	//	*InputEvent_Control
+	//	*InputEvent_MousePosition
 	Event         isInputEvent_Event `protobuf_oneof:"event"`
-	Timestamp     int64              `protobuf:"varint,6,opt,name=timestamp,proto3" json:"timestamp,omitempty"`
-	SourceId      string             `protobuf:"bytes,7,opt,name=source_id,json=sourceId,proto3" json:"source_id,omitempty"` // Which server sent this
+	Timestamp     int64              `protobuf:"varint,7,opt,name=timestamp,proto3" json:"timestamp,omitempty"`
+	SourceId      string             `protobuf:"bytes,8,opt,name=source_id,json=sourceId,proto3" json:"source_id,omitempty"` // Which server sent this
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -279,6 +289,15 @@ func (x *InputEvent) GetControl() *ControlEvent {
 	return nil
 }
 
+func (x *InputEvent) GetMousePosition() *MousePositionEvent {
+	if x != nil {
+		if x, ok := x.Event.(*InputEvent_MousePosition); ok {
+			return x.MousePosition
+		}
+	}
+	return nil
+}
+
 func (x *InputEvent) GetTimestamp() int64 {
 	if x != nil {
 		return x.Timestamp
@@ -317,6 +336,10 @@ type InputEvent_Control struct {
 	Control *ControlEvent `protobuf:"bytes,5,opt,name=control,proto3,oneof"`
 }
 
+type InputEvent_MousePosition struct {
+	MousePosition *MousePositionEvent `protobuf:"bytes,6,opt,name=mouse_position,json=mousePosition,proto3,oneof"`
+}
+
 func (*InputEvent_MouseMove) isInputEvent_Event() {}
 
 func (*InputEvent_MouseButton) isInputEvent_Event() {}
@@ -326,6 +349,8 @@ func (*InputEvent_MouseScroll) isInputEvent_Event() {}
 func (*InputEvent_Keyboard) isInputEvent_Event() {}
 
 func (*InputEvent_Control) isInputEvent_Event() {}
+
+func (*InputEvent_MousePosition) isInputEvent_Event() {}
 
 // Mouse movement with relative coordinates
 type MouseMoveEvent struct {
@@ -380,6 +405,59 @@ func (x *MouseMoveEvent) GetDy() float64 {
 	return 0
 }
 
+// Absolute mouse positioning
+type MousePositionEvent struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	X             int32                  `protobuf:"varint,1,opt,name=x,proto3" json:"x,omitempty"` // Absolute X coordinate
+	Y             int32                  `protobuf:"varint,2,opt,name=y,proto3" json:"y,omitempty"` // Absolute Y coordinate
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *MousePositionEvent) Reset() {
+	*x = MousePositionEvent{}
+	mi := &file_internal_protocol_events_proto_msgTypes[2]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *MousePositionEvent) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*MousePositionEvent) ProtoMessage() {}
+
+func (x *MousePositionEvent) ProtoReflect() protoreflect.Message {
+	mi := &file_internal_protocol_events_proto_msgTypes[2]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use MousePositionEvent.ProtoReflect.Descriptor instead.
+func (*MousePositionEvent) Descriptor() ([]byte, []int) {
+	return file_internal_protocol_events_proto_rawDescGZIP(), []int{2}
+}
+
+func (x *MousePositionEvent) GetX() int32 {
+	if x != nil {
+		return x.X
+	}
+	return 0
+}
+
+func (x *MousePositionEvent) GetY() int32 {
+	if x != nil {
+		return x.Y
+	}
+	return 0
+}
+
 // Mouse button press/release
 type MouseButtonEvent struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
@@ -391,7 +469,7 @@ type MouseButtonEvent struct {
 
 func (x *MouseButtonEvent) Reset() {
 	*x = MouseButtonEvent{}
-	mi := &file_internal_protocol_events_proto_msgTypes[2]
+	mi := &file_internal_protocol_events_proto_msgTypes[3]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -403,7 +481,7 @@ func (x *MouseButtonEvent) String() string {
 func (*MouseButtonEvent) ProtoMessage() {}
 
 func (x *MouseButtonEvent) ProtoReflect() protoreflect.Message {
-	mi := &file_internal_protocol_events_proto_msgTypes[2]
+	mi := &file_internal_protocol_events_proto_msgTypes[3]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -416,7 +494,7 @@ func (x *MouseButtonEvent) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use MouseButtonEvent.ProtoReflect.Descriptor instead.
 func (*MouseButtonEvent) Descriptor() ([]byte, []int) {
-	return file_internal_protocol_events_proto_rawDescGZIP(), []int{2}
+	return file_internal_protocol_events_proto_rawDescGZIP(), []int{3}
 }
 
 func (x *MouseButtonEvent) GetButton() uint32 {
@@ -445,7 +523,7 @@ type MouseScrollEvent struct {
 
 func (x *MouseScrollEvent) Reset() {
 	*x = MouseScrollEvent{}
-	mi := &file_internal_protocol_events_proto_msgTypes[3]
+	mi := &file_internal_protocol_events_proto_msgTypes[4]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -457,7 +535,7 @@ func (x *MouseScrollEvent) String() string {
 func (*MouseScrollEvent) ProtoMessage() {}
 
 func (x *MouseScrollEvent) ProtoReflect() protoreflect.Message {
-	mi := &file_internal_protocol_events_proto_msgTypes[3]
+	mi := &file_internal_protocol_events_proto_msgTypes[4]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -470,7 +548,7 @@ func (x *MouseScrollEvent) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use MouseScrollEvent.ProtoReflect.Descriptor instead.
 func (*MouseScrollEvent) Descriptor() ([]byte, []int) {
-	return file_internal_protocol_events_proto_rawDescGZIP(), []int{3}
+	return file_internal_protocol_events_proto_rawDescGZIP(), []int{4}
 }
 
 func (x *MouseScrollEvent) GetDx() float64 {
@@ -506,7 +584,7 @@ type KeyboardEvent struct {
 
 func (x *KeyboardEvent) Reset() {
 	*x = KeyboardEvent{}
-	mi := &file_internal_protocol_events_proto_msgTypes[4]
+	mi := &file_internal_protocol_events_proto_msgTypes[5]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -518,7 +596,7 @@ func (x *KeyboardEvent) String() string {
 func (*KeyboardEvent) ProtoMessage() {}
 
 func (x *KeyboardEvent) ProtoReflect() protoreflect.Message {
-	mi := &file_internal_protocol_events_proto_msgTypes[4]
+	mi := &file_internal_protocol_events_proto_msgTypes[5]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -531,7 +609,7 @@ func (x *KeyboardEvent) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use KeyboardEvent.ProtoReflect.Descriptor instead.
 func (*KeyboardEvent) Descriptor() ([]byte, []int) {
-	return file_internal_protocol_events_proto_rawDescGZIP(), []int{4}
+	return file_internal_protocol_events_proto_rawDescGZIP(), []int{5}
 }
 
 func (x *KeyboardEvent) GetKey() uint32 {
@@ -567,7 +645,7 @@ type ControlEvent struct {
 
 func (x *ControlEvent) Reset() {
 	*x = ControlEvent{}
-	mi := &file_internal_protocol_events_proto_msgTypes[5]
+	mi := &file_internal_protocol_events_proto_msgTypes[6]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -579,7 +657,7 @@ func (x *ControlEvent) String() string {
 func (*ControlEvent) ProtoMessage() {}
 
 func (x *ControlEvent) ProtoReflect() protoreflect.Message {
-	mi := &file_internal_protocol_events_proto_msgTypes[5]
+	mi := &file_internal_protocol_events_proto_msgTypes[6]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -592,7 +670,7 @@ func (x *ControlEvent) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ControlEvent.ProtoReflect.Descriptor instead.
 func (*ControlEvent) Descriptor() ([]byte, []int) {
-	return file_internal_protocol_events_proto_rawDescGZIP(), []int{5}
+	return file_internal_protocol_events_proto_rawDescGZIP(), []int{6}
 }
 
 func (x *ControlEvent) GetType() ControlEvent_Type {
@@ -630,7 +708,7 @@ type ClientInfo struct {
 
 func (x *ClientInfo) Reset() {
 	*x = ClientInfo{}
-	mi := &file_internal_protocol_events_proto_msgTypes[6]
+	mi := &file_internal_protocol_events_proto_msgTypes[7]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -642,7 +720,7 @@ func (x *ClientInfo) String() string {
 func (*ClientInfo) ProtoMessage() {}
 
 func (x *ClientInfo) ProtoReflect() protoreflect.Message {
-	mi := &file_internal_protocol_events_proto_msgTypes[6]
+	mi := &file_internal_protocol_events_proto_msgTypes[7]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -655,7 +733,7 @@ func (x *ClientInfo) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ClientInfo.ProtoReflect.Descriptor instead.
 func (*ClientInfo) Descriptor() ([]byte, []int) {
-	return file_internal_protocol_events_proto_rawDescGZIP(), []int{6}
+	return file_internal_protocol_events_proto_rawDescGZIP(), []int{7}
 }
 
 func (x *ClientInfo) GetId() string {
@@ -707,7 +785,7 @@ type ServerInfo struct {
 
 func (x *ServerInfo) Reset() {
 	*x = ServerInfo{}
-	mi := &file_internal_protocol_events_proto_msgTypes[7]
+	mi := &file_internal_protocol_events_proto_msgTypes[8]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -719,7 +797,7 @@ func (x *ServerInfo) String() string {
 func (*ServerInfo) ProtoMessage() {}
 
 func (x *ServerInfo) ProtoReflect() protoreflect.Message {
-	mi := &file_internal_protocol_events_proto_msgTypes[7]
+	mi := &file_internal_protocol_events_proto_msgTypes[8]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -732,7 +810,7 @@ func (x *ServerInfo) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ServerInfo.ProtoReflect.Descriptor instead.
 func (*ServerInfo) Descriptor() ([]byte, []int) {
-	return file_internal_protocol_events_proto_rawDescGZIP(), []int{7}
+	return file_internal_protocol_events_proto_rawDescGZIP(), []int{8}
 }
 
 func (x *ServerInfo) GetId() string {
@@ -782,7 +860,7 @@ type ServerCapabilities struct {
 
 func (x *ServerCapabilities) Reset() {
 	*x = ServerCapabilities{}
-	mi := &file_internal_protocol_events_proto_msgTypes[8]
+	mi := &file_internal_protocol_events_proto_msgTypes[9]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -794,7 +872,7 @@ func (x *ServerCapabilities) String() string {
 func (*ServerCapabilities) ProtoMessage() {}
 
 func (x *ServerCapabilities) ProtoReflect() protoreflect.Message {
-	mi := &file_internal_protocol_events_proto_msgTypes[8]
+	mi := &file_internal_protocol_events_proto_msgTypes[9]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -807,7 +885,7 @@ func (x *ServerCapabilities) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ServerCapabilities.ProtoReflect.Descriptor instead.
 func (*ServerCapabilities) Descriptor() ([]byte, []int) {
-	return file_internal_protocol_events_proto_rawDescGZIP(), []int{8}
+	return file_internal_protocol_events_proto_rawDescGZIP(), []int{9}
 }
 
 func (x *ServerCapabilities) GetSupportsKeyboard() bool {
@@ -851,7 +929,7 @@ type ClientConfig struct {
 
 func (x *ClientConfig) Reset() {
 	*x = ClientConfig{}
-	mi := &file_internal_protocol_events_proto_msgTypes[9]
+	mi := &file_internal_protocol_events_proto_msgTypes[10]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -863,7 +941,7 @@ func (x *ClientConfig) String() string {
 func (*ClientConfig) ProtoMessage() {}
 
 func (x *ClientConfig) ProtoReflect() protoreflect.Message {
-	mi := &file_internal_protocol_events_proto_msgTypes[9]
+	mi := &file_internal_protocol_events_proto_msgTypes[10]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -876,7 +954,7 @@ func (x *ClientConfig) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ClientConfig.ProtoReflect.Descriptor instead.
 func (*ClientConfig) Descriptor() ([]byte, []int) {
-	return file_internal_protocol_events_proto_rawDescGZIP(), []int{9}
+	return file_internal_protocol_events_proto_rawDescGZIP(), []int{10}
 }
 
 func (x *ClientConfig) GetClientId() string {
@@ -924,7 +1002,7 @@ type Monitor struct {
 
 func (x *Monitor) Reset() {
 	*x = Monitor{}
-	mi := &file_internal_protocol_events_proto_msgTypes[10]
+	mi := &file_internal_protocol_events_proto_msgTypes[11]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -936,7 +1014,7 @@ func (x *Monitor) String() string {
 func (*Monitor) ProtoMessage() {}
 
 func (x *Monitor) ProtoReflect() protoreflect.Message {
-	mi := &file_internal_protocol_events_proto_msgTypes[10]
+	mi := &file_internal_protocol_events_proto_msgTypes[11]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -949,7 +1027,7 @@ func (x *Monitor) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Monitor.ProtoReflect.Descriptor instead.
 func (*Monitor) Descriptor() ([]byte, []int) {
-	return file_internal_protocol_events_proto_rawDescGZIP(), []int{10}
+	return file_internal_protocol_events_proto_rawDescGZIP(), []int{11}
 }
 
 func (x *Monitor) GetName() string {
@@ -1022,7 +1100,7 @@ type ClientCapabilities struct {
 
 func (x *ClientCapabilities) Reset() {
 	*x = ClientCapabilities{}
-	mi := &file_internal_protocol_events_proto_msgTypes[11]
+	mi := &file_internal_protocol_events_proto_msgTypes[12]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1034,7 +1112,7 @@ func (x *ClientCapabilities) String() string {
 func (*ClientCapabilities) ProtoMessage() {}
 
 func (x *ClientCapabilities) ProtoReflect() protoreflect.Message {
-	mi := &file_internal_protocol_events_proto_msgTypes[11]
+	mi := &file_internal_protocol_events_proto_msgTypes[12]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1047,7 +1125,7 @@ func (x *ClientCapabilities) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ClientCapabilities.ProtoReflect.Descriptor instead.
 func (*ClientCapabilities) Descriptor() ([]byte, []int) {
-	return file_internal_protocol_events_proto_rawDescGZIP(), []int{11}
+	return file_internal_protocol_events_proto_rawDescGZIP(), []int{12}
 }
 
 func (x *ClientCapabilities) GetCanReceiveKeyboard() bool {
@@ -1089,7 +1167,7 @@ var File_internal_protocol_events_proto protoreflect.FileDescriptor
 
 const file_internal_protocol_events_proto_rawDesc = "" +
 	"\n" +
-	"\x1einternal/protocol/events.proto\x12\x0fwaymon.protocol\"\x9b\x03\n" +
+	"\x1einternal/protocol/events.proto\x12\x0fwaymon.protocol\"\xe9\x03\n" +
 	"\n" +
 	"InputEvent\x12@\n" +
 	"\n" +
@@ -1097,13 +1175,17 @@ const file_internal_protocol_events_proto_rawDesc = "" +
 	"\fmouse_button\x18\x02 \x01(\v2!.waymon.protocol.MouseButtonEventH\x00R\vmouseButton\x12F\n" +
 	"\fmouse_scroll\x18\x03 \x01(\v2!.waymon.protocol.MouseScrollEventH\x00R\vmouseScroll\x12<\n" +
 	"\bkeyboard\x18\x04 \x01(\v2\x1e.waymon.protocol.KeyboardEventH\x00R\bkeyboard\x129\n" +
-	"\acontrol\x18\x05 \x01(\v2\x1d.waymon.protocol.ControlEventH\x00R\acontrol\x12\x1c\n" +
-	"\ttimestamp\x18\x06 \x01(\x03R\ttimestamp\x12\x1b\n" +
-	"\tsource_id\x18\a \x01(\tR\bsourceIdB\a\n" +
+	"\acontrol\x18\x05 \x01(\v2\x1d.waymon.protocol.ControlEventH\x00R\acontrol\x12L\n" +
+	"\x0emouse_position\x18\x06 \x01(\v2#.waymon.protocol.MousePositionEventH\x00R\rmousePosition\x12\x1c\n" +
+	"\ttimestamp\x18\a \x01(\x03R\ttimestamp\x12\x1b\n" +
+	"\tsource_id\x18\b \x01(\tR\bsourceIdB\a\n" +
 	"\x05event\"0\n" +
 	"\x0eMouseMoveEvent\x12\x0e\n" +
 	"\x02dx\x18\x01 \x01(\x01R\x02dx\x12\x0e\n" +
-	"\x02dy\x18\x02 \x01(\x01R\x02dy\"D\n" +
+	"\x02dy\x18\x02 \x01(\x01R\x02dy\"0\n" +
+	"\x12MousePositionEvent\x12\f\n" +
+	"\x01x\x18\x01 \x01(\x05R\x01x\x12\f\n" +
+	"\x01y\x18\x02 \x01(\x05R\x01y\"D\n" +
 	"\x10MouseButtonEvent\x12\x16\n" +
 	"\x06button\x18\x01 \x01(\rR\x06button\x12\x18\n" +
 	"\apressed\x18\x02 \x01(\bR\apressed\"c\n" +
@@ -1114,11 +1196,11 @@ const file_internal_protocol_events_proto_rawDesc = "" +
 	"\rKeyboardEvent\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\rR\x03key\x12\x18\n" +
 	"\apressed\x18\x02 \x01(\bR\apressed\x12\x1c\n" +
-	"\tmodifiers\x18\x03 \x01(\rR\tmodifiers\"\xcb\x02\n" +
+	"\tmodifiers\x18\x03 \x01(\rR\tmodifiers\"\x8e\x03\n" +
 	"\fControlEvent\x126\n" +
 	"\x04type\x18\x01 \x01(\x0e2\".waymon.protocol.ControlEvent.TypeR\x04type\x12\x1b\n" +
 	"\ttarget_id\x18\x02 \x01(\tR\btargetId\x12B\n" +
-	"\rclient_config\x18\x03 \x01(\v2\x1d.waymon.protocol.ClientConfigR\fclientConfig\"\xa1\x01\n" +
+	"\rclient_config\x18\x03 \x01(\v2\x1d.waymon.protocol.ClientConfigR\fclientConfig\"\xe4\x01\n" +
 	"\x04Type\x12\x13\n" +
 	"\x0fSWITCH_TO_LOCAL\x10\x00\x12\x14\n" +
 	"\x10SWITCH_TO_CLIENT\x10\x01\x12\x13\n" +
@@ -1126,7 +1208,10 @@ const file_internal_protocol_events_proto_rawDesc = "" +
 	"\x0fRELEASE_CONTROL\x10\x03\x12\x17\n" +
 	"\x13CLIENT_LIST_REQUEST\x10\x04\x12\x18\n" +
 	"\x14CLIENT_LIST_RESPONSE\x10\x05\x12\x11\n" +
-	"\rCLIENT_CONFIG\x10\x06\"\xa4\x01\n" +
+	"\rCLIENT_CONFIG\x10\x06\x12\x13\n" +
+	"\x0fSERVER_SHUTDOWN\x10\a\x12\x15\n" +
+	"\x11HEALTH_CHECK_PING\x10\b\x12\x15\n" +
+	"\x11HEALTH_CHECK_PONG\x10\t\"\xa4\x01\n" +
 	"\n" +
 	"ClientInfo\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x12\n" +
@@ -1190,43 +1275,45 @@ func file_internal_protocol_events_proto_rawDescGZIP() []byte {
 }
 
 var file_internal_protocol_events_proto_enumTypes = make([]protoimpl.EnumInfo, 3)
-var file_internal_protocol_events_proto_msgTypes = make([]protoimpl.MessageInfo, 12)
+var file_internal_protocol_events_proto_msgTypes = make([]protoimpl.MessageInfo, 13)
 var file_internal_protocol_events_proto_goTypes = []any{
 	(ScrollType)(0),            // 0: waymon.protocol.ScrollType
 	(ClientStatus)(0),          // 1: waymon.protocol.ClientStatus
 	(ControlEvent_Type)(0),     // 2: waymon.protocol.ControlEvent.Type
 	(*InputEvent)(nil),         // 3: waymon.protocol.InputEvent
 	(*MouseMoveEvent)(nil),     // 4: waymon.protocol.MouseMoveEvent
-	(*MouseButtonEvent)(nil),   // 5: waymon.protocol.MouseButtonEvent
-	(*MouseScrollEvent)(nil),   // 6: waymon.protocol.MouseScrollEvent
-	(*KeyboardEvent)(nil),      // 7: waymon.protocol.KeyboardEvent
-	(*ControlEvent)(nil),       // 8: waymon.protocol.ControlEvent
-	(*ClientInfo)(nil),         // 9: waymon.protocol.ClientInfo
-	(*ServerInfo)(nil),         // 10: waymon.protocol.ServerInfo
-	(*ServerCapabilities)(nil), // 11: waymon.protocol.ServerCapabilities
-	(*ClientConfig)(nil),       // 12: waymon.protocol.ClientConfig
-	(*Monitor)(nil),            // 13: waymon.protocol.Monitor
-	(*ClientCapabilities)(nil), // 14: waymon.protocol.ClientCapabilities
+	(*MousePositionEvent)(nil), // 5: waymon.protocol.MousePositionEvent
+	(*MouseButtonEvent)(nil),   // 6: waymon.protocol.MouseButtonEvent
+	(*MouseScrollEvent)(nil),   // 7: waymon.protocol.MouseScrollEvent
+	(*KeyboardEvent)(nil),      // 8: waymon.protocol.KeyboardEvent
+	(*ControlEvent)(nil),       // 9: waymon.protocol.ControlEvent
+	(*ClientInfo)(nil),         // 10: waymon.protocol.ClientInfo
+	(*ServerInfo)(nil),         // 11: waymon.protocol.ServerInfo
+	(*ServerCapabilities)(nil), // 12: waymon.protocol.ServerCapabilities
+	(*ClientConfig)(nil),       // 13: waymon.protocol.ClientConfig
+	(*Monitor)(nil),            // 14: waymon.protocol.Monitor
+	(*ClientCapabilities)(nil), // 15: waymon.protocol.ClientCapabilities
 }
 var file_internal_protocol_events_proto_depIdxs = []int32{
 	4,  // 0: waymon.protocol.InputEvent.mouse_move:type_name -> waymon.protocol.MouseMoveEvent
-	5,  // 1: waymon.protocol.InputEvent.mouse_button:type_name -> waymon.protocol.MouseButtonEvent
-	6,  // 2: waymon.protocol.InputEvent.mouse_scroll:type_name -> waymon.protocol.MouseScrollEvent
-	7,  // 3: waymon.protocol.InputEvent.keyboard:type_name -> waymon.protocol.KeyboardEvent
-	8,  // 4: waymon.protocol.InputEvent.control:type_name -> waymon.protocol.ControlEvent
-	0,  // 5: waymon.protocol.MouseScrollEvent.type:type_name -> waymon.protocol.ScrollType
-	2,  // 6: waymon.protocol.ControlEvent.type:type_name -> waymon.protocol.ControlEvent.Type
-	12, // 7: waymon.protocol.ControlEvent.client_config:type_name -> waymon.protocol.ClientConfig
-	1,  // 8: waymon.protocol.ClientInfo.status:type_name -> waymon.protocol.ClientStatus
-	9,  // 9: waymon.protocol.ServerInfo.connected_clients:type_name -> waymon.protocol.ClientInfo
-	11, // 10: waymon.protocol.ServerInfo.capabilities:type_name -> waymon.protocol.ServerCapabilities
-	13, // 11: waymon.protocol.ClientConfig.monitors:type_name -> waymon.protocol.Monitor
-	14, // 12: waymon.protocol.ClientConfig.capabilities:type_name -> waymon.protocol.ClientCapabilities
-	13, // [13:13] is the sub-list for method output_type
-	13, // [13:13] is the sub-list for method input_type
-	13, // [13:13] is the sub-list for extension type_name
-	13, // [13:13] is the sub-list for extension extendee
-	0,  // [0:13] is the sub-list for field type_name
+	6,  // 1: waymon.protocol.InputEvent.mouse_button:type_name -> waymon.protocol.MouseButtonEvent
+	7,  // 2: waymon.protocol.InputEvent.mouse_scroll:type_name -> waymon.protocol.MouseScrollEvent
+	8,  // 3: waymon.protocol.InputEvent.keyboard:type_name -> waymon.protocol.KeyboardEvent
+	9,  // 4: waymon.protocol.InputEvent.control:type_name -> waymon.protocol.ControlEvent
+	5,  // 5: waymon.protocol.InputEvent.mouse_position:type_name -> waymon.protocol.MousePositionEvent
+	0,  // 6: waymon.protocol.MouseScrollEvent.type:type_name -> waymon.protocol.ScrollType
+	2,  // 7: waymon.protocol.ControlEvent.type:type_name -> waymon.protocol.ControlEvent.Type
+	13, // 8: waymon.protocol.ControlEvent.client_config:type_name -> waymon.protocol.ClientConfig
+	1,  // 9: waymon.protocol.ClientInfo.status:type_name -> waymon.protocol.ClientStatus
+	10, // 10: waymon.protocol.ServerInfo.connected_clients:type_name -> waymon.protocol.ClientInfo
+	12, // 11: waymon.protocol.ServerInfo.capabilities:type_name -> waymon.protocol.ServerCapabilities
+	14, // 12: waymon.protocol.ClientConfig.monitors:type_name -> waymon.protocol.Monitor
+	15, // 13: waymon.protocol.ClientConfig.capabilities:type_name -> waymon.protocol.ClientCapabilities
+	14, // [14:14] is the sub-list for method output_type
+	14, // [14:14] is the sub-list for method input_type
+	14, // [14:14] is the sub-list for extension type_name
+	14, // [14:14] is the sub-list for extension extendee
+	0,  // [0:14] is the sub-list for field type_name
 }
 
 func init() { file_internal_protocol_events_proto_init() }
@@ -1240,6 +1327,7 @@ func file_internal_protocol_events_proto_init() {
 		(*InputEvent_MouseScroll)(nil),
 		(*InputEvent_Keyboard)(nil),
 		(*InputEvent_Control)(nil),
+		(*InputEvent_MousePosition)(nil),
 	}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
@@ -1247,7 +1335,7 @@ func file_internal_protocol_events_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_internal_protocol_events_proto_rawDesc), len(file_internal_protocol_events_proto_rawDesc)),
 			NumEnums:      3,
-			NumMessages:   12,
+			NumMessages:   13,
 			NumExtensions: 0,
 			NumServices:   0,
 		},
