@@ -9,10 +9,10 @@ import (
 	"syscall"
 	"time"
 
-	charmlog "github.com/charmbracelet/log"
 	"github.com/bnema/waymon/internal/input"
 	"github.com/bnema/waymon/internal/logger"
 	"github.com/bnema/waymon/internal/protocol"
+	charmlog "github.com/charmbracelet/log"
 )
 
 func main() {
