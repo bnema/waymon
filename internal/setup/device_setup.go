@@ -30,7 +30,13 @@ func (ds *DeviceSetup) RunInteractiveSetup() error {
 	// Check if devices are already configured
 	if cfg.Input.MouseDevice != "" && cfg.Input.KeyboardDevice != "" {
 		logger.Info("Input devices already configured")
-		return nil
+		// Validate that configured devices actually exist and have proper capabilities
+		if err := ds.ValidateDevices(); err != nil {
+			logger.Warnf("Device validation failed: %v", err)
+			fmt.Println("⚠️  Configured devices have issues. Please reconfigure.")
+		} else {
+			return nil
+		}
 	}
 
 	// Check if we have permission to access input devices
@@ -42,11 +48,14 @@ func (ds *DeviceSetup) RunInteractiveSetup() error {
 	fmt.Println("\n🖱️  Waymon Server Setup - Input Device Selection")
 	fmt.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
 	fmt.Println("This appears to be your first time running Waymon server.")
-	fmt.Println("Let's select the input devices to capture from.\n")
+	fmt.Println("Let's select the input devices to capture from.")
+	fmt.Println("\nIMPORTANT: We'll check actual device capabilities to ensure")
+	fmt.Println("we select devices that can properly capture mouse/keyboard input.\n")
 
 	// Select mouse device if not configured
 	if cfg.Input.MouseDevice == "" {
 		fmt.Println("📌 Step 1: Select Mouse Device")
+		fmt.Println("Looking for devices with X/Y movement capabilities...")
 		mousePath, err := ds.selector.SelectMouseDeviceEnhanced()
 		if err != nil {
 			return fmt.Errorf("mouse selection failed: %w", err)
@@ -59,6 +68,7 @@ func (ds *DeviceSetup) RunInteractiveSetup() error {
 	// Select keyboard device if not configured
 	if cfg.Input.KeyboardDevice == "" {
 		fmt.Println("📌 Step 2: Select Keyboard Device")
+		fmt.Println("Looking for devices with keyboard key capabilities...")
 		keyboardPath, err := ds.selector.SelectKeyboardDeviceEnhanced()
 		if err != nil {
 			// Keyboard is optional
@@ -132,9 +142,10 @@ func (ds *DeviceSetup) hasInputPermission() bool {
 	return false
 }
 
-// ValidateDevices checks if configured devices are still valid
+// ValidateDevices checks if configured devices are still valid and have proper capabilities
 func (ds *DeviceSetup) ValidateDevices() error {
 	cfg := config.Get()
+	detector := input.NewDeviceDetector()
 
 	// Validate mouse device
 	if cfg.Input.MouseDevice != "" {
@@ -144,7 +155,26 @@ func (ds *DeviceSetup) ValidateDevices() error {
 		if file, err := os.Open(cfg.Input.MouseDevice); err != nil {
 			return fmt.Errorf("cannot access mouse device %s: %w", cfg.Input.MouseDevice, err)
 		} else {
+			// Check if device actually has mouse capabilities
+			caps := detector.GetDeviceCapabilities(file)
 			file.Close()
+			
+			// Check for REL_X and REL_Y
+			hasMouseMovement := false
+			if relCaps, hasRel := caps[0x02]; hasRel { // EV_REL
+				hasX := false
+				hasY := false
+				for _, rel := range relCaps {
+					if rel == 0x00 { hasX = true }
+					if rel == 0x01 { hasY = true }
+				}
+				hasMouseMovement = hasX && hasY
+			}
+			
+			if !hasMouseMovement {
+				return fmt.Errorf("configured mouse device %s does not have X/Y movement capabilities", cfg.Input.MouseDevice)
+			}
+			logger.Infof("✓ Mouse device %s validated - has proper movement capabilities", cfg.Input.MouseDevice)
 		}
 	}
 
@@ -156,7 +186,25 @@ func (ds *DeviceSetup) ValidateDevices() error {
 		} else if file, err := os.Open(cfg.Input.KeyboardDevice); err != nil {
 			logger.Warnf("Cannot access keyboard device %s: %v", cfg.Input.KeyboardDevice, err)
 		} else {
+			// Check if device actually has keyboard capabilities
+			caps := detector.GetDeviceCapabilities(file)
 			file.Close()
+			
+			// Check for keyboard keys
+			keyboardKeys := 0
+			if keyCaps, hasKeys := caps[0x01]; hasKeys { // EV_KEY
+				for _, key := range keyCaps {
+					if key >= 1 && key <= 83 { // KEY_ESC to KEY_KPDOT
+						keyboardKeys++
+					}
+				}
+			}
+			
+			if keyboardKeys < 20 {
+				logger.Warnf("Configured keyboard device %s has limited keyboard capabilities (%d keys)", cfg.Input.KeyboardDevice, keyboardKeys)
+			} else {
+				logger.Infof("✓ Keyboard device %s validated - has %d keyboard keys", cfg.Input.KeyboardDevice, keyboardKeys)
+			}
 		}
 	}
 
