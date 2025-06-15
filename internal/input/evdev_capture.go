@@ -23,6 +23,7 @@ type EvdevCapture struct {
 	cancel         context.CancelFunc
 	mousePath      string // Configured mouse device path
 	keyboardPath   string // Configured keyboard device path
+	devicesGrabbed bool   // Track if devices are grabbed
 }
 
 // NewEvdevCapture creates a new evdev-based input capture
@@ -112,6 +113,11 @@ func (e *EvdevCapture) Stop() error {
 		e.cancel()
 	}
 
+	// Release grabbed devices before closing
+	if e.devicesGrabbed {
+		e.ungrabDevices()
+	}
+
 	// Close devices
 	if e.mouseDevice != nil {
 		e.mouseDevice.File.Close()
@@ -129,8 +135,27 @@ func (e *EvdevCapture) Stop() error {
 
 // SetTarget sets the target client ID for input events
 func (e *EvdevCapture) SetTarget(clientID string) error {
+	oldTarget := e.currentTarget
 	e.currentTarget = clientID
-	logger.Infof("Set input capture target to client: %s", clientID)
+
+	// Handle device grabbing based on target
+	if clientID == "" {
+		// Release devices when controlling local system
+		if e.devicesGrabbed {
+			e.ungrabDevices()
+		}
+		logger.Info("Input capture target cleared - controlling local system")
+	} else {
+		// Grab devices when controlling a client
+		if !e.devicesGrabbed {
+			if err := e.grabDevices(); err != nil {
+				// Revert target on grab failure
+				e.currentTarget = oldTarget
+				return fmt.Errorf("failed to grab input devices: %w", err)
+			}
+		}
+		logger.Infof("Set input capture target to client: %s", clientID)
+	}
 	return nil
 }
 
@@ -374,4 +399,57 @@ func (e *EvdevCapture) sendKeyboardEvent(key uint32, pressed bool, timestamp int
 	}
 
 	e.onInputEvent(event)
+}
+
+// grabDevices grabs exclusive access to input devices
+func (e *EvdevCapture) grabDevices() error {
+	var errors []string
+
+	if e.mouseDevice != nil {
+		if err := e.mouseDevice.Grab(); err != nil {
+			errors = append(errors, fmt.Sprintf("mouse grab failed: %v", err))
+		} else {
+			logger.Info("Grabbed exclusive access to mouse device")
+		}
+	}
+
+	if e.keyboardDevice != nil {
+		if err := e.keyboardDevice.Grab(); err != nil {
+			errors = append(errors, fmt.Sprintf("keyboard grab failed: %v", err))
+		} else {
+			logger.Info("Grabbed exclusive access to keyboard device")
+		}
+	}
+
+	if len(errors) > 0 {
+		// If any grab failed, ungrab all to maintain consistency
+		e.ungrabDevices()
+		return fmt.Errorf("device grab errors: %s", strings.Join(errors, "; "))
+	}
+
+	e.devicesGrabbed = true
+	logger.Info("Successfully grabbed input devices for exclusive access")
+	return nil
+}
+
+// ungrabDevices releases exclusive access to input devices
+func (e *EvdevCapture) ungrabDevices() {
+	if e.mouseDevice != nil {
+		if err := e.mouseDevice.Release(); err != nil {
+			logger.Warnf("Failed to release mouse device: %v", err)
+		} else {
+			logger.Info("Released exclusive access to mouse device")
+		}
+	}
+
+	if e.keyboardDevice != nil {
+		if err := e.keyboardDevice.Release(); err != nil {
+			logger.Warnf("Failed to release keyboard device: %v", err)
+		} else {
+			logger.Info("Released exclusive access to keyboard device")
+		}
+	}
+
+	e.devicesGrabbed = false
+	logger.Info("Released input device grabs")
 }
