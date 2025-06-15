@@ -50,7 +50,7 @@ func (ds *DeviceSetup) RunInteractiveSetup() error {
 	fmt.Println("This appears to be your first time running Waymon server.")
 	fmt.Println("Let's select the input devices to capture from.")
 	fmt.Println("\nIMPORTANT: We'll check actual device capabilities to ensure")
-	fmt.Println("we select devices that can properly capture mouse/keyboard input.\n")
+	fmt.Println("we select devices that can properly capture mouse/keyboard input.")
 
 	// Select mouse device if not configured
 	if cfg.Input.MouseDevice == "" {
@@ -158,19 +158,23 @@ func (ds *DeviceSetup) ValidateDevices() error {
 			// Check if device actually has mouse capabilities
 			caps := detector.GetDeviceCapabilities(file)
 			file.Close()
-			
+
 			// Check for REL_X and REL_Y
 			hasMouseMovement := false
 			if relCaps, hasRel := caps[0x02]; hasRel { // EV_REL
 				hasX := false
 				hasY := false
 				for _, rel := range relCaps {
-					if rel == 0x00 { hasX = true }
-					if rel == 0x01 { hasY = true }
+					if rel == 0x00 {
+						hasX = true
+					}
+					if rel == 0x01 {
+						hasY = true
+					}
 				}
 				hasMouseMovement = hasX && hasY
 			}
-			
+
 			if !hasMouseMovement {
 				return fmt.Errorf("configured mouse device %s does not have X/Y movement capabilities", cfg.Input.MouseDevice)
 			}
@@ -189,7 +193,7 @@ func (ds *DeviceSetup) ValidateDevices() error {
 			// Check if device actually has keyboard capabilities
 			caps := detector.GetDeviceCapabilities(file)
 			file.Close()
-			
+
 			// Check for keyboard keys
 			keyboardKeys := 0
 			if keyCaps, hasKeys := caps[0x01]; hasKeys { // EV_KEY
@@ -199,7 +203,7 @@ func (ds *DeviceSetup) ValidateDevices() error {
 					}
 				}
 			}
-			
+
 			if keyboardKeys < 20 {
 				logger.Warnf("Configured keyboard device %s has limited keyboard capabilities (%d keys)", cfg.Input.KeyboardDevice, keyboardKeys)
 			} else {

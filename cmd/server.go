@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/bnema/waymon/internal/config"
+	"github.com/bnema/waymon/internal/ipc"
 	"github.com/bnema/waymon/internal/logger"
 	"github.com/bnema/waymon/internal/protocol"
 	"github.com/bnema/waymon/internal/server"
@@ -185,6 +186,27 @@ func initializeServer(ctx context.Context, srv *server.Server, cfg *config.Confi
 	logger.Info("Starting network server...")
 	if err := srv.StartNetworking(ctx); err != nil {
 		return fmt.Errorf("failed to start network server: %w", err)
+	}
+
+	// Start IPC socket server for switch commands
+	if cm := srv.GetClientManager(); cm != nil {
+		logger.Info("Starting IPC socket server...")
+		ipcServer, err := ipc.NewSocketServer(cm)
+		if err != nil {
+			logger.Errorf("Failed to create IPC socket server: %v", err)
+			// Don't fail server startup for IPC issues
+		} else {
+			if err := ipcServer.Start(); err != nil {
+				logger.Errorf("Failed to start IPC socket server: %v", err)
+			} else {
+				logger.Info("IPC socket server started successfully")
+				// Stop IPC server on shutdown
+				go func() {
+					<-ctx.Done()
+					ipcServer.Stop()
+				}()
+			}
+		}
 	}
 
 	return nil

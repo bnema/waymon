@@ -65,7 +65,7 @@ func (s *Server) Start(ctx context.Context) error {
 	if err := s.initNetwork(); err != nil {
 		return fmt.Errorf("failed to initialize network: %w", err)
 	}
-	
+
 	// Start the input backend AFTER all connections are made
 	logger.Info("Server: Starting input backend")
 	if err := s.inputBackend.Start(ctx); err != nil {
@@ -98,10 +98,10 @@ func (s *Server) initClientManager() error {
 	}
 	logger.Debug("Server.initClientManager: Client manager created successfully")
 	s.clientManager = clientManager
-	
+
 	// Input backend is managed by client manager directly
 	logger.Info("Server: Client manager has been set up with input backend")
-	
+
 	return nil
 }
 
@@ -128,7 +128,7 @@ func (s *Server) initInput() error {
 		return err
 	}
 	s.inputBackend = backend
-	
+
 	// NOTE: We set up the callback BEFORE starting the backend
 	// so the test event generator can start properly
 	logger.Info("Server: Setting up input event callback (before Start)")
@@ -140,7 +140,7 @@ func (s *Server) initInput() error {
 			logger.Warn("Server: Input event received but client manager not initialized")
 		}
 	})
-	
+
 	return nil
 }
 
