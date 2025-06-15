@@ -36,7 +36,7 @@ func main() {
 		logger.Errorf("❌ Failed to initialize config: %v", err)
 		os.Exit(1)
 	}
-	
+
 	cfg := config.Get()
 	if cfg.Input.MouseDevice == "" {
 		logger.Error("❌ No mouse device configured!")
@@ -77,7 +77,7 @@ func main() {
 // testDirectEvdev tests direct access to the evdev device
 func testDirectEvdev(devicePath string) error {
 	logger.Infof("Opening device: %s", devicePath)
-	
+
 	device, err := evdev.Open(devicePath)
 	if err != nil {
 		return fmt.Errorf("failed to open device: %w", err)
@@ -90,12 +90,12 @@ func testDirectEvdev(devicePath string) error {
 
 	logger.Infof("✓ Device opened: %s", device.Name)
 	logger.Infof("  Physical: %s", device.Phys)
-	
+
 	// Check device capabilities
 	caps := device.Capabilities
 	if caps != nil {
 		logger.Info("Device capabilities:")
-		for evType, _ := range caps {
+		for evType := range caps {
 			if evType.Type == evdev.EV_REL {
 				logger.Info("  - Supports relative movement (mouse-like)")
 			}
@@ -107,16 +107,16 @@ func testDirectEvdev(devicePath string) error {
 			}
 		}
 	}
-	
+
 	// First try reading without grabbing
 	logger.Info("Testing event reading WITHOUT grab (move your mouse)...")
 	ctx1, cancel1 := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel1()
-	
+
 	if err := testReadEvents(device, ctx1, false); err != nil {
 		logger.Warnf("Reading without grab failed: %v", err)
 		logger.Info("Now testing WITH grab...")
-		
+
 		// Test grabbing
 		logger.Info("Testing device grab...")
 		if err := device.Grab(); err != nil {
@@ -124,16 +124,16 @@ func testDirectEvdev(devicePath string) error {
 		}
 		logger.Info("✓ Device grabbed successfully")
 		defer device.Release()
-		
+
 		// Test reading events with grab
 		ctx2, cancel2 := context.WithTimeout(context.Background(), 3*time.Second)
 		defer cancel2()
-		
+
 		if err := testReadEvents(device, ctx2, true); err != nil {
 			return err
 		}
 	}
-	
+
 	return nil
 }
 
@@ -144,11 +144,11 @@ func testReadEvents(device *evdev.InputDevice, ctx context.Context, grabbed bool
 		grabStatus = "WITH grab"
 	}
 	logger.Infof("Testing event reading %s (move your mouse)...", grabStatus)
-	
+
 	eventCount := 0
 	eventChan := make(chan *evdev.InputEvent, 100)
 	errChan := make(chan error, 1)
-	
+
 	// Start a goroutine to read events
 	go func() {
 		logger.Info("Event reader goroutine started")
@@ -171,7 +171,7 @@ func testReadEvents(device *evdev.InputDevice, ctx context.Context, grabbed bool
 					}
 					return
 				}
-				
+
 				if len(events) > 0 {
 					logger.Infof("📍 Read %d events on attempt %d", len(events), readCount)
 					for _, event := range events {
@@ -183,14 +183,14 @@ func testReadEvents(device *evdev.InputDevice, ctx context.Context, grabbed bool
 					}
 				} else {
 					emptyReads++
-					if emptyReads % 10 == 0 {
+					if emptyReads%10 == 0 {
 						logger.Debugf("Still reading... %d empty reads so far", emptyReads)
 					}
 				}
 			}
 		}
 	}()
-	
+
 	for {
 		select {
 		case <-ctx.Done():
@@ -205,7 +205,7 @@ func testReadEvents(device *evdev.InputDevice, ctx context.Context, grabbed bool
 			if event == nil {
 				continue
 			}
-			
+
 			if event.Type == evdev.EV_REL && (event.Code == evdev.REL_X || event.Code == evdev.REL_Y) {
 				eventCount++
 				axis := "X"
@@ -238,7 +238,7 @@ func testWaylandVirtualInput() (*input.WaylandVirtualInput, error) {
 
 	// Test injection by drawing a small circle
 	logger.Info("Drawing test circle with virtual mouse...")
-	
+
 	radius := 50.0
 	steps := 20
 
@@ -264,14 +264,14 @@ func testFullPipeline(devicePath string, waylandBackend *input.WaylandVirtualInp
 
 	// Create evdev capture backend
 	evdevBackend := input.NewEvdevCaptureWithDevices(devicePath, "")
-	
+
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
 	// Set up event forwarding
 	var eventCount int
 	var mu sync.Mutex
-	
+
 	evdevBackend.OnInputEvent(func(event *protocol.InputEvent) {
 		mu.Lock()
 		eventCount++
@@ -279,7 +279,7 @@ func testFullPipeline(devicePath string, waylandBackend *input.WaylandVirtualInp
 		mu.Unlock()
 
 		logger.Infof("📤 Event #%d captured, injecting...", count)
-		
+
 		// Forward to Wayland virtual input
 		switch e := event.Event.(type) {
 		case *protocol.InputEvent_MouseMove:
