@@ -53,10 +53,10 @@ func CreateServerBackend() (InputBackend, error) {
 		
 		// Check if devices are configured
 		cfg := config.Get()
-		if cfg != nil && (cfg.Server.MouseDevice != "" || cfg.Server.KeyboardDevice != "") {
+		if cfg != nil && (cfg.Input.MouseDevice != "" || cfg.Input.KeyboardDevice != "") {
 			logger.Infof("Using configured devices - Mouse: %s, Keyboard: %s", 
-				cfg.Server.MouseDevice, cfg.Server.KeyboardDevice)
-			return NewEvdevCaptureWithDevices(cfg.Server.MouseDevice, cfg.Server.KeyboardDevice), nil
+				cfg.Input.MouseDevice, cfg.Input.KeyboardDevice)
+			return NewEvdevCaptureWithDevices(cfg.Input.MouseDevice, cfg.Input.KeyboardDevice), nil
 		}
 		
 		return NewEvdevCapture(), nil
