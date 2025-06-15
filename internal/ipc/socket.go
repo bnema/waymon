@@ -71,8 +71,14 @@ func (s *SocketServer) Start() error {
 		return fmt.Errorf("failed to create socket listener: %w", err)
 	}
 
-	// Set socket permissions (user only)
-	if err := os.Chmod(s.socketPath, 0600); err != nil {
+	// Set socket permissions
+	// For server mode (root), allow all users to connect (0666)
+	// For user mode, restrict to owner only (0600)
+	perms := os.FileMode(0600)
+	if os.Geteuid() == 0 {
+		perms = 0666
+	}
+	if err := os.Chmod(s.socketPath, perms); err != nil {
 		listener.Close()
 		return fmt.Errorf("failed to set socket permissions: %w", err)
 	}
@@ -253,6 +259,12 @@ func (s *SocketServer) writeMessage(conn net.Conn, msg *pb.IPCMessage) error {
 
 // getSocketPath returns the path for the Unix socket
 func getSocketPath() (string, error) {
+	// For server mode (running as root), use a predictable socket path
+	if os.Geteuid() == 0 {
+		return "/tmp/waymon.sock", nil
+	}
+	
+	// For client mode (regular user), include username in socket path
 	currentUser, err := user.Current()
 	if err != nil {
 		return "", fmt.Errorf("failed to get current user: %w", err)
