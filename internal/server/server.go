@@ -14,7 +14,7 @@ import (
 	"github.com/bnema/waymon/internal/input"
 	"github.com/bnema/waymon/internal/logger"
 	"github.com/bnema/waymon/internal/network"
-	waymonProto "github.com/bnema/waymon/internal/proto"
+	"github.com/bnema/waymon/internal/protocol"
 )
 
 // Server represents the main server
@@ -65,6 +65,12 @@ func (s *Server) Start(ctx context.Context) error {
 	if err := s.initNetwork(); err != nil {
 		return fmt.Errorf("failed to initialize network: %w", err)
 	}
+	
+	// Start the input backend AFTER all connections are made
+	logger.Info("Server: Starting input backend")
+	if err := s.inputBackend.Start(ctx); err != nil {
+		return fmt.Errorf("failed to start input backend: %w", err)
+	}
 
 	return nil
 }
@@ -92,6 +98,10 @@ func (s *Server) initClientManager() error {
 	}
 	logger.Debug("Server.initClientManager: Client manager created successfully")
 	s.clientManager = clientManager
+	
+	// Input backend is managed by client manager directly
+	logger.Info("Server: Client manager has been set up with input backend")
+	
 	return nil
 }
 
@@ -112,12 +122,25 @@ func (s *Server) initDisplay() error {
 
 // initInput initializes the input handler
 func (s *Server) initInput() error {
-	// Input handler will use privileged helper if needed
-	backend, err := input.CreateBackend()
+	// Server needs evdev backend for actual input capture
+	backend, err := input.CreateServerBackend()
 	if err != nil {
 		return err
 	}
 	s.inputBackend = backend
+	
+	// NOTE: We set up the callback BEFORE starting the backend
+	// so the test event generator can start properly
+	logger.Info("Server: Setting up input event callback (before Start)")
+	s.inputBackend.OnInputEvent(func(event *protocol.InputEvent) {
+		logger.Warnf("Server: Received input event from backend: %T", event.Event)
+		if s.clientManager != nil {
+			s.clientManager.HandleInputEvent(event)
+		} else {
+			logger.Warn("Server: Input event received but client manager not initialized")
+		}
+	})
+	
 	return nil
 }
 
@@ -139,8 +162,8 @@ func (s *Server) initNetwork() error {
 	s.sshServer = network.NewSSHServer(s.config.Server.Port, hostKeyPath, authKeysPath)
 	s.sshServer.SetMaxClients(s.config.Server.MaxClients)
 
-	// Set up event handler
-	s.sshServer.OnMouseEvent = s.handleMouseEvent
+	// Event handler is set up by the command layer (cmd/server.go)
+	// This allows the handler to be set after the SSH server is created
 
 	return nil
 }
@@ -154,34 +177,8 @@ func (s *Server) runNetworkServer(ctx context.Context) {
 	}
 }
 
-// handleMouseEvent processes incoming mouse events
-func (s *Server) handleMouseEvent(event *network.MouseEvent) error {
-	if s.inputBackend == nil {
-		return fmt.Errorf("input backend not initialized")
-	}
-
-	// Log event details
-	switch event.MouseEvent.Type {
-	case waymonProto.EventType_EVENT_TYPE_ENTER:
-		logger.Info("Mouse entered from client - taking control")
-	case waymonProto.EventType_EVENT_TYPE_LEAVE:
-		logger.Info("Mouse left to client - releasing control")
-	case waymonProto.EventType_EVENT_TYPE_MOVE:
-		logger.Debugf("Mouse move: dx=%.0f, dy=%.0f", event.MouseEvent.X, event.MouseEvent.Y)
-	case waymonProto.EventType_EVENT_TYPE_CLICK:
-		action := "pressed"
-		if !event.MouseEvent.IsPressed {
-			action = "released"
-		}
-		logger.Debugf("Mouse button %s: %s", event.MouseEvent.Button.String(), action)
-	case waymonProto.EventType_EVENT_TYPE_SCROLL:
-		logger.Debugf("Mouse scroll: %s", event.MouseEvent.Direction.String())
-	}
-
-	// Note: Server-side input processing would be implemented here if needed
-	// For now, the server primarily captures and forwards events to clients
-	return nil
-}
+// Note: Event processing is now handled by ClientManager.HandleInputEvent
+// which receives events via the OnInputEvent callback from the SSH server
 
 // Stop stops the server
 func (s *Server) Stop() {

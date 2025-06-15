@@ -9,7 +9,6 @@ import (
 
 	"github.com/bnema/waymon/internal/config"
 	"github.com/bnema/waymon/internal/logger"
-	Proto "github.com/bnema/waymon/internal/proto"
 	"github.com/bnema/waymon/internal/protocol"
 	"github.com/charmbracelet/ssh"
 	"github.com/charmbracelet/wish"
@@ -41,7 +40,7 @@ type SSHServer struct {
 	wg       sync.WaitGroup
 
 	// Event handlers
-	OnMouseEvent         EventHandler
+	OnInputEvent         func(event *protocol.InputEvent)
 	OnClientConnected    func(addr string, publicKey string)
 	OnClientDisconnected func(addr string)
 	OnAuthRequest        func(addr, publicKey, fingerprint string) bool // Returns approval
@@ -116,21 +115,28 @@ func (s *SSHServer) Start(ctx context.Context) error {
 
 // SendEventToClient sends an input event to a specific client by address
 func (s *SSHServer) SendEventToClient(clientAddr string, event *protocol.InputEvent) error {
+	logger.Debugf("[SSH-SERVER] SendEventToClient called: clientAddr=%s, eventType=%T", clientAddr, event.Event)
+	
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
 	// Find client by address
 	for _, client := range s.clients {
 		if client.addr == clientAddr {
+			logger.Debugf("[SSH-SERVER] Found client for address %s, writing event", clientAddr)
+			
 			// Use the same message format as the client expects
-			if err := writeInputMessage(client.writer, event); err != nil {
+			if err := s.writeInputEvent(client.writer, event); err != nil {
+				logger.Errorf("[SSH-SERVER] Failed to write event to client %s: %v", clientAddr, err)
 				return fmt.Errorf("failed to send event to client: %w", err)
 			}
 
+			logger.Debugf("[SSH-SERVER] Successfully sent event to client %s", clientAddr)
 			return nil
 		}
 	}
 
+	logger.Errorf("[SSH-SERVER] Client not found for address: %s", clientAddr)
 	return fmt.Errorf("client not found: %s", clientAddr)
 }
 
@@ -369,15 +375,16 @@ func (s *SSHServer) handleMouseEvents(ctx context.Context, sess ssh.Session) {
 			}
 
 			// Unmarshal protobuf event
-			var protoEvent Proto.MouseEvent
-			if err := proto.Unmarshal(eventBuf, &protoEvent); err != nil {
+			var inputEvent protocol.InputEvent
+			if err := proto.Unmarshal(eventBuf, &inputEvent); err != nil {
+				logger.Debugf("[SSH-SERVER] Failed to unmarshal input event: %v", err)
 				continue
 			}
 
 			// Call event handler
-			if s.OnMouseEvent != nil {
-				event := &MouseEvent{MouseEvent: &protoEvent}
-				s.OnMouseEvent(event)
+			if s.OnInputEvent != nil {
+				logger.Debugf("[SSH-SERVER] Forwarding input event: type=%T, sourceId=%s", inputEvent.Event, inputEvent.SourceId)
+				s.OnInputEvent(&inputEvent)
 			}
 		}
 	}
@@ -445,13 +452,18 @@ func (s *SSHServer) GetClientSessions() map[string]string {
 
 // writeInputEvent writes an input event to a client
 func (s *SSHServer) writeInputEvent(w io.Writer, event *protocol.InputEvent) error {
+	logger.Debugf("[SSH-SERVER] writeInputEvent: marshaling event type=%T", event.Event)
+	
 	data, err := proto.Marshal(event)
 	if err != nil {
+		logger.Errorf("[SSH-SERVER] Failed to marshal input event: %v", err)
 		return fmt.Errorf("failed to marshal input event: %w", err)
 	}
 
 	// Write length prefix (4 bytes, big-endian)
 	length := len(data)
+	logger.Debugf("[SSH-SERVER] Writing message: length=%d bytes", length)
+	
 	lengthBuf := []byte{
 		byte(length >> 24),
 		byte(length >> 16),
@@ -460,12 +472,15 @@ func (s *SSHServer) writeInputEvent(w io.Writer, event *protocol.InputEvent) err
 	}
 
 	if _, err := w.Write(lengthBuf); err != nil {
+		logger.Errorf("[SSH-SERVER] Failed to write length prefix: %v", err)
 		return fmt.Errorf("failed to write length: %w", err)
 	}
 
 	if _, err := w.Write(data); err != nil {
+		logger.Errorf("[SSH-SERVER] Failed to write data: %v", err)
 		return fmt.Errorf("failed to write data: %w", err)
 	}
 
+	logger.Debugf("[SSH-SERVER] Successfully wrote %d bytes to client", length)
 	return nil
 }

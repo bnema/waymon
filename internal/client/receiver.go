@@ -47,8 +47,8 @@ type ControlStatus struct {
 
 // NewInputReceiver creates a new input receiver for the client
 func NewInputReceiver(serverAddress string) (*InputReceiver, error) {
-	// Create input backend for injection
-	backend, err := input.CreateBackend()
+	// Create client input backend for injection
+	backend, err := input.CreateClientBackend()
 	if err != nil {
 		return nil, fmt.Errorf("failed to create input backend: %w", err)
 	}
@@ -91,6 +91,7 @@ func (ir *InputReceiver) Connect(ctx context.Context, privateKeyPath string) err
 	ir.connected = true
 
 	// Set up input event handler
+	logger.Debug("[CLIENT-RECEIVER] Setting up SSH input event handler")
 	ir.sshConnection.OnInputEvent(ir.processInputEvent)
 
 	// Send client configuration to server
@@ -170,8 +171,12 @@ func (ir *InputReceiver) OnStatusChange(callback func(ControlStatus)) {
 
 // processInputEvent processes a received input event
 func (ir *InputReceiver) processInputEvent(event *protocol.InputEvent) {
+	logger.Debugf("[CLIENT-RECEIVER] Processing input event: type=%T, timestamp=%d, sourceId=%s", 
+		event.Event, event.Timestamp, event.SourceId)
+	
 	// Handle control events first
 	if controlEvent := event.GetControl(); controlEvent != nil {
+		logger.Debugf("[CLIENT-RECEIVER] Event is control event: type=%v", controlEvent.Type)
 		ir.handleControlEvent(controlEvent)
 		return
 	}
@@ -179,20 +184,30 @@ func (ir *InputReceiver) processInputEvent(event *protocol.InputEvent) {
 	// Only inject input if we're being controlled
 	ir.mu.RLock()
 	beingControlled := ir.controlStatus.BeingControlled
+	controllerName := ir.controlStatus.ControllerName
 	ir.mu.RUnlock()
 
+	logger.Debugf("[CLIENT-RECEIVER] Control status: beingControlled=%v, controller=%s", 
+		beingControlled, controllerName)
+
 	if !beingControlled {
+		logger.Debug("[CLIENT-RECEIVER] Not being controlled, ignoring input event")
 		return
 	}
 
 	// Inject the input event based on type
+	logger.Debugf("[CLIENT-RECEIVER] Injecting event type: %T", event.Event)
 	if err := ir.injectEvent(event); err != nil {
-		logger.Errorf("Failed to inject input event: %v", err)
+		logger.Errorf("[CLIENT-RECEIVER] Failed to inject input event: %v", err)
+	} else {
+		logger.Debugf("[CLIENT-RECEIVER] Successfully injected event")
 	}
 }
 
 // handleControlEvent processes control events from the server
 func (ir *InputReceiver) handleControlEvent(control *protocol.ControlEvent) {
+	logger.Debugf("[CLIENT-RECEIVER] Handling control event: type=%v, targetId=%s", control.Type, control.TargetId)
+	
 	ir.mu.Lock()
 	defer ir.mu.Unlock()
 
@@ -201,23 +216,24 @@ func (ir *InputReceiver) handleControlEvent(control *protocol.ControlEvent) {
 		// Server is requesting to control this client
 		ir.controlStatus.BeingControlled = true
 		ir.controlStatus.ControllerName = control.TargetId // Server ID/name
-		logger.Infof("Control granted to server: %s", control.TargetId)
+		ir.controlStatus.ConnectedAt = time.Now().Unix()
+		logger.Infof("[CLIENT-RECEIVER] Control granted to server: %s", control.TargetId)
 
 	case protocol.ControlEvent_RELEASE_CONTROL:
 		// Server is releasing control of this client
 		ir.controlStatus.BeingControlled = false
 		ir.controlStatus.ControllerName = ""
-		logger.Info("Control released by server")
+		logger.Info("[CLIENT-RECEIVER] Control released by server")
 
 	case protocol.ControlEvent_SWITCH_TO_LOCAL:
 		// Server switched to local control (we're no longer being controlled)
 		ir.controlStatus.BeingControlled = false
 		ir.controlStatus.ControllerName = ""
-		logger.Info("Server switched to local control")
+		logger.Info("[CLIENT-RECEIVER] Server switched to local control")
 
 	case protocol.ControlEvent_SERVER_SHUTDOWN:
 		// Server is shutting down gracefully
-		logger.Info("Server is shutting down - will attempt to reconnect")
+		logger.Info("[CLIENT-RECEIVER] Server is shutting down - will attempt to reconnect")
 		// Mark as disconnected so reconnection logic can take over
 		ir.connected = false
 		// Clear control status
@@ -234,14 +250,15 @@ func (ir *InputReceiver) handleControlEvent(control *protocol.ControlEvent) {
 	case protocol.ControlEvent_HEALTH_CHECK_PONG:
 		// Server responded to health check
 		ir.lastHealthCheckResponse = time.Now()
-		logger.Info("Received health check response from server")
+		logger.Info("[CLIENT-RECEIVER] Received health check response from server")
 
 	default:
-		logger.Warnf("Unknown control event type: %v", control.Type)
+		logger.Warnf("[CLIENT-RECEIVER] Unknown control event type: %v", control.Type)
 	}
 
 	// Notify status change
 	if ir.onStatusChange != nil {
+		logger.Debug("[CLIENT-RECEIVER] Notifying status change callback")
 		ir.onStatusChange(ir.controlStatus)
 	}
 }
@@ -543,6 +560,7 @@ func (ir *InputReceiver) reconnectToServer(ctx context.Context) error {
 	ir.connected = true
 
 	// Set up input event handler
+	logger.Debug("[CLIENT-RECEIVER] Setting up SSH input event handler")
 	ir.sshConnection.OnInputEvent(ir.processInputEvent)
 
 	// Send client configuration to server
@@ -600,19 +618,35 @@ func (ir *InputReceiver) injectEvent(event *protocol.InputEvent) error {
 	// Cast to WaylandVirtualInput to access injection methods
 	backend, ok := ir.inputBackend.(*input.WaylandVirtualInput)
 	if !ok {
+		logger.Errorf("[CLIENT-RECEIVER] Input backend is not WaylandVirtualInput, got %T", ir.inputBackend)
 		return fmt.Errorf("input backend does not support injection")
 	}
 
 	switch e := event.Event.(type) {
 	case *protocol.InputEvent_MouseMove:
+		logger.Debugf("[CLIENT-RECEIVER] Injecting mouse move: dx=%d, dy=%d", e.MouseMove.Dx, e.MouseMove.Dy)
 		return backend.InjectMouseMove(e.MouseMove.Dx, e.MouseMove.Dy)
+		
 	case *protocol.InputEvent_MouseButton:
+		logger.Debugf("[CLIENT-RECEIVER] Injecting mouse button: button=%d, pressed=%v", e.MouseButton.Button, e.MouseButton.Pressed)
 		return backend.InjectMouseButton(e.MouseButton.Button, e.MouseButton.Pressed)
+		
 	case *protocol.InputEvent_MouseScroll:
+		logger.Debugf("[CLIENT-RECEIVER] Injecting mouse scroll: dx=%d, dy=%d", e.MouseScroll.Dx, e.MouseScroll.Dy)
 		return backend.InjectMouseScroll(e.MouseScroll.Dx, e.MouseScroll.Dy)
+		
 	case *protocol.InputEvent_Keyboard:
+		logger.Debugf("[CLIENT-RECEIVER] Injecting keyboard event: key=%d, pressed=%v", e.Keyboard.Key, e.Keyboard.Pressed)
 		return backend.InjectKeyEvent(e.Keyboard.Key, e.Keyboard.Pressed)
+		
+	case *protocol.InputEvent_MousePosition:
+		logger.Debugf("[CLIENT-RECEIVER] Received mouse position event: x=%d, y=%d (not implemented)", 
+			e.MousePosition.X, e.MousePosition.Y)
+		// TODO: Implement absolute positioning if needed
+		return nil
+		
 	default:
+		logger.Errorf("[CLIENT-RECEIVER] Unsupported input event type: %T", event.Event)
 		return fmt.Errorf("unsupported input event type: %T", event.Event)
 	}
 }

@@ -10,6 +10,7 @@ import (
 
 	"github.com/bnema/waymon/internal/config"
 	"github.com/bnema/waymon/internal/logger"
+	"github.com/bnema/waymon/internal/protocol"
 	"github.com/bnema/waymon/internal/server"
 	"github.com/bnema/waymon/internal/ui"
 	tea "github.com/charmbracelet/bubbletea"
@@ -110,6 +111,16 @@ func initializeServer(ctx context.Context, srv *server.Server, cfg *config.Confi
 				// In non-TUI mode, auto-approve (you might want to change this)
 				logger.Warnf("Auto-approving SSH connection from %s (fingerprint: %s) - running in no-TUI mode", addr, fingerprint)
 				return true
+			}
+		}
+		
+		// Set up input event handler to forward events from SSH to ClientManager
+		sshSrv.OnInputEvent = func(event *protocol.InputEvent) {
+			if cm := srv.GetClientManager(); cm != nil {
+				logger.Debugf("[SSH-SERVER] Forwarding input event to ClientManager: type=%T, sourceId=%s", event.Event, event.SourceId)
+				cm.HandleInputEvent(event)
+			} else {
+				logger.Warn("[SSH-SERVER] No ClientManager available to handle input event")
 			}
 		}
 	} else {

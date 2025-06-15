@@ -45,10 +45,10 @@ type ConnectedClient struct {
 
 // NewClientManager creates a new client manager for the server
 func NewClientManager() (*ClientManager, error) {
-	// Create libei input backend (only supported backend)
-	inputBackend, err := input.CreateBackend()
+	// Create server input backend (evdev for capture)
+	inputBackend, err := input.CreateServerBackend()
 	if err != nil {
-		return nil, fmt.Errorf("failed to create libei input backend: %w", err)
+		return nil, fmt.Errorf("failed to create server input backend: %w", err)
 	}
 
 	return &ClientManager{
@@ -71,12 +71,15 @@ func (cm *ClientManager) Start(ctx context.Context, port int) error {
 	cm.inputEventsCtx, cm.inputCancel = context.WithCancel(ctx)
 
 	// Set up event handler
-	cm.inputBackend.OnInputEvent(cm.handleInputEvent)
+	logger.Debug("[SERVER-MANAGER] Setting up input event handler")
+	cm.inputBackend.OnInputEvent(cm.HandleInputEvent)
 
 	// Start input backend
+	logger.Debug("[SERVER-MANAGER] Starting input backend")
 	if err := cm.inputBackend.Start(ctx); err != nil {
 		return fmt.Errorf("failed to start input backend: %w", err)
 	}
+	logger.Debug("[SERVER-MANAGER] Input backend started successfully")
 
 	// Start SSH server
 	go func() {
@@ -115,24 +118,32 @@ func (cm *ClientManager) Stop() error {
 
 // SwitchToClient switches input control to the specified client
 func (cm *ClientManager) SwitchToClient(clientID string) error {
+	logger.Debugf("[SERVER-MANAGER] SwitchToClient called: clientID=%s", clientID)
+	
 	cm.mu.Lock()
 	defer cm.mu.Unlock()
 
 	// Check if client exists
 	client, exists := cm.clients[clientID]
 	if !exists {
+		logger.Errorf("[SERVER-MANAGER] Client %s not found", clientID)
 		return fmt.Errorf("client %s not found", clientID)
 	}
+
+	logger.Debugf("[SERVER-MANAGER] Found client: name=%s, address=%s", client.Name, client.Address)
 
 	// Update previous client status
 	if cm.activeClientID != "" {
 		if prevClient, exists := cm.clients[cm.activeClientID]; exists {
 			prevClient.Status = protocol.ClientStatus_CLIENT_IDLE
+			logger.Debugf("[SERVER-MANAGER] Previous client %s status set to IDLE", prevClient.Name)
 		}
 	}
 
 	// Update target in input backend
+	logger.Debugf("[SERVER-MANAGER] Setting input backend target to %s", clientID)
 	if err := cm.inputBackend.SetTarget(clientID); err != nil {
+		logger.Errorf("[SERVER-MANAGER] Failed to set input target: %v", err)
 		return fmt.Errorf("failed to set input target: %w", err)
 	}
 
@@ -140,6 +151,9 @@ func (cm *ClientManager) SwitchToClient(clientID string) error {
 	cm.activeClientID = clientID
 	cm.controllingLocal = false
 	client.Status = protocol.ClientStatus_CLIENT_BEING_CONTROLLED
+
+	logger.Debugf("[SERVER-MANAGER] State updated: activeClientID=%s, controllingLocal=%v", 
+		cm.activeClientID, cm.controllingLocal)
 
 	// Send control event to notify client they're being controlled
 	if cm.sshServer != nil {
@@ -154,19 +168,23 @@ func (cm *ClientManager) SwitchToClient(clientID string) error {
 			Timestamp: time.Now().UnixNano(),
 			SourceId:  "server",
 		}
+		
+		logger.Debugf("[SERVER-MANAGER] Sending REQUEST_CONTROL event to client %s", client.Name)
 		if err := cm.sshServer.SendEventToClient(client.Address, inputEvent); err != nil {
-			logger.Errorf("Failed to send control request to client: %v", err)
+			logger.Errorf("[SERVER-MANAGER] Failed to send control request to client: %v", err)
 		} else {
-			logger.Debugf("Sent control request to client %s", client.Name)
+			logger.Debugf("[SERVER-MANAGER] Successfully sent control request to client %s", client.Name)
 		}
 
 		// Position cursor at center of main monitor (monitor at 0,0)
 		if err := cm.positionCursorOnMainMonitor(client); err != nil {
-			logger.Warnf("Failed to position cursor on main monitor: %v", err)
+			logger.Warnf("[SERVER-MANAGER] Failed to position cursor on main monitor: %v", err)
 		}
+	} else {
+		logger.Error("[SERVER-MANAGER] No SSH server available to send control request")
 	}
 
-	logger.Infof("Switched control to client: %s (%s)", client.Name, client.Address)
+	logger.Infof("[SERVER-MANAGER] Switched control to client: %s (%s)", client.Name, client.Address)
 
 	// Notify UI if callback is set
 	if cm.onActivity != nil {
@@ -284,10 +302,14 @@ func (cm *ClientManager) IsControllingLocal() bool {
 	return cm.controllingLocal
 }
 
-// handleInputEvent processes input events and routes them to the appropriate target
-func (cm *ClientManager) handleInputEvent(event *protocol.InputEvent) {
+// HandleInputEvent processes input events and routes them to the appropriate target
+func (cm *ClientManager) HandleInputEvent(event *protocol.InputEvent) {
+	logger.Debugf("[SERVER-MANAGER] handleInputEvent called: type=%T, timestamp=%d, sourceId=%s",
+		event.Event, event.Timestamp, event.SourceId)
+	
 	// Handle control events specially
 	if controlEvent := event.GetControl(); controlEvent != nil {
+		logger.Debugf("[SERVER-MANAGER] Routing control event: type=%v", controlEvent.Type)
 		cm.handleControlEvent(controlEvent, event.SourceId)
 		return
 	}
@@ -297,26 +319,30 @@ func (cm *ClientManager) handleInputEvent(event *protocol.InputEvent) {
 
 	// If controlling local, do nothing (let input go to local system)
 	if cm.controllingLocal {
+		logger.Debug("[SERVER-MANAGER] Controlling local system, ignoring event")
 		return
 	}
 
 	// If no active client, switch back to local
 	if cm.activeClientID == "" {
+		logger.Debug("[SERVER-MANAGER] No active client, ignoring event")
 		return
 	}
 
 	// Get the active client
 	client, exists := cm.clients[cm.activeClientID]
 	if !exists {
-		logger.Warnf("Active client %s not found, switching to local", cm.activeClientID)
+		logger.Warnf("[SERVER-MANAGER] Active client %s not found, switching to local", cm.activeClientID)
 		go cm.SwitchToLocal() // Switch back to local asynchronously
 		return
 	}
 
+	logger.Debugf("[SERVER-MANAGER] Routing event to client: %s (%s)", client.Name, client.Address)
+
 	// Send input event to the client via SSH
 	if cm.sshServer != nil {
 		if err := cm.sshServer.SendEventToClient(client.Address, event); err != nil {
-			logger.Errorf("Failed to send input event to client %s: %v", cm.activeClientID, err)
+			logger.Errorf("[SERVER-MANAGER] Failed to send input event to client %s: %v", cm.activeClientID, err)
 		} else {
 			// Log input activity with more user-friendly messages
 			eventType := "input"
@@ -331,7 +357,7 @@ func (cm *ClientManager) handleInputEvent(event *protocol.InputEvent) {
 				eventType = "keyboard"
 			}
 			message := fmt.Sprintf("Injecting %s input into %s (%s)", eventType, client.Name, client.Address)
-			logger.Debug(message)
+			logger.Debugf("[SERVER-MANAGER] %s", message)
 
 			// Send to UI with throttling to avoid spam
 			if cm.onActivity != nil {
@@ -352,6 +378,8 @@ func (cm *ClientManager) handleInputEvent(event *protocol.InputEvent) {
 				}
 			}
 		}
+	} else {
+		logger.Error("[SERVER-MANAGER] No SSH server available to send events")
 	}
 }
 
@@ -374,16 +402,39 @@ func (cm *ClientManager) handleControlEvent(controlEvent *protocol.ControlEvent,
 	}
 }
 
-// updateClientConfiguration updates a client's configuration
+// updateClientConfiguration updates a client's configuration  
 func (cm *ClientManager) updateClientConfiguration(config *protocol.ClientConfig, sourceID string) {
 	cm.mu.Lock()
 	defer cm.mu.Unlock()
 
-	// Find the client by connection source or create/update entry
+	logger.Debugf("[SERVER-MANAGER] updateClientConfiguration: clientId=%s, clientName=%s, sourceID=%s", 
+		config.ClientId, config.ClientName, sourceID)
+	logger.Debugf("[SERVER-MANAGER] Current registered clients: %d", len(cm.clients))
+	for id, client := range cm.clients {
+		logger.Debugf("[SERVER-MANAGER]   Client: id=%s, name=%s, address=%s", id, client.Name, client.Address)
+	}
+
+	// Find the client by multiple methods:
+	// 1. Exact ID match
+	// 2. Exact name match  
+	// 3. Address-based match (since registration uses address as ID)
+	// 4. If only one client connected, assume it's that client
 	var targetClient *ConnectedClient
+	
+	// Try exact matches first
 	for _, client := range cm.clients {
 		if client.ID == config.ClientId || client.Name == config.ClientName {
 			targetClient = client
+			logger.Debugf("[SERVER-MANAGER] Found client by exact match: %s", client.Address)
+			break
+		}
+	}
+	
+	// If no exact match and we only have one client, use that client
+	if targetClient == nil && len(cm.clients) == 1 {
+		for _, client := range cm.clients {
+			targetClient = client
+			logger.Debugf("[SERVER-MANAGER] Using only connected client: %s", client.Address)
 			break
 		}
 	}
@@ -392,29 +443,38 @@ func (cm *ClientManager) updateClientConfiguration(config *protocol.ClientConfig
 		// Update existing client
 		targetClient.Monitors = config.Monitors
 		targetClient.Capabilities = config.Capabilities
-		if targetClient.Name == "" {
+		
+		// Update name to use the client-provided name instead of address
+		if config.ClientName != "" && targetClient.Name != config.ClientName {
+			logger.Debugf("[SERVER-MANAGER] Updating client name from '%s' to '%s'", targetClient.Name, config.ClientName)
 			targetClient.Name = config.ClientName
 		}
-		if targetClient.ID == "" {
-			targetClient.ID = config.ClientId
-		}
 
-		logger.Infof("Updated client configuration for %s: %d monitors, compositor: %s",
+		logger.Infof("[SERVER-MANAGER] Updated client configuration for %s: %d monitors, compositor: %s",
 			targetClient.Name, len(config.Monitors), config.Capabilities.WaylandCompositor)
 
 		// Log monitor details
 		for i, monitor := range config.Monitors {
-			logger.Debugf("  Monitor %d: %s (%dx%d at %d,%d) primary=%v scale=%.1f",
+			logger.Debugf("[SERVER-MANAGER]   Monitor %d: %s (%dx%d at %d,%d) primary=%v scale=%.1f",
 				i+1, monitor.Name, monitor.Width, monitor.Height,
 				monitor.X, monitor.Y, monitor.Primary, monitor.Scale)
 		}
 	} else {
-		logger.Warnf("Received client config from unknown client: %s (source: %s)", config.ClientName, sourceID)
+		logger.Warnf("[SERVER-MANAGER] Received client config from unknown client: %s (source: %s)", config.ClientName, sourceID)
+		logger.Warnf("[SERVER-MANAGER] Available clients: %v", func() []string {
+			var addrs []string
+			for _, client := range cm.clients {
+				addrs = append(addrs, client.Address)
+			}
+			return addrs
+		}())
 	}
 }
 
 // RegisterClient registers a new client connection
 func (cm *ClientManager) RegisterClient(id, name, address string) {
+	logger.Debugf("[SERVER-MANAGER] RegisterClient called: id=%s, name=%s, address=%s", id, name, address)
+	
 	cm.mu.Lock()
 	defer cm.mu.Unlock()
 
@@ -427,7 +487,8 @@ func (cm *ClientManager) RegisterClient(id, name, address string) {
 	}
 
 	cm.clients[id] = client
-	logger.Infof("Registered client: %s (%s) from %s", name, id, address)
+	logger.Infof("[SERVER-MANAGER] Registered client: %s (%s) from %s", name, id, address)
+	logger.Debugf("[SERVER-MANAGER] Total clients: %d", len(cm.clients))
 
 	// Notify UI if callback is set
 	if cm.onActivity != nil {
