@@ -38,7 +38,6 @@ func init() {
 	// Add commands
 	rootCmd.AddCommand(serverCmd)
 	rootCmd.AddCommand(clientCmd)
-	rootCmd.AddCommand(testCmd)
 	rootCmd.AddCommand(configCmd)
 }
 

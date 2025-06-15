@@ -11,7 +11,6 @@ import (
 	"github.com/bnema/waymon/internal/config"
 	"github.com/bnema/waymon/internal/logger"
 	"github.com/bnema/waymon/internal/server"
-	"github.com/bnema/waymon/internal/setup"
 	"github.com/bnema/waymon/internal/ui"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/spf13/cobra"
@@ -190,34 +189,7 @@ func runServer(cmd *cobra.Command, args []string) error {
 	// Get configuration
 	cfg := config.Get()
 
-	// Run device setup if devices are not configured
-	if cfg.Input.MouseDevice == "" || cfg.Input.KeyboardDevice == "" {
-		// Import setup package
-		deviceSetup := setup.NewDeviceSetup()
-		if err := deviceSetup.RunInteractiveSetup(); err != nil {
-			return fmt.Errorf("device setup failed: %w", err)
-		}
-		// Reload config after setup
-		if err := config.Init(); err != nil {
-			return fmt.Errorf("failed to reload config: %w", err)
-		}
-		cfg = config.Get()
-	} else {
-		// Validate existing devices
-		deviceSetup := setup.NewDeviceSetup()
-		if err := deviceSetup.ValidateDevices(); err != nil {
-			logger.Warnf("Device validation failed: %v", err)
-			// Prompt for reselection
-			if err := deviceSetup.PromptDeviceReselection(); err != nil {
-				return fmt.Errorf("device reselection failed: %w", err)
-			}
-			// Reload config after reselection
-			if err := config.Init(); err != nil {
-				return fmt.Errorf("failed to reload config: %w", err)
-			}
-			cfg = config.Get()
-		}
-	}
+	// Device setup is no longer needed - libei handles device access automatically
 
 	// Show log location if not using TUI
 	if noTUI {
@@ -226,11 +198,7 @@ func runServer(cmd *cobra.Command, args []string) error {
 
 	// Server runs as normal user and will request sudo when needed for uinput
 
-	// Check if uinput is available (but don't fail if no access yet)
-	if err := CheckUinputAvailable(); err != nil {
-		logger.Warnf("uinput not fully configured: %v", err)
-		logger.Info("Server will request sudo access when needed for mouse injection")
-	}
+	// uinput availability check is no longer needed - libei handles input injection
 
 	// Ensure config file exists
 	if err := ensureServerConfig(); err != nil {

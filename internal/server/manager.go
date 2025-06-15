@@ -18,7 +18,7 @@ type ClientManager struct {
 	mu               sync.RWMutex
 	clients          map[string]*ConnectedClient
 	activeClientID   string // Currently being controlled
-	evdevCapture     *input.EvdevCapture
+	inputBackend     input.InputBackend
 	inputEventsCtx   context.Context
 	inputCancel      context.CancelFunc
 	sshServer        *network.SSHServer
@@ -45,20 +45,15 @@ type ConnectedClient struct {
 
 // NewClientManager creates a new client manager for the server
 func NewClientManager() (*ClientManager, error) {
-	// Get config to check for configured devices
-	cfg := config.Get()
-
-	// Create evdev capture with configured devices if available
-	var evdevCapture *input.EvdevCapture
-	if cfg.Input.MouseDevice != "" || cfg.Input.KeyboardDevice != "" {
-		evdevCapture = input.NewEvdevCaptureWithDevices(cfg.Input.MouseDevice, cfg.Input.KeyboardDevice)
-	} else {
-		evdevCapture = input.NewEvdevCapture()
+	// Create libei input backend (only supported backend)
+	inputBackend, err := input.CreateBackend()
+	if err != nil {
+		return nil, fmt.Errorf("failed to create libei input backend: %w", err)
 	}
 
 	return &ClientManager{
 		clients:          make(map[string]*ConnectedClient),
-		evdevCapture:     evdevCapture,
+		inputBackend:     inputBackend,
 		controllingLocal: true, // Start by controlling local system
 	}, nil
 }
@@ -76,11 +71,11 @@ func (cm *ClientManager) Start(ctx context.Context, port int) error {
 	cm.inputEventsCtx, cm.inputCancel = context.WithCancel(ctx)
 
 	// Set up event handler
-	cm.evdevCapture.OnInputEvent(cm.handleInputEvent)
+	cm.inputBackend.OnInputEvent(cm.handleInputEvent)
 
-	// Start evdev capture
-	if err := cm.evdevCapture.Start(ctx); err != nil {
-		return fmt.Errorf("failed to start evdev capture: %w", err)
+	// Start input backend
+	if err := cm.inputBackend.Start(ctx); err != nil {
+		return fmt.Errorf("failed to start input backend: %w", err)
 	}
 
 	// Start SSH server
@@ -99,9 +94,9 @@ func (cm *ClientManager) Stop() error {
 	cm.mu.Lock()
 	defer cm.mu.Unlock()
 
-	// Stop evdev capture
-	if err := cm.evdevCapture.Stop(); err != nil {
-		logger.Errorf("Error stopping evdev capture: %v", err)
+	// Stop input backend
+	if err := cm.inputBackend.Stop(); err != nil {
+		logger.Errorf("Error stopping input backend: %v", err)
 	}
 
 	// Stop SSH server
@@ -136,8 +131,8 @@ func (cm *ClientManager) SwitchToClient(clientID string) error {
 		}
 	}
 
-	// Update target in evdev capture
-	if err := cm.evdevCapture.SetTarget(clientID); err != nil {
+	// Update target in input backend
+	if err := cm.inputBackend.SetTarget(clientID); err != nil {
 		return fmt.Errorf("failed to set input target: %w", err)
 	}
 
@@ -213,12 +208,14 @@ func (cm *ClientManager) SwitchToLocal() error {
 		}
 	}
 
+	// Clear target in input backend
+	if err := cm.inputBackend.SetTarget(""); err != nil {
+		logger.Errorf("Failed to clear input target: %v", err)
+	}
+
 	// Update state
 	cm.activeClientID = ""
 	cm.controllingLocal = true
-
-	// Stop routing input events to clients
-	// (input will naturally go to local system)
 
 	logger.Info("Switched control to local system")
 
