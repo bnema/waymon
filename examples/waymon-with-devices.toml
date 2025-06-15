@@ -1,0 +1,39 @@
+# Example Waymon configuration with device paths
+
+[server]
+port = 52525
+bind_address = "0.0.0.0"
+name = "my-workstation"
+max_clients = 5
+ssh_host_key_path = "~/.config/waymon/host_key"
+ssh_authorized_keys_path = "~/.config/waymon/authorized_keys"
+ssh_whitelist = []
+ssh_whitelist_only = true
+
+[client]
+server_address = ""
+auto_connect = false
+reconnect_delay = 5
+edge_threshold = 5
+screen_position = "right"
+edge_mappings = []
+hotkey_modifier = "ctrl+alt"
+hotkey_key = "s"
+ssh_private_key = ""
+
+[display]
+refresh_interval = 5
+backend = "auto"
+cursor_tracking = true
+
+[input]
+mouse_sensitivity = 1.0
+scroll_speed = 1.0
+enable_keyboard = true
+keyboard_layout = "us"
+# Device paths - these will be auto-configured on first run
+mouse_device = "/dev/input/event5"      # Example: Logitech MX Master 3
+keyboard_device = "/dev/input/event3"   # Example: USB Keyboard
+
+[[hosts]]
+# Example host configuration
