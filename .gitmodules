@@ -4,3 +4,6 @@
 [submodule "third_party/libei"]
 	path = third_party/libei
 	url = https://gitlab.freedesktop.org/libinput/libei.git
+[submodule "third_party/wayland-virtual-input-go"]
+	path = third_party/wayland-virtual-input-go
+	url = git@github.com:bnema/wayland-virtual-input-go.git
