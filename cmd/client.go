@@ -53,10 +53,7 @@ func runClient(cmd *cobra.Command, args []string) error {
 	}
 	defer logFile.Close()
 
-	// Verify waymon client setup has been completed
-	if err := VerifyClientSetup(); err != nil {
-		return fmt.Errorf("waymon client setup verification failed: %w", err)
-	}
+	// Setup verification is no longer needed - libei handles permissions automatically
 
 	// Get configuration
 	cfg := config.Get()
