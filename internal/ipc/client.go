@@ -20,6 +20,18 @@ type Client struct {
 
 // NewClient creates a new IPC client
 func NewClient() (*Client, error) {
+	// Try server socket first (predictable location)
+	serverSocketPath := "/tmp/waymon.sock"
+	
+	// Check if server socket exists
+	if _, err := net.DialTimeout("unix", serverSocketPath, 100*time.Millisecond); err == nil {
+		return &Client{
+			socketPath: serverSocketPath,
+			timeout:    5 * time.Second,
+		}, nil
+	}
+	
+	// Fall back to user-specific socket path
 	socketPath, err := GetSocketPath()
 	if err != nil {
 		return nil, fmt.Errorf("failed to get socket path: %w", err)
