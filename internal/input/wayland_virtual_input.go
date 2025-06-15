@@ -113,25 +113,20 @@ func (w *WaylandVirtualInput) setupWaylandGlobals() error {
 	return nil
 }
 
-// Start begins capturing input events
+// Start begins the input backend (for clients: injection only)
 func (w *WaylandVirtualInput) Start(ctx context.Context) error {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 	
 	if w.capturing {
-		return fmt.Errorf("already capturing")
+		return fmt.Errorf("already started")
 	}
 	
 	ctx, cancel := context.WithCancel(ctx)
 	w.cancel = cancel
 	w.capturing = true
 	
-	// Set up input capture using Wayland seat
-	if err := w.setupInputCapture(); err != nil {
-		logger.Warnf("Failed to setup input capture: %v", err)
-	}
-	
-	// Create virtual pointer for injection (server mode)
+	// Create virtual pointer for injection
 	if w.pointerMgr != nil {
 		virtualPtr, err := w.pointerMgr.CreateVirtualPointer(nil)
 		if err != nil {
@@ -142,7 +137,7 @@ func (w *WaylandVirtualInput) Start(ctx context.Context) error {
 		}
 	}
 	
-	// Create virtual keyboard for injection (server mode)
+	// Create virtual keyboard for injection
 	if w.keyboardMgr != nil {
 		virtualKbd, err := w.keyboardMgr.CreateVirtualKeyboard(nil)
 		if err != nil {
@@ -164,46 +159,9 @@ func (w *WaylandVirtualInput) Start(ctx context.Context) error {
 	return nil
 }
 
-// setupInputCapture creates pointer and keyboard for input capture
-func (w *WaylandVirtualInput) setupInputCapture() error {
-	// For now, we'll provide a simplified setup
-	// The actual input capture would require proper Wayland seat integration
-	logger.Error("\n" +
-		"============================================================\n" +
-		"CRITICAL: Wayland Input Capture NOT IMPLEMENTED!\n" +
-		"============================================================\n" +
-		"\n" +
-		"The wayland-virtual-input protocols are for INJECTION only!\n" +
-		"They create fake input devices, they don't capture real input.\n" +
-		"\n" +
-		"To capture input on Wayland, you need ONE of:\n" +
-		"\n" +
-		"1. libei (Recommended for Wayland remote desktop):\n" +
-		"   - Specifically designed for this use case\n" +
-		"   - Supported by GNOME 45+ and KDE Plasma 6\n" +
-		"   - NOT supported by Hyprland/wlroots yet\n" +
-		"\n" +
-		"2. Wayland seat event listeners:\n" +
-		"   - Use wl_seat to get wl_pointer and wl_keyboard\n" +
-		"   - Listen to motion, button, key events\n" +
-		"   - Requires the app to have focus\n" +
-		"\n" +
-		"3. Reading /dev/input/event* (requires root):\n" +
-		"   - Direct kernel device access\n" +
-		"   - Works on any compositor\n" +
-		"   - Security concerns\n" +
-		"\n" +
-		"The protocols you added (pointer-constraints, etc.) are\n" +
-		"for STOPPING the cursor, not reading its movement!\n" +
-		"============================================================")
-	
-	// TODO: Implement actual input capture using one of the above methods
-	
-	// Test generator will be started after OnInputEvent is called
-	logger.Info("[WAYLAND-VIRTUAL-INPUT] Test event generator will start when callback is set")
-	
-	return nil
-}
+// Note: This backend is designed for CLIENT input injection only.
+// Input capture is handled by the evdev backend on the server side.
+// The Wayland virtual input protocols are for creating fake input devices, not capturing real input.
 
 // enableExclusiveCapture enables exclusive pointer and keyboard capture
 func (w *WaylandVirtualInput) enableExclusiveCapture() error {
@@ -336,126 +294,23 @@ func (w *WaylandVirtualInput) SetTarget(clientID string) error {
 			}
 		}
 		logger.Infof("Wayland virtual input: forwarding events to client %s", clientID)
-		logger.Error("\n" +
-			"=======================================================\n" +
-			"CRITICAL: Input capture is NOT implemented!\n" +
-			"=======================================================\n" +
-			"The server CANNOT capture mouse/keyboard events yet.\n" +
-			"The setupInputCapture() method is empty (TODO).\n" +
-			"\n" +
-			"This means NO events will be sent to the client!\n" +
-			"\n" +
-			"To fix this, you need to implement one of:\n" +
-			"1. libei backend for input capture\n" +
-			"2. Wayland seat-based capture using wl_seat\n" +
-			"3. Alternative input capture method\n" +
-			"=======================================================")
+		// Note: This backend is used for CLIENT injection only.
+		// Server-side input capture is handled by the evdev backend.
 	}
 	
 	return nil
 }
 
 // OnInputEvent sets the callback for captured input events
+// Note: This backend is for CLIENT injection only - it doesn't capture input
 func (w *WaylandVirtualInput) OnInputEvent(callback func(*protocol.InputEvent)) {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 	w.onInputEvent = callback
-	logger.Info("[WAYLAND-VIRTUAL-INPUT] OnInputEvent callback set")
-	
-	// Start test event generator if we're capturing and callback is set
-	if w.capturing && callback != nil && w.cancel == nil {
-		logger.Warn("[WAYLAND-VIRTUAL-INPUT] Starting TEST EVENT GENERATOR to simulate input")
-		logger.Warn("[WAYLAND-VIRTUAL-INPUT] Test events will be generated every 5 seconds when controlling a client")
-		ctx, cancel := context.WithCancel(context.Background())
-		w.cancel = cancel
-		go w.generateTestEvents(ctx)
-	}
+	logger.Debug("Wayland virtual input: OnInputEvent callback set (used for client injection only)")
 }
 
-// generateTestEvents generates test events for debugging when input capture is not implemented
-func (w *WaylandVirtualInput) generateTestEvents(ctx context.Context) {
-	ticker := time.NewTicker(5 * time.Second)
-	defer ticker.Stop()
-	
-	eventCount := 0
-	for {
-		select {
-		case <-ctx.Done():
-			logger.Info("[WAYLAND-VIRTUAL-INPUT] Stopping test event generator")
-			return
-		case <-ticker.C:
-			w.mu.RLock()
-			callback := w.onInputEvent
-			target := w.currentTarget
-			w.mu.RUnlock()
-			
-			if callback == nil {
-				logger.Debug("[WAYLAND-VIRTUAL-INPUT] No callback set, skipping test event")
-				continue
-			}
-			
-			if target == "" {
-				logger.Debug("[WAYLAND-VIRTUAL-INPUT] No target set (controlling local), skipping test event")
-				continue
-			}
-			
-			eventCount++
-			
-			// Generate a test mouse move event
-			event := &protocol.InputEvent{
-				Event: &protocol.InputEvent_MouseMove{
-					MouseMove: &protocol.MouseMoveEvent{
-						Dx: float64(eventCount * 10),
-						Dy: float64(eventCount * 5),
-					},
-				},
-				Timestamp: time.Now().UnixNano(),
-				SourceId:  "test-generator",
-			}
-			
-			logger.Infof("[WAYLAND-VIRTUAL-INPUT] Generating test event #%d: mouse move dx=%d dy=%d", 
-				eventCount, eventCount*10, eventCount*5)
-			
-			callback(event)
-			
-			// Also generate a test click every 3rd event
-			if eventCount%3 == 0 {
-				clickEvent := &protocol.InputEvent{
-					Event: &protocol.InputEvent_MouseButton{
-						MouseButton: &protocol.MouseButtonEvent{
-							Button: 1, // Left button
-							Pressed: true,
-						},
-					},
-					Timestamp: time.Now().UnixNano(),
-					SourceId:  "test-generator",
-				}
-				
-				logger.Infof("[WAYLAND-VIRTUAL-INPUT] Generating test event: mouse button press")
-				callback(clickEvent)
-				
-				// Release after 100ms
-				time.Sleep(100 * time.Millisecond)
-				
-				releaseEvent := &protocol.InputEvent{
-					Event: &protocol.InputEvent_MouseButton{
-						MouseButton: &protocol.MouseButtonEvent{
-							Button: 1, // Left button
-							Pressed: false,
-						},
-					},
-					Timestamp: time.Now().UnixNano(),
-					SourceId:  "test-generator",
-				}
-				
-				logger.Infof("[WAYLAND-VIRTUAL-INPUT] Generating test event: mouse button release")
-				callback(releaseEvent)
-			}
-		}
-	}
-}
-
-// InjectMouseMove injects a mouse move event (for server mode)
+// InjectMouseMove injects a mouse move event
 func (w *WaylandVirtualInput) InjectMouseMove(dx, dy float64) error {
 	w.mu.Lock()
 	defer w.mu.Unlock()

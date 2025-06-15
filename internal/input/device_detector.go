@@ -16,7 +16,7 @@ func NewDeviceDetector() *DeviceDetector {
 
 // isValidInputDevice checks if an open file descriptor is a valid input device
 func (d *DeviceDetector) isValidInputDevice(file *os.File) bool {
-	capabilities := d.getDeviceCapabilities(file)
+	capabilities := d.GetDeviceCapabilities(file)
 	
 	// Must have some kind of input capability (keys or relative movement)
 	_, hasKeys := capabilities[0x01]  // EV_KEY
@@ -25,8 +25,8 @@ func (d *DeviceDetector) isValidInputDevice(file *os.File) bool {
 	return hasKeys || hasRel
 }
 
-// getDeviceCapabilities gets the capabilities of an evdev device
-func (d *DeviceDetector) getDeviceCapabilities(file *os.File) map[int][]int {
+// GetDeviceCapabilities gets the capabilities of an evdev device
+func (d *DeviceDetector) GetDeviceCapabilities(file *os.File) map[int][]int {
 	capabilities := make(map[int][]int)
 	
 	// EVIOCGBIT(ev, len) - get event type bits

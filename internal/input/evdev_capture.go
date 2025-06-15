@@ -175,22 +175,27 @@ func (e *EvdevCapture) OnInputEvent(callback func(*protocol.InputEvent)) {
 // grabDevices grabs exclusive access to input devices
 func (e *EvdevCapture) grabDevices() error {
 	if e.mouseDevice != nil {
+		logger.Debugf("Attempting to grab mouse device: %s", e.mouseDevice.Name)
 		if err := e.mouseDevice.Grab(); err != nil {
+			logger.Errorf("Failed to grab mouse device %s: %v", e.mouseDevice.Name, err)
 			return fmt.Errorf("failed to grab mouse device: %w", err)
 		}
-		logger.Debug("Grabbed exclusive access to mouse device")
+		logger.Infof("✓ Grabbed exclusive access to mouse device: %s", e.mouseDevice.Name)
 	}
 	if e.keyboardDevice != nil {
+		logger.Debugf("Attempting to grab keyboard device: %s", e.keyboardDevice.Name)
 		if err := e.keyboardDevice.Grab(); err != nil {
+			logger.Errorf("Failed to grab keyboard device %s: %v", e.keyboardDevice.Name, err)
 			// Release mouse if keyboard grab fails
 			if e.mouseDevice != nil {
 				e.mouseDevice.Release()
 			}
 			return fmt.Errorf("failed to grab keyboard device: %w", err)
 		}
-		logger.Debug("Grabbed exclusive access to keyboard device")
+		logger.Infof("✓ Grabbed exclusive access to keyboard device: %s", e.keyboardDevice.Name)
 	}
 	e.devicesGrabbed = true
+	logger.Info("✓ All input devices grabbed successfully - ready to capture events")
 	return nil
 }
 
@@ -261,12 +266,14 @@ func (e *EvdevCapture) captureMouseEvents() {
 		}
 	}()
 
-	logger.Debug("Starting mouse event capture")
+	logger.Info("Starting mouse event capture - ready to capture mouse movements")
 	
 	// Variables to accumulate relative movements
 	var accX, accY int32
 	ticker := time.NewTicker(16 * time.Millisecond) // ~60 FPS
 	defer ticker.Stop()
+
+	eventCount := 0
 
 	for {
 		select {
@@ -292,7 +299,7 @@ func (e *EvdevCapture) captureMouseEvents() {
 					SourceId:  "evdev-capture",
 				}
 				callback(event)
-				logger.Debugf("Sent accumulated mouse movement: dx=%d, dy=%d", accX, accY)
+				logger.Infof("📤 Sent mouse movement: dx=%d, dy=%d (total events: %d)", accX, accY, eventCount)
 				accX, accY = 0, 0
 			}
 		default:
@@ -307,22 +314,33 @@ func (e *EvdevCapture) captureMouseEvents() {
 			}
 
 			for _, event := range events {
+				eventCount++
 				switch event.Type {
 				case evdev.EV_REL:
 					switch event.Code {
 					case evdev.REL_X:
 						accX += event.Value
+						logger.Debugf("📍 Mouse X movement: %d (accumulated: %d)", event.Value, accX)
 					case evdev.REL_Y:
 						accY += event.Value
+						logger.Debugf("📍 Mouse Y movement: %d (accumulated: %d)", event.Value, accY)
 					case evdev.REL_WHEEL:
+						logger.Debugf("🖱️ Mouse wheel: %d", event.Value)
 						e.handleMouseScroll(0, float64(event.Value))
 					case evdev.REL_HWHEEL:
+						logger.Debugf("🖱️ Mouse horizontal wheel: %d", event.Value)
 						e.handleMouseScroll(float64(event.Value), 0)
 					}
 				case evdev.EV_KEY:
 					if event.Code >= evdev.BTN_LEFT && event.Code <= evdev.BTN_TASK {
+						logger.Debugf("🖱️ Mouse button: code=%d, value=%d", event.Code, event.Value)
 						e.handleMouseButton(event.Code, event.Value)
 					}
+				case evdev.EV_SYN:
+					// Synchronization event - indicates end of a set of events
+					logger.Debugf("📋 Event sync (accumulated: dx=%d, dy=%d)", accX, accY)
+				default:
+					logger.Debugf("❓ Unknown event type: %d, code: %d, value: %d", event.Type, event.Code, event.Value)
 				}
 			}
 		}

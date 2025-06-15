@@ -27,7 +27,7 @@ type EnhancedDeviceInfo struct {
 	Capabilities DeviceCapabilities
 }
 
-// analyzeCapabilities analyzes what a device can do based on its name and properties
+// analyzeCapabilities analyzes what a device can do based on actual kernel capabilities
 func (s *DeviceSelector) analyzeCapabilities(file *os.File, deviceName string) DeviceCapabilities {
 	caps := DeviceCapabilities{}
 	
@@ -42,40 +42,64 @@ func (s *DeviceSelector) analyzeCapabilities(file *os.File, deviceName string) D
 		fullName = deviceName
 	}
 	
-	fullNameLower := strings.ToLower(fullName)
-	deviceNameLower := strings.ToLower(deviceName)
+	// Get actual device capabilities from kernel
+	detector := NewDeviceDetector()
+	kernelCaps := detector.GetDeviceCapabilities(file)
 	
-	// Detect mouse capabilities
-	if strings.Contains(fullNameLower, "mouse") || 
-	   strings.Contains(deviceNameLower, "mouse") ||
-	   strings.Contains(fullNameLower, "pulsar") ||
-	   strings.Contains(deviceNameLower, "pulsar") ||
-	   strings.Contains(fullNameLower, "logitech") ||
-	   strings.Contains(deviceNameLower, "logitech") {
-		caps.HasMouseMovement = true
-		caps.HasMouseButtons = true
+	// Check for mouse capabilities - must have REL_X and REL_Y
+	if relCaps, hasRel := kernelCaps[0x02]; hasRel { // EV_REL
+		hasX := false
+		hasY := false
+		for _, rel := range relCaps {
+			if rel == 0x00 { // REL_X
+				hasX = true
+			}
+			if rel == 0x01 { // REL_Y
+				hasY = true
+			}
+		}
+		caps.HasMouseMovement = hasX && hasY
 	}
 	
-	// Detect keyboard capabilities
-	if strings.Contains(fullNameLower, "keyboard") ||
-	   strings.Contains(deviceNameLower, "keyboard") ||
-	   strings.Contains(fullNameLower, "lofree") ||
-	   strings.Contains(deviceNameLower, "lofree") ||
-	   strings.Contains(fullNameLower, "compx") ||
-	   strings.Contains(deviceNameLower, "compx") {
-		caps.HasKeyboard = true
+	// Check for mouse buttons
+	if keyCaps, hasKeys := kernelCaps[0x01]; hasKeys { // EV_KEY
+		for _, key := range keyCaps {
+			// BTN_LEFT = 0x110, BTN_RIGHT = 0x111, BTN_MIDDLE = 0x112
+			if key >= 0x110 && key <= 0x117 {
+				caps.HasMouseButtons = true
+				break
+			}
+		}
 	}
 	
-	// Generate recommendations
+	// Check for keyboard capabilities
+	if keyCaps, hasKeys := kernelCaps[0x01]; hasKeys { // EV_KEY
+		// Check for typical keyboard keys (KEY_Q = 16, KEY_SPACE = 57, etc)
+		keyboardKeyCount := 0
+		for _, key := range keyCaps {
+			if key >= 1 && key <= 83 { // KEY_ESC to KEY_KPDOT
+				keyboardKeyCount++
+			}
+		}
+		// If device has many keyboard keys, it's likely a keyboard
+		caps.HasKeyboard = keyboardKeyCount > 20
+	}
+	
+	// Generate recommendations based on actual capabilities
 	if caps.HasMouseMovement && caps.HasMouseButtons && !caps.HasKeyboard {
 		caps.Recommendation = "🖱️ RECOMMENDED for MOUSE"
 	} else if caps.HasKeyboard && !caps.HasMouseMovement {
 		caps.Recommendation = "⌨️ RECOMMENDED for KEYBOARD"
 	} else if caps.HasKeyboard && caps.HasMouseMovement {
-		caps.Recommendation = "🔄 COMBO device (mouse or keyboard)"
+		caps.Recommendation = "🔄 COMBO device (mouse + keyboard)"
+	} else if caps.HasMouseButtons && !caps.HasMouseMovement {
+		caps.Recommendation = "🎮 Gaming/Special device (buttons only)"
 	} else {
-		caps.Recommendation = "⚙️ System device"
+		caps.Recommendation = "⚙️ Other input device"
 	}
+	
+	logger.Debugf("Device %s (%s): Movement=%v, Buttons=%v, Keyboard=%v", 
+		fullName, eventName, caps.HasMouseMovement, caps.HasMouseButtons, caps.HasKeyboard)
 	
 	return caps
 }
