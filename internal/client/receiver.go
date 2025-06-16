@@ -297,7 +297,7 @@ func (ir *InputReceiver) handleControlEvent(control *protocol.ControlEvent) {
 	case protocol.ControlEvent_HEALTH_CHECK_PONG:
 		// Server responded to health check
 		ir.lastHealthCheckResponse = time.Now()
-		logger.Info("[CLIENT-RECEIVER] Received health check response from server")
+		logger.Debug("[CLIENT-RECEIVER] Received health check response from server")
 
 	default:
 		logger.Warnf("[CLIENT-RECEIVER] Unknown control event type: %v", control.Type)
@@ -623,7 +623,7 @@ func (ir *InputReceiver) monitorConnection() {
 				ir.mu.Unlock()
 				continue
 			} else {
-				logger.Infof("Sent health check ping (last response: %v ago)", time.Since(lastHealthResponse))
+				logger.Debugf("Sent health check ping (last response: %v ago)", time.Since(lastHealthResponse))
 			}
 
 			// Check if server has responded to health checks recently

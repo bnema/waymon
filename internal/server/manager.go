@@ -349,15 +349,21 @@ func (cm *ClientManager) IsControllingLocal() bool {
 
 // HandleInputEvent processes input events and routes them to the appropriate target
 func (cm *ClientManager) HandleInputEvent(event *protocol.InputEvent) {
-	logger.Debugf("[SERVER-MANAGER] handleInputEvent called: type=%T, timestamp=%d, sourceId=%s",
-		event.Event, event.Timestamp, event.SourceId)
-
 	// Handle control events specially
 	if controlEvent := event.GetControl(); controlEvent != nil {
-		logger.Debugf("[SERVER-MANAGER] Routing control event: type=%v", controlEvent.Type)
+		// Skip debug logs for health check events to reduce noise
+		if controlEvent.Type != protocol.ControlEvent_HEALTH_CHECK_PING && 
+		   controlEvent.Type != protocol.ControlEvent_HEALTH_CHECK_PONG {
+			logger.Debugf("[SERVER-MANAGER] handleInputEvent called: type=%T, timestamp=%d, sourceId=%s",
+				event.Event, event.Timestamp, event.SourceId)
+			logger.Debugf("[SERVER-MANAGER] Routing control event: type=%v", controlEvent.Type)
+		}
 		cm.handleControlEvent(controlEvent, event.SourceId)
 		return
 	}
+
+	logger.Debugf("[SERVER-MANAGER] handleInputEvent called: type=%T, timestamp=%d, sourceId=%s",
+		event.Event, event.Timestamp, event.SourceId)
 
 	cm.mu.RLock()
 	defer cm.mu.RUnlock()
