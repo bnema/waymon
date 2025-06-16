@@ -1,6 +1,6 @@
 # Waymon
 
-**Wayland Mouse Over Network** - A client/server mouse sharing application for Wayland systems. It allows seamless mouse movement between two computers on a local network, working around Wayland's security restrictions by using the uinput kernel module.
+**Wayland Mouse Over Network** - A client/server mouse sharing application for Wayland compositors. It allows seamless mouse movement between two computers on a local network, working around Wayland's security restrictions by using the uinput kernel module.
 
 ## Features
 
