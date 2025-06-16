@@ -333,8 +333,10 @@ func (w *WaylandVirtualInput) InjectMouseMove(dx, dy float64) error {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 
+	logger.Debugf("[WAYLAND-INPUT] InjectMouseMove called: dx=%.2f, dy=%.2f, capturing=%v, virtualPtr=%v", dx, dy, w.capturing, w.virtualPtr != nil)
+
 	if !w.capturing || w.virtualPtr == nil {
-		return fmt.Errorf("virtual pointer not available")
+		return fmt.Errorf("virtual pointer not available (capturing=%v, virtualPtr=%v)", w.capturing, w.virtualPtr != nil)
 	}
 
 	// Use relative motion for mouse movement
@@ -343,7 +345,12 @@ func (w *WaylandVirtualInput) InjectMouseMove(dx, dy float64) error {
 	}
 
 	// Frame the event
-	return w.virtualPtr.Frame()
+	if err := w.virtualPtr.Frame(); err != nil {
+		return fmt.Errorf("failed to frame mouse motion: %w", err)
+	}
+
+	logger.Debugf("[WAYLAND-INPUT] Successfully injected mouse move")
+	return nil
 }
 
 // InjectMouseButton injects a mouse button event (for server mode)
@@ -351,8 +358,27 @@ func (w *WaylandVirtualInput) InjectMouseButton(button uint32, pressed bool) err
 	w.mu.Lock()
 	defer w.mu.Unlock()
 
+	logger.Debugf("[WAYLAND-INPUT] InjectMouseButton called: button=%d, pressed=%v, capturing=%v, virtualPtr=%v", button, pressed, w.capturing, w.virtualPtr != nil)
+
 	if !w.capturing || w.virtualPtr == nil {
-		return fmt.Errorf("virtual pointer not available")
+		return fmt.Errorf("virtual pointer not available (capturing=%v, virtualPtr=%v)", w.capturing, w.virtualPtr != nil)
+	}
+
+	// Convert protocol button numbers to Linux button codes
+	var linuxButton uint32
+	switch button {
+	case 1:
+		linuxButton = virtual_pointer.BTN_LEFT
+	case 2:
+		linuxButton = virtual_pointer.BTN_RIGHT
+	case 3:
+		linuxButton = virtual_pointer.BTN_MIDDLE
+	case 4:
+		linuxButton = virtual_pointer.BTN_SIDE
+	case 5:
+		linuxButton = virtual_pointer.BTN_EXTRA
+	default:
+		return fmt.Errorf("unsupported button number: %d", button)
 	}
 
 	// Convert button state
@@ -364,7 +390,7 @@ func (w *WaylandVirtualInput) InjectMouseButton(button uint32, pressed bool) err
 	}
 
 	// Inject button event
-	if err := w.virtualPtr.Button(time.Now(), button, state); err != nil {
+	if err := w.virtualPtr.Button(time.Now(), linuxButton, state); err != nil {
 		return fmt.Errorf("failed to inject mouse button: %w", err)
 	}
 

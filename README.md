@@ -1,6 +1,6 @@
 # Waymon
 
-**Wayland Mouse Over Network** - A client/server mouse sharing application for Wayland compositors. It allows seamless mouse movement between two computers on a local network, working around Wayland's security restrictions by using the uinput kernel module.
+**Wayland Mouse Over Network** - A client/server mouse sharing application for Wayland compositors. It allows seamless mouse movement between two computers on a local network, using native Wayland virtual input protocols for input injection.
 
 ## Features
 
@@ -15,14 +15,15 @@
 
 ### System Requirements
 
-- Linux system with Wayland compositor
-- uinput kernel module (usually available by default)
-- Sudo privileges on server machine (required for uinput access)
+- Linux system with Wayland compositor (wlroots-based compositors like Sway, Hyprland, etc.)
+- Wayland virtual input protocol support (zwp_virtual_pointer_v1 and zwp_virtual_keyboard_v1)
+- Sudo privileges on server machine (required for evdev device access)
 
 ### Dependencies
 
 The following system packages may be required:
-- `uinput-tools` (recommended)
+- Wayland development headers
+- libevdev (for server-side input capture)
 - Development headers if building from source
 
 ## Installation
@@ -94,38 +95,15 @@ go install github.com/bnema/waymon@latest
 1. Install Waymon on both computers using one of the methods above
 2. On the server (computer to be controlled):
    ```bash
-   waymon setup              # Set up uinput permissions
    sudo waymon server        # Start server
    ```
 3. On the client (computer you're controlling from):
    ```bash
-   waymon setup              # Set up uinput permissions
    waymon client --host SERVER_IP:52525
    ```
 4. Move your mouse to the edge of the screen to switch between computers!
 
-## Setup
-
-### 1. uinput Permissions
-
-Before using Waymon, you need to set up secure uinput permissions **on both server and client machines**:
-
-```bash
-waymon setup
-```
-
-This command automatically:
-- Creates a dedicated `waymon` group for secure access
-- Adds your user to the waymon group  
-- Creates a udev rule that only allows waymon group access to uinput
-- Configures everything needed for secure operation
-
-**Important**: 
-- Run `waymon setup` on both computers (server and client)
-- You must log out and back in after setup for group changes to take effect (To be determined)
-- Both machines need uinput access since the client also handles mouse input capture
-
-### 2. Configuration
+## Configuration
 
 Copy the example configuration file:
 
@@ -170,7 +148,7 @@ Example:
 sudo waymon server --port 52525 --bind 192.168.1.100
 ```
 
-**Note**: Server mode requires root privileges for uinput access.
+**Note**: Server mode requires root privileges for evdev device access to capture mouse and keyboard input.
 
 ### Client Mode
 
@@ -302,8 +280,8 @@ cursor_tracking = true    # Enable cursor tracking
 If you get permission errors:
 
 1. Make sure you're running the server with `sudo`
-2. Check uinput permissions: `ls -la /dev/uinput`
-3. Run the setup command: `waymon setup`
+2. Check input device permissions: `ls -la /dev/input/`
+3. Verify your user has access to input devices
 4. Add your user to the input group: `sudo usermod -a -G input $USER`
 
 ### Connection Issues

@@ -126,7 +126,12 @@ func initializeServer(ctx context.Context, srv *server.Server, cfg *config.Confi
 		// Set up input event handler to forward events from SSH to ClientManager
 		sshSrv.OnInputEvent = func(event *protocol.InputEvent) {
 			if cm := srv.GetClientManager(); cm != nil {
-				logger.Debugf("[SSH-SERVER] Forwarding input event to ClientManager: type=%T, sourceId=%s", event.Event, event.SourceId)
+				// Skip debug log for health check events to reduce noise
+				if controlEvent := event.GetControl(); controlEvent == nil || 
+					(controlEvent.Type != protocol.ControlEvent_HEALTH_CHECK_PING && 
+					 controlEvent.Type != protocol.ControlEvent_HEALTH_CHECK_PONG) {
+					logger.Debugf("[SSH-SERVER] Forwarding input event to ClientManager: type=%T, sourceId=%s", event.Event, event.SourceId)
+				}
 				cm.HandleInputEvent(event)
 			} else {
 				logger.Warn("[SSH-SERVER] No ClientManager available to handle input event")
