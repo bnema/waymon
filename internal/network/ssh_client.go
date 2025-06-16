@@ -322,7 +322,7 @@ func (c *SSHClient) ConnectWithTimeout(ctx context.Context, serverAddr string, t
 	go c.receiveInputEvents(ctx)
 
 	// Monitor connection
-	go c.monitorConnection()
+	go c.monitorConnection(ctx)
 
 	return nil
 }
@@ -441,16 +441,32 @@ func (c *SSHClient) receiveInputEvents(ctx context.Context) {
 				return
 			}
 
-			// Read length prefix (4 bytes)
+			// Read length prefix (4 bytes) with timeout
 			lengthBuf := make([]byte, 4)
 			logger.Debug("[SSH-CLIENT] Reading length prefix (4 bytes)...")
-			_, err := io.ReadFull(reader, lengthBuf)
-			if err != nil {
-				if err == io.EOF || err == io.ErrClosedPipe {
-					logger.Info("[SSH-CLIENT] Connection closed (EOF/ErrClosedPipe)")
-					return // Connection closed
+			
+			// Use a timeout to avoid hanging on read
+			readChan := make(chan error, 1)
+			go func() {
+				_, err := io.ReadFull(reader, lengthBuf)
+				readChan <- err
+			}()
+
+			select {
+			case <-ctx.Done():
+				logger.Info("[SSH-CLIENT] Context cancelled during length read")
+				return
+			case err := <-readChan:
+				if err != nil {
+					if err == io.EOF || err == io.ErrClosedPipe {
+						logger.Info("[SSH-CLIENT] Connection closed (EOF/ErrClosedPipe)")
+						return // Connection closed
+					}
+					logger.Errorf("[SSH-CLIENT] Failed to read message length: %v", err)
+					continue
 				}
-				logger.Errorf("[SSH-CLIENT] Failed to read message length: %v", err)
+			case <-time.After(2 * time.Second):
+				logger.Debug("[SSH-CLIENT] Read timeout, checking context")
 				continue
 			}
 
@@ -463,12 +479,27 @@ func (c *SSHClient) receiveInputEvents(ctx context.Context) {
 				continue
 			}
 
-			// Read message data
+			// Read message data with timeout
 			msgBuf := make([]byte, length)
 			logger.Debugf("[SSH-CLIENT] Reading message data (%d bytes)...", length)
-			_, err = io.ReadFull(reader, msgBuf)
-			if err != nil {
-				logger.Errorf("[SSH-CLIENT] Failed to read message data: %v", err)
+			
+			readChan = make(chan error, 1)
+			go func() {
+				_, err := io.ReadFull(reader, msgBuf)
+				readChan <- err
+			}()
+
+			select {
+			case <-ctx.Done():
+				logger.Info("[SSH-CLIENT] Context cancelled during message read")
+				return
+			case err := <-readChan:
+				if err != nil {
+					logger.Errorf("[SSH-CLIENT] Failed to read message data: %v", err)
+					continue
+				}
+			case <-time.After(2 * time.Second):
+				logger.Debug("[SSH-CLIENT] Message read timeout, checking context")
 				continue
 			}
 
@@ -499,12 +530,15 @@ func (c *SSHClient) receiveInputEvents(ctx context.Context) {
 }
 
 // monitorConnection monitors the SSH connection health
-func (c *SSHClient) monitorConnection() {
+func (c *SSHClient) monitorConnection(ctx context.Context) {
 	ticker := time.NewTicker(5 * time.Second)
 	defer ticker.Stop()
 
-	for { //nolint:staticcheck // this is a connection monitoring loop, not a simple range
+	for {
 		select {
+		case <-ctx.Done():
+			logger.Info("[SSH-CLIENT] Context cancelled, stopping connection monitor")
+			return
 		case <-ticker.C:
 			c.mu.Lock()
 			if !c.connected || c.client == nil {

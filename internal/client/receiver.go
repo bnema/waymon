@@ -610,7 +610,11 @@ func (ir *InputReceiver) monitorConnection() {
 				}
 				ir.mu.Unlock()
 				// Wait a bit before next check to avoid spam
-				time.Sleep(10 * time.Second)
+				select {
+				case <-ir.reconnectCtx.Done():
+					return
+				case <-time.After(10 * time.Second):
+				}
 				continue
 			}
 
