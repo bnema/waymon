@@ -157,26 +157,39 @@ func SetPrefix(prefix string) {
 // SetupFileLogging configures both the default log and internal logger to write to a file
 // This is used by both client and server to avoid TUI interference
 func SetupFileLogging(prefix string) (*os.File, error) {
-	// Always use a user-specific log file to avoid permission issues
-	homeDir, err := os.UserHomeDir()
-	if err != nil {
-		// Fallback to current directory if home dir not available
-		homeDir = "."
-	}
+	var logDir, logPath string
 
-	// Create logs directory in user's home
-	logDir := filepath.Join(homeDir, ".local", "share", "waymon")
-	if err := os.MkdirAll(logDir, 0755); err != nil {
-		// Fallback to simpler path
-		logDir = filepath.Join(homeDir, ".waymon")
+	// If running as root (sudo), use system log directory
+	if os.Geteuid() == 0 && prefix == "SERVER" {
+		logDir = "/var/log/waymon"
+		logPath = filepath.Join(logDir, "waymon.log")
+		
+		// Create /var/log/waymon directory if it doesn't exist
 		if err := os.MkdirAll(logDir, 0755); err != nil {
-			return nil, fmt.Errorf("failed to create log directory: %v", err)
+			return nil, fmt.Errorf("failed to create system log directory: %v", err)
 		}
+	} else {
+		// Use user-specific log file for non-root or client mode
+		homeDir, err := os.UserHomeDir()
+		if err != nil {
+			// Fallback to current directory if home dir not available
+			homeDir = "."
+		}
+
+		// Create logs directory in user's home
+		logDir = filepath.Join(homeDir, ".local", "share", "waymon")
+		if err := os.MkdirAll(logDir, 0755); err != nil {
+			// Fallback to simpler path
+			logDir = filepath.Join(homeDir, ".waymon")
+			if err := os.MkdirAll(logDir, 0755); err != nil {
+				return nil, fmt.Errorf("failed to create log directory: %v", err)
+			}
+		}
+
+		logPath = filepath.Join(logDir, "waymon.log")
 	}
 
-	logPath := filepath.Join(logDir, "waymon.log")
-
-	// Open or create the log file with user-only permissions
+	// Open or create the log file with world-readable permissions
 	logFile, err := os.OpenFile(logPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
 	if err != nil {
 		return nil, fmt.Errorf("failed to open log file %s: %v", logPath, err)
