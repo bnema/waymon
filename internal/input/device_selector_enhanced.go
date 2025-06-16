@@ -88,12 +88,16 @@ func (s *DeviceSelector) analyzeCapabilities(file *os.File, deviceName string) D
 	// Generate recommendations based on actual capabilities
 	switch {
 	case caps.HasMouseMovement && caps.HasMouseButtons && !caps.HasKeyboard:
+		// This is a pure mouse/trackpad device
 		caps.Recommendation = "🖱️ RECOMMENDED for MOUSE"
 	case caps.HasKeyboard && !caps.HasMouseMovement:
+		// This is a pure keyboard device
 		caps.Recommendation = "⌨️ RECOMMENDED for KEYBOARD"
 	case caps.HasKeyboard && caps.HasMouseMovement:
+		// This is a combo device (like laptop with built-in trackpad)
 		caps.Recommendation = "🔄 COMBO device (mouse + keyboard)"
 	case caps.HasMouseButtons && !caps.HasMouseMovement:
+		// Gaming devices, presenter remotes, etc
 		caps.Recommendation = "🎮 Gaming/Special device (buttons only)"
 	default:
 		caps.Recommendation = "⚙️ Other input device"
@@ -157,7 +161,8 @@ func (s *DeviceSelector) SelectMouseDeviceEnhanced() (string, error) {
 	// Filter and sort: prioritize mouse devices
 	var mouseDevices, otherDevices []EnhancedDeviceInfo
 	for _, dev := range enhancedDevices {
-		if dev.Capabilities.HasMouseMovement {
+		// Only include devices that are actually recommended for mouse
+		if dev.Capabilities.HasMouseMovement && strings.Contains(dev.Capabilities.Recommendation, "RECOMMENDED for MOUSE") {
 			mouseDevices = append(mouseDevices, dev)
 		} else {
 			otherDevices = append(otherDevices, dev)
@@ -165,8 +170,7 @@ func (s *DeviceSelector) SelectMouseDeviceEnhanced() (string, error) {
 	}
 
 	// Combine: mouse devices first, then others
-	mouseDevices = append(mouseDevices, otherDevices...)
-	allDevices := mouseDevices
+	allDevices := append(mouseDevices, otherDevices...)
 
 	if len(allDevices) == 0 {
 		return "", fmt.Errorf("no suitable input devices found")
@@ -248,8 +252,7 @@ func (s *DeviceSelector) SelectKeyboardDeviceEnhanced() (string, error) {
 	}
 
 	// Combine: keyboard devices first, then others
-	keyboardDevices = append(keyboardDevices, otherDevices...)
-	allDevices := keyboardDevices
+	allDevices := append(keyboardDevices, otherDevices...)
 
 	if len(allDevices) == 0 {
 		return "", fmt.Errorf("no suitable input devices found")
