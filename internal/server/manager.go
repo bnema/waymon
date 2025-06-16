@@ -577,6 +577,11 @@ func (cm *ClientManager) updateClientConfiguration(config *protocol.ClientConfig
 				monitor.X, monitor.Y, monitor.Primary, monitor.Scale)
 		}
 
+		// Notify UI of configuration update to refresh display
+		if cm.onActivity != nil {
+			cm.onActivity("INFO", fmt.Sprintf("Client %s configured with %d monitors", targetClient.Name, len(config.Monitors)))
+		}
+
 		// Update cursor bounds if this is the active client
 		if cm.activeClientID == targetClient.ID && len(config.Monitors) > 0 {
 			bounds := cm.calculateTotalDisplayBounds(config.Monitors)
@@ -621,7 +626,9 @@ func (cm *ClientManager) RegisterClient(id, name, address string) {
 
 	// Notify UI if callback is set
 	if cm.onActivity != nil {
-		cm.onActivity("INFO", fmt.Sprintf("Client registered: %s (%s)", name, address))
+		// Force a UI refresh by sending an activity notification
+		// The UI will refresh its client list when it receives this
+		cm.onActivity("INFO", fmt.Sprintf("Client connected: %s (%s)", name, address))
 	}
 }
 
@@ -649,6 +656,13 @@ func (cm *ClientManager) UnregisterClient(id string) {
 	delete(cm.clientCursors, id)
 
 	logger.Infof("Unregistered client: %s (%s)", client.Name, id)
+
+	// Notify UI if callback is set
+	if cm.onActivity != nil {
+		// Force a UI refresh by sending an activity notification
+		// The UI will refresh its client list when it receives this
+		cm.onActivity("INFO", fmt.Sprintf("Client disconnected: %s (%s)", client.Name, client.Address))
+	}
 }
 
 // SetOnActivity sets a callback for activity notifications
