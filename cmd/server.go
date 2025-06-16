@@ -62,36 +62,38 @@ func initializeServer(ctx context.Context, srv *server.Server, cfg *config.Confi
 	// NOW set up client connection callbacks AFTER the SSH server is created
 	if sshSrv := srv.GetNetworkServer(); sshSrv != nil {
 		logger.Debug("Setting up SSH server callbacks")
+		
+		// Set up client connection handler (only once!)
 		sshSrv.OnClientConnected = func(addr, publicKey string) {
 			// Register client with ClientManager
 			if cm := srv.GetClientManager(); cm != nil {
-				// Generate client ID from address (simple for now)
-				clientID := addr
-				clientName := addr // Use address as name for now
-				cm.RegisterClient(clientID, clientName, addr)
+				// Use address as both ID and name initially
+				// The client will send its actual configuration later
+				cm.RegisterClient(addr, addr, addr)
+				logger.Infof("Client connected and registered: %s", addr)
 			}
 
 			// Send UI notification
 			if p != nil {
 				p.Send(ui.ClientConnectedMsg{ClientAddr: addr})
-			} else {
-				logger.Infof("Client connected from %s", addr)
 			}
 		}
+		
+		// Set up client disconnection handler
 		sshSrv.OnClientDisconnected = func(addr string) {
 			// Unregister client from ClientManager
 			if cm := srv.GetClientManager(); cm != nil {
-				clientID := addr
-				cm.UnregisterClient(clientID)
+				cm.UnregisterClient(addr)
+				logger.Infof("Client disconnected and unregistered: %s", addr)
 			}
 
 			// Send UI notification
 			if p != nil {
 				p.Send(ui.ClientDisconnectedMsg{ClientAddr: addr})
-			} else {
-				logger.Infof("Client disconnected from %s", addr)
 			}
 		}
+		
+		// Set up authentication handler
 		sshSrv.OnAuthRequest = func(addr, publicKey, fingerprint string) bool {
 			if p != nil {
 				// Create a channel for the response
@@ -118,23 +120,6 @@ func initializeServer(ctx context.Context, srv *server.Server, cfg *config.Confi
 				// In non-TUI mode, auto-approve (you might want to change this)
 				logger.Warnf("Auto-approving SSH connection from %s (fingerprint: %s) - running in no-TUI mode", addr, fingerprint)
 				return true
-			}
-		}
-
-		// Set up client connection handlers
-		sshSrv.OnClientConnected = func(addr, publicKey string) {
-			if cm := srv.GetClientManager(); cm != nil {
-				// Use address as both ID and name initially
-				// The client will send its actual configuration later
-				cm.RegisterClient(addr, addr, addr)
-				logger.Infof("Client connected and registered: %s", addr)
-			}
-		}
-
-		sshSrv.OnClientDisconnected = func(addr string) {
-			if cm := srv.GetClientManager(); cm != nil {
-				cm.UnregisterClient(addr)
-				logger.Infof("Client disconnected and unregistered: %s", addr)
 			}
 		}
 
