@@ -188,11 +188,12 @@ func (m *ClientModel) View() string {
 func (m *ClientModel) renderClientStatusBar() string {
 	// Connection status
 	var statusText string
-	if m.connected {
+	switch {
+	case m.connected:
 		statusText = fmt.Sprintf("Connected to %s", m.serverAddr)
-	} else if m.reconnecting {
+	case m.reconnecting:
 		statusText = fmt.Sprintf("Reconnecting to %s", m.serverAddr)
-	} else {
+	default:
 		statusText = fmt.Sprintf("Disconnected from %s", m.serverAddr)
 	}
 
@@ -207,7 +208,8 @@ func (m *ClientModel) renderControlStatus() string {
 	output.WriteString(headerStyle.Render("Control Status:"))
 	output.WriteString("\n")
 
-	if m.controlStatus.BeingControlled {
+	switch {
+	case m.controlStatus.BeingControlled:
 		// Being controlled
 		controlStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("214")).Bold(true)
 		output.WriteString("  ")
@@ -218,7 +220,7 @@ func (m *ClientModel) renderControlStatus() string {
 		controlsStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("240"))
 		controls := "  Controls: [p] Request pause • [r] Reconnect • [q] Quit"
 		output.WriteString(controlsStyle.Render(controls))
-	} else if m.connected {
+	case m.connected:
 		// Connected but idle
 		idleStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("240"))
 		output.WriteString("  ")
@@ -229,7 +231,7 @@ func (m *ClientModel) renderControlStatus() string {
 		controlsStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("240"))
 		controls := "  Controls: [r] Reconnect • [q] Quit"
 		output.WriteString(controlsStyle.Render(controls))
-	} else {
+	default:
 		// Disconnected
 		disconnStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("196"))
 		output.WriteString("  ")

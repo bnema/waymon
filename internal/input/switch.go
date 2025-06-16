@@ -76,10 +76,10 @@ func (sm *SwitchManager) RemoveComputer(name string) {
 	sm.computers = filtered
 
 	// Adjust current computer index if necessary
-	if int32(removedIndex) == sm.currentComputer {
+	if int32(removedIndex) == sm.currentComputer { //nolint:gosec // index within slice bounds
 		// If the current computer was removed, switch to server (index 0)
 		sm.currentComputer = 0
-	} else if int32(removedIndex) < sm.currentComputer {
+	} else if int32(removedIndex) < sm.currentComputer { //nolint:gosec // index within slice bounds
 		// If a computer before the current one was removed, decrement index
 		sm.currentComputer--
 	}
@@ -112,7 +112,7 @@ func (sm *SwitchManager) SwitchNext() error {
 	}
 
 	previousComputer := sm.currentComputer
-	sm.currentComputer = (sm.currentComputer + 1) % int32(len(sm.computers))
+	sm.currentComputer = (sm.currentComputer + 1) % int32(len(sm.computers)) //nolint:gosec // slice length within int32 range
 
 	logger.Infof("Switched from %s to %s",
 		sm.computers[previousComputer],

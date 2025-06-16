@@ -132,7 +132,7 @@ func newWlrCgoBackend() (Backend, error) {
 
 func (w *wlrCgoBackend) GetMonitors() ([]*Monitor, error) {
 	var cOutputs *C.output_info
-	count := int(C.get_wayland_outputs(&cOutputs))
+	count := int(C.get_wayland_outputs(&cOutputs)) //nolint:gocritic // false positive in C code
 
 	if count < 0 {
 		return nil, fmt.Errorf("failed to connect to Wayland display")

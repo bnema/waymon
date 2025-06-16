@@ -30,22 +30,22 @@ type EnhancedDeviceInfo struct {
 // analyzeCapabilities analyzes what a device can do based on actual kernel capabilities
 func (s *DeviceSelector) analyzeCapabilities(file *os.File, deviceName string) DeviceCapabilities {
 	caps := DeviceCapabilities{}
-	
+
 	// Get device name from sysfs for more accurate detection
 	eventName := filepath.Base(file.Name())
 	sysPath := fmt.Sprintf("/sys/class/input/%s/device/name", eventName)
-	
+
 	var fullName string
-	if data, err := os.ReadFile(sysPath); err == nil {
+	if data, err := os.ReadFile(sysPath); err == nil { //nolint:gosec // sysPath is constructed from device path
 		fullName = strings.TrimSpace(string(data))
 	} else {
 		fullName = deviceName
 	}
-	
+
 	// Get actual device capabilities from kernel
 	detector := NewDeviceDetector()
 	kernelCaps := detector.GetDeviceCapabilities(file)
-	
+
 	// Check for mouse capabilities - must have REL_X and REL_Y
 	if relCaps, hasRel := kernelCaps[0x02]; hasRel { // EV_REL
 		hasX := false
@@ -60,7 +60,7 @@ func (s *DeviceSelector) analyzeCapabilities(file *os.File, deviceName string) D
 		}
 		caps.HasMouseMovement = hasX && hasY
 	}
-	
+
 	// Check for mouse buttons
 	if keyCaps, hasKeys := kernelCaps[0x01]; hasKeys { // EV_KEY
 		for _, key := range keyCaps {
@@ -71,7 +71,7 @@ func (s *DeviceSelector) analyzeCapabilities(file *os.File, deviceName string) D
 			}
 		}
 	}
-	
+
 	// Check for keyboard capabilities
 	if keyCaps, hasKeys := kernelCaps[0x01]; hasKeys { // EV_KEY
 		// Check for typical keyboard keys (KEY_Q = 16, KEY_SPACE = 57, etc)
@@ -84,37 +84,38 @@ func (s *DeviceSelector) analyzeCapabilities(file *os.File, deviceName string) D
 		// If device has many keyboard keys, it's likely a keyboard
 		caps.HasKeyboard = keyboardKeyCount > 20
 	}
-	
+
 	// Generate recommendations based on actual capabilities
-	if caps.HasMouseMovement && caps.HasMouseButtons && !caps.HasKeyboard {
+	switch {
+	case caps.HasMouseMovement && caps.HasMouseButtons && !caps.HasKeyboard:
 		caps.Recommendation = "🖱️ RECOMMENDED for MOUSE"
-	} else if caps.HasKeyboard && !caps.HasMouseMovement {
+	case caps.HasKeyboard && !caps.HasMouseMovement:
 		caps.Recommendation = "⌨️ RECOMMENDED for KEYBOARD"
-	} else if caps.HasKeyboard && caps.HasMouseMovement {
+	case caps.HasKeyboard && caps.HasMouseMovement:
 		caps.Recommendation = "🔄 COMBO device (mouse + keyboard)"
-	} else if caps.HasMouseButtons && !caps.HasMouseMovement {
+	case caps.HasMouseButtons && !caps.HasMouseMovement:
 		caps.Recommendation = "🎮 Gaming/Special device (buttons only)"
-	} else {
+	default:
 		caps.Recommendation = "⚙️ Other input device"
 	}
-	
-	logger.Debugf("Device %s (%s): Movement=%v, Buttons=%v, Keyboard=%v", 
+
+	logger.Debugf("Device %s (%s): Movement=%v, Buttons=%v, Keyboard=%v",
 		fullName, eventName, caps.HasMouseMovement, caps.HasMouseButtons, caps.HasKeyboard)
-	
+
 	return caps
 }
 
 // formatDeviceDescription creates a user-friendly description with capability hints
 func (s *DeviceSelector) formatDeviceDescription(name, eventName string, caps DeviceCapabilities) string {
 	// Determine if this is likely the main interface
-	isMainInterface := !strings.Contains(strings.ToLower(name), "-if") && 
-	                   !strings.Contains(strings.ToLower(name), "-event-")
-	
+	isMainInterface := !strings.Contains(strings.ToLower(name), "-if") &&
+		!strings.Contains(strings.ToLower(name), "-event-")
+
 	var mainIndicator string
 	if isMainInterface && (caps.HasMouseMovement || caps.HasKeyboard) {
 		mainIndicator = " [MAIN]"
 	}
-	
+
 	return fmt.Sprintf("%s (%s)%s - %s", name, eventName, mainIndicator, caps.Recommendation)
 }
 
@@ -147,7 +148,9 @@ func (s *DeviceSelector) SelectMouseDeviceEnhanced() (string, error) {
 				}
 				enhancedDevices = append(enhancedDevices, enhanced)
 			}
-			file.Close()
+			if err := file.Close(); err != nil {
+			logger.Debugf("Failed to close file %s: %v", dev.Path, err)
+		}
 		}
 	}
 
@@ -162,7 +165,8 @@ func (s *DeviceSelector) SelectMouseDeviceEnhanced() (string, error) {
 	}
 
 	// Combine: mouse devices first, then others
-	allDevices := append(mouseDevices, otherDevices...)
+	mouseDevices = append(mouseDevices, otherDevices...)
+	allDevices := mouseDevices
 
 	if len(allDevices) == 0 {
 		return "", fmt.Errorf("no suitable input devices found")
@@ -227,7 +231,9 @@ func (s *DeviceSelector) SelectKeyboardDeviceEnhanced() (string, error) {
 				}
 				enhancedDevices = append(enhancedDevices, enhanced)
 			}
-			file.Close()
+			if err := file.Close(); err != nil {
+			logger.Debugf("Failed to close file %s: %v", dev.Path, err)
+		}
 		}
 	}
 
@@ -242,7 +248,8 @@ func (s *DeviceSelector) SelectKeyboardDeviceEnhanced() (string, error) {
 	}
 
 	// Combine: keyboard devices first, then others
-	allDevices := append(keyboardDevices, otherDevices...)
+	keyboardDevices = append(keyboardDevices, otherDevices...)
+	allDevices := keyboardDevices
 
 	if len(allDevices) == 0 {
 		return "", fmt.Errorf("no suitable input devices found")

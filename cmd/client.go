@@ -37,7 +37,9 @@ func init() {
 	clientCmd.Flags().StringVarP(&hostName, "name", "n", "", "Host name from config")
 
 	// Bind flags to viper
-	viper.BindPFlag("client.server_address", clientCmd.Flags().Lookup("host"))
+	if err := viper.BindPFlag("client.server_address", clientCmd.Flags().Lookup("host")); err != nil {
+		logger.Errorf("Failed to bind host flag: %v", err)
+	}
 }
 
 func runClient(cmd *cobra.Command, args []string) error {
@@ -51,7 +53,11 @@ func runClient(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return fmt.Errorf("failed to setup file logging: %w", err)
 	}
-	defer logFile.Close()
+	defer func() {
+		if err := logFile.Close(); err != nil {
+			logger.Errorf("Failed to close log file: %v", err)
+		}
+	}()
 
 	// Setup verification is no longer needed - libei handles permissions automatically
 
@@ -83,7 +89,11 @@ func runClient(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return fmt.Errorf("failed to initialize display: %w", err)
 	}
-	defer disp.Close()
+	defer func() {
+		if err := disp.Close(); err != nil {
+			logger.Errorf("Failed to close display: %v", err)
+		}
+	}()
 
 	// Show monitor configuration
 	monitors := disp.GetMonitors()
@@ -100,7 +110,11 @@ func runClient(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return fmt.Errorf("failed to create input receiver: %w", err)
 	}
-	defer inputReceiver.Disconnect()
+	defer func() {
+		if err := inputReceiver.Disconnect(); err != nil {
+			logger.Errorf("Failed to disconnect input receiver: %v", err)
+		}
+	}()
 
 	// Create redesigned client TUI model
 	model := ui.NewClientModel(serverAddr, inputReceiver, Version)
@@ -149,13 +163,15 @@ func runClient(cmd *cobra.Command, args []string) error {
 		// Use the parent context for the actual connection
 		// The input backend and SSH receive loop need to stay alive after connection
 		if err := inputReceiver.Connect(ctx, privateKeyPath); err != nil {
-			if strings.Contains(err.Error(), "waiting for server approval") {
+			errStr := err.Error()
+			switch {
+			case strings.Contains(errStr, "waiting for server approval"):
 				// Keep showing the waiting message
 				logger.Info("Connection pending server approval")
-			} else if strings.Contains(err.Error(), "timed out") {
+			case strings.Contains(errStr, "timed out"):
 				logger.Errorf("Connection timed out: %v", err)
 				p.Send(ui.DisconnectedMsg{})
-			} else {
+			default:
 				logger.Errorf("Failed to connect to server: %v", err)
 				p.Send(ui.DisconnectedMsg{})
 			}
@@ -179,15 +195,16 @@ func runClient(cmd *cobra.Command, args []string) error {
 		p.Send(ui.LogMsg{Entry: logEntry})
 
 		// Also send appropriate UI messages based on status
-		if strings.Contains(status, "Reconnection attempt") ||
+		switch {
+		case strings.Contains(status, "Reconnection attempt") ||
 			strings.Contains(status, "Reconnecting") ||
 			strings.Contains(status, "retrying") ||
-			strings.Contains(status, "attempting to reconnect") {
+			strings.Contains(status, "attempting to reconnect"):
 			p.Send(ui.ReconnectingMsg{Status: status})
-		} else if strings.Contains(status, "Reconnected successfully") {
+		case strings.Contains(status, "Reconnected successfully"):
 			p.Send(ui.ConnectedMsg{})
-		} else if strings.Contains(status, "Server shutdown") ||
-			strings.Contains(status, "Connection lost") {
+		case strings.Contains(status, "Server shutdown") ||
+			strings.Contains(status, "Connection lost"):
 			p.Send(ui.DisconnectedMsg{})
 			p.Send(ui.ReconnectingMsg{Status: status})
 		}
@@ -206,7 +223,9 @@ func runClient(cmd *cobra.Command, args []string) error {
 		cancel() // Cancel context
 		if inputReceiver.IsConnected() {
 			logger.Info("Disconnecting from server...")
-			inputReceiver.Disconnect()
+			if err := inputReceiver.Disconnect(); err != nil {
+				logger.Errorf("Failed to disconnect input receiver during cleanup: %v", err)
+			}
 		}
 	}()
 

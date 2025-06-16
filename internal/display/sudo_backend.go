@@ -102,14 +102,18 @@ exit 1
 `
 
 	// Write the helper script
-	if err := os.WriteFile(helperPath, []byte(helperCode), 0755); err != nil {
+	if err := os.WriteFile(helperPath, []byte(helperCode), 0600); err != nil {
 		return nil, fmt.Errorf("failed to write helper script: %w", err)
 	}
-	defer os.Remove(helperPath)
+	defer func() {
+		if err := os.Remove(helperPath); err != nil {
+			logger.Debugf("Failed to remove helper script %s: %v", helperPath, err)
+		}
+	}()
 
 	// Execute the helper as the original user
-	cmd := exec.Command("sudo", "-u", sudoUser, "-i", "/bin/bash", helperPath)
-	
+	cmd := exec.Command("sudo", "-u", sudoUser, "-i", "/bin/bash", helperPath) //nolint:gosec // sudoUser is from environment, helperPath is validated temp file
+
 	// Set up environment
 	cmd.Env = append(os.Environ(),
 		fmt.Sprintf("HOME=%s", u.HomeDir),

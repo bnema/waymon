@@ -97,7 +97,6 @@ func (s *Server) initClientManager() error {
 	return nil
 }
 
-
 // initInput initializes the input handler
 func (s *Server) initInput() error {
 	// Server needs evdev backend for actual input capture
@@ -170,12 +169,13 @@ func (s *Server) Stop() {
 	}
 
 	if s.inputBackend != nil {
-		s.inputBackend.Stop()
+		if err := s.inputBackend.Stop(); err != nil {
+			logger.Errorf("Failed to stop input backend: %v", err)
+		}
 	}
 
 	s.wg.Wait()
 }
-
 
 // GetPort returns the server port
 func (s *Server) GetPort() int {

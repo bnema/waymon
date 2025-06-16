@@ -187,13 +187,14 @@ func (m *InlineClientModel) renderClientStatusBar() string {
 	parts = append(parts, nameStyle.Render("WAYMON"))
 
 	// Connection status
-	if m.connected {
+	switch {
+	case m.connected:
 		connStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("42"))
 		parts = append(parts, connStyle.Render("● Connected"))
-	} else if m.reconnecting {
+	case m.reconnecting:
 		connStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("214"))
 		parts = append(parts, connStyle.Render(m.spinner.View()+" Reconnecting"))
-	} else {
+	default:
 		connStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("196"))
 		parts = append(parts, connStyle.Render("✗ Disconnected"))
 	}

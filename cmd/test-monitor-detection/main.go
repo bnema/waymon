@@ -11,7 +11,7 @@ import (
 func main() {
 	// Set up logging
 	logger.SetLevel("debug")
-	
+
 	fmt.Println("Testing monitor detection...")
 	fmt.Printf("Running as UID: %d\n", os.Geteuid())
 	fmt.Printf("SUDO_USER: %s\n", os.Getenv("SUDO_USER"))
@@ -25,12 +25,16 @@ func main() {
 		fmt.Printf("Error creating display manager: %v\n", err)
 		os.Exit(1)
 	}
-	defer disp.Close()
+	defer func() {
+		if err := disp.Close(); err != nil {
+			fmt.Printf("Failed to close display: %v\n", err)
+		}
+	}()
 
 	// Get monitors
 	monitors := disp.GetMonitors()
 	fmt.Printf("Detected %d monitor(s):\n", len(monitors))
-	
+
 	for _, mon := range monitors {
 		fmt.Printf("\nMonitor: %s\n", mon.Name)
 		fmt.Printf("  ID: %s\n", mon.ID)

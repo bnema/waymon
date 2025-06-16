@@ -188,7 +188,9 @@ func (e *EvdevCapture) grabDevices() error {
 			logger.Errorf("Failed to grab keyboard device %s: %v", e.keyboardDevice.Name, err)
 			// Release mouse if keyboard grab fails
 			if e.mouseDevice != nil {
-				e.mouseDevice.Release()
+				if err := e.mouseDevice.Release(); err != nil {
+					logger.Errorf("Failed to release mouse device: %v", err)
+				}
 			}
 			return fmt.Errorf("failed to grab keyboard device: %w", err)
 		}
@@ -202,11 +204,15 @@ func (e *EvdevCapture) grabDevices() error {
 // ungrabDevices releases exclusive access to input devices
 func (e *EvdevCapture) ungrabDevices() {
 	if e.mouseDevice != nil {
-		e.mouseDevice.Release()
+		if err := e.mouseDevice.Release(); err != nil {
+			logger.Errorf("Failed to release mouse device: %v", err)
+		}
 		logger.Debug("Released exclusive access to mouse device")
 	}
 	if e.keyboardDevice != nil {
-		e.keyboardDevice.Release()
+		if err := e.keyboardDevice.Release(); err != nil {
+			logger.Errorf("Failed to release keyboard device: %v", err)
+		}
 		logger.Debug("Released exclusive access to keyboard device")
 	}
 	e.devicesGrabbed = false
@@ -267,7 +273,7 @@ func (e *EvdevCapture) captureMouseEvents() {
 	}()
 
 	logger.Info("Starting mouse event capture - ready to capture mouse movements")
-	
+
 	// Variables to accumulate relative movements
 	var accX, accY int32
 	ticker := time.NewTicker(16 * time.Millisecond) // ~60 FPS

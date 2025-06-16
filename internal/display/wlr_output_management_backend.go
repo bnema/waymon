@@ -326,15 +326,17 @@ func newWlrOutputManagementBackend() (Backend, error) {
 
 func (w *wlrOutputManagementBackend) GetMonitors() ([]*Monitor, error) {
 	var cOutputs *C.wlr_output_info
-	count := C.get_wlr_outputs(&cOutputs)
+	count := C.get_wlr_outputs(&cOutputs) //nolint:gocritic // false positive in C code
 
 	if count < 0 {
-		if count == -1 {
+		switch count {
+		case -1:
 			return nil, fmt.Errorf("failed to connect to Wayland display")
-		} else if count == -2 {
+		case -2:
 			return nil, fmt.Errorf("wlr-output-management protocol not supported by compositor")
+		default:
+			return nil, fmt.Errorf("failed to get outputs: error %d", count)
 		}
-		return nil, fmt.Errorf("failed to get outputs: error %d", count)
 	}
 
 	if count == 0 {

@@ -17,21 +17,21 @@ func NewDeviceDetector() *DeviceDetector {
 // isValidInputDevice checks if an open file descriptor is a valid input device
 func (d *DeviceDetector) isValidInputDevice(file *os.File) bool {
 	capabilities := d.GetDeviceCapabilities(file)
-	
+
 	// Must have some kind of input capability (keys or relative movement)
-	_, hasKeys := capabilities[0x01]  // EV_KEY
-	_, hasRel := capabilities[0x02]   // EV_REL
-	
+	_, hasKeys := capabilities[0x01] // EV_KEY
+	_, hasRel := capabilities[0x02]  // EV_REL
+
 	return hasKeys || hasRel
 }
 
 // GetDeviceCapabilities gets the capabilities of an evdev device
 func (d *DeviceDetector) GetDeviceCapabilities(file *os.File) map[int][]int {
 	capabilities := make(map[int][]int)
-	
+
 	// EVIOCGBIT(ev, len) - get event type bits
 	// We check for EV_KEY (0x01), EV_REL (0x02), etc.
-	
+
 	// Check for EV_KEY capabilities (buttons and keys)
 	keyBits := make([]byte, 96) // KEY_MAX/8 + 1
 	if d.getEventTypeBits(file, 0x01, keyBits) {
@@ -45,7 +45,7 @@ func (d *DeviceDetector) GetDeviceCapabilities(file *os.File) map[int][]int {
 			capabilities[0x01] = keys
 		}
 	}
-	
+
 	// Check for EV_REL capabilities (relative movement)
 	relBits := make([]byte, 2) // REL_MAX is small
 	if d.getEventTypeBits(file, 0x02, relBits) {
@@ -59,22 +59,21 @@ func (d *DeviceDetector) GetDeviceCapabilities(file *os.File) map[int][]int {
 			capabilities[0x02] = rels
 		}
 	}
-	
+
 	return capabilities
 }
 
 // getEventTypeBits uses ioctl to get event type capabilities
 func (d *DeviceDetector) getEventTypeBits(file *os.File, eventType int, bits []byte) bool {
 	// EVIOCGBIT(ev, len) = _IOC(_IOC_READ, 'E', 0x20 + ev, len)
-	cmd := uintptr(0x80000000 | (uintptr(len(bits))<<16) | (uintptr('E')<<8) | uintptr(0x20+eventType))
-	
+	cmd := 0x80000000 | (uintptr(len(bits)) << 16) | (uintptr('E') << 8) | uintptr(0x20+eventType)
+
 	_, _, errno := syscall.Syscall(
 		syscall.SYS_IOCTL,
 		file.Fd(),
 		cmd,
-		uintptr(unsafe.Pointer(&bits[0])),
+		uintptr(unsafe.Pointer(&bits[0])), //nolint:gosec // required for ioctl syscall
 	)
-	
+
 	return errno == 0
 }
-

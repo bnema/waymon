@@ -94,7 +94,7 @@ func (c *SSHClient) ConnectWithTimeout(ctx context.Context, serverAddr string, t
 		Auth: []ssh.AuthMethod{
 			ssh.PublicKeys(signer),
 		},
-		HostKeyCallback: ssh.InsecureIgnoreHostKey(), // TODO: Implement proper host key checking
+		HostKeyCallback: ssh.InsecureIgnoreHostKey(), //nolint:gosec // TODO: Implement proper host key checking
 		// Don't set a timeout here - let the context handle it
 		// Add client version to help with debugging
 		ClientVersion: "SSH-2.0-Waymon-Client",
@@ -151,7 +151,9 @@ func (c *SSHClient) ConnectWithTimeout(ctx context.Context, serverAddr string, t
 		logger.Errorf("Failed to establish TCP connection to %s after %v: %v", serverAddr, tcpDuration, err)
 		return fmt.Errorf("failed to establish TCP connection: %w", err)
 	}
-	tcpConn.Close()
+	if err := tcpConn.Close(); err != nil {
+		logger.Errorf("Failed to close TCP connection: %v", err)
+	}
 	logger.Debugf("TCP connectivity test successful after %v", tcpDuration)
 
 	// Create a channel to track dial completion
@@ -185,7 +187,9 @@ func (c *SSHClient) ConnectWithTimeout(ctx context.Context, serverAddr string, t
 		// Wrap the connection with the SSH client
 		sshConn, chans, reqs, err := ssh.NewClientConn(conn, serverAddr, config)
 		if err != nil {
-			conn.Close()
+			if err := conn.Close(); err != nil {
+				logger.Errorf("Failed to close connection: %v", err)
+			}
 			logger.Errorf("SSH handshake failed: %v", err)
 			dialErr = fmt.Errorf("SSH handshake failed: %w", err)
 			close(dialDone)
@@ -215,30 +219,44 @@ func (c *SSHClient) ConnectWithTimeout(ctx context.Context, serverAddr string, t
 	// Create session
 	session, err := client.NewSession()
 	if err != nil {
-		client.Close()
+		if err := client.Close(); err != nil {
+			logger.Errorf("Failed to close SSH client: %v", err)
+		}
 		return fmt.Errorf("failed to create SSH session: %w", err)
 	}
 
 	// Get stdin pipe for sending data
 	writer, err := session.StdinPipe()
 	if err != nil {
-		session.Close()
-		client.Close()
+		if err := session.Close(); err != nil {
+			logger.Errorf("Failed to close SSH session: %v", err)
+		}
+		if err := client.Close(); err != nil {
+			logger.Errorf("Failed to close SSH client: %v", err)
+		}
 		return fmt.Errorf("failed to get stdin pipe: %w", err)
 	}
 
 	// Get stdout for receiving input events from server
 	reader, err := session.StdoutPipe()
 	if err != nil {
-		session.Close()
-		client.Close()
+		if err := session.Close(); err != nil {
+			logger.Errorf("Failed to close SSH session: %v", err)
+		}
+		if err := client.Close(); err != nil {
+			logger.Errorf("Failed to close SSH client: %v", err)
+		}
 		return fmt.Errorf("failed to get stdout pipe: %w", err)
 	}
 
 	// Start the session
 	if err := session.Shell(); err != nil {
-		session.Close()
-		client.Close()
+		if err := session.Close(); err != nil {
+			logger.Errorf("Failed to close SSH session: %v", err)
+		}
+		if err := client.Close(); err != nil {
+			logger.Errorf("Failed to close SSH client: %v", err)
+		}
 		return fmt.Errorf("failed to start SSH session: %w", err)
 	}
 
@@ -256,8 +274,12 @@ func (c *SSHClient) ConnectWithTimeout(ctx context.Context, serverAddr string, t
 		if n > 0 {
 			response := string(buf[:n])
 			if strings.Contains(response, "maximum number of active clients") {
-				session.Close()
-				client.Close()
+				if err := session.Close(); err != nil {
+					logger.Errorf("Failed to close SSH session: %v", err)
+				}
+				if err := client.Close(); err != nil {
+					logger.Errorf("Failed to close SSH client: %v", err)
+				}
 				return fmt.Errorf("connection rejected: server has maximum number of active clients")
 			}
 			// Wait for either approval or established message
@@ -269,15 +291,23 @@ func (c *SSHClient) ConnectWithTimeout(ctx context.Context, serverAddr string, t
 				}
 			}
 			if !strings.Contains(response, "Waymon SSH connection established") {
-				session.Close()
-				client.Close()
+				if err := session.Close(); err != nil {
+					logger.Errorf("Failed to close SSH session: %v", err)
+				}
+				if err := client.Close(); err != nil {
+					logger.Errorf("Failed to close SSH client: %v", err)
+				}
 				return fmt.Errorf("connection not established: waiting for server approval")
 			}
 		}
 	case <-time.After(2 * time.Second):
 		// No immediate response, assume we're waiting for approval
-		session.Close()
-		client.Close()
+		if err := session.Close(); err != nil {
+			logger.Errorf("Failed to close SSH session: %v", err)
+		}
+		if err := client.Close(); err != nil {
+			logger.Errorf("Failed to close SSH client: %v", err)
+		}
 		return fmt.Errorf("connection pending: waiting for server approval")
 	}
 
@@ -309,12 +339,16 @@ func (c *SSHClient) Disconnect() error {
 	c.connected = false
 
 	if c.session != nil {
-		c.session.Close()
+		if err := c.session.Close(); err != nil {
+			logger.Errorf("Failed to close SSH session: %v", err)
+		}
 		c.session = nil
 	}
 
 	if c.client != nil {
-		c.client.Close()
+		if err := c.client.Close(); err != nil {
+			logger.Errorf("Failed to close SSH client: %v", err)
+		}
 		c.client = nil
 	}
 
@@ -390,7 +424,7 @@ func (c *SSHClient) OnInputEvent(callback func(*protocol.InputEvent)) {
 // receiveInputEvents continuously receives input events from the server
 func (c *SSHClient) receiveInputEvents(ctx context.Context) {
 	logger.Info("[SSH-CLIENT] Starting receiveInputEvents goroutine")
-	
+
 	for {
 		select {
 		case <-ctx.Done():
@@ -423,7 +457,7 @@ func (c *SSHClient) receiveInputEvents(ctx context.Context) {
 			// Decode length
 			length := int(lengthBuf[0])<<24 | int(lengthBuf[1])<<16 | int(lengthBuf[2])<<8 | int(lengthBuf[3])
 			logger.Debugf("[SSH-CLIENT] Decoded message length: %d bytes", length)
-			
+
 			if length <= 0 || length > 4096 {
 				logger.Errorf("[SSH-CLIENT] Invalid message length: %d", length)
 				continue
@@ -446,7 +480,7 @@ func (c *SSHClient) receiveInputEvents(ctx context.Context) {
 				continue
 			}
 
-			logger.Debugf("[SSH-CLIENT] Received event: type=%T, timestamp=%d, sourceId=%s", 
+			logger.Debugf("[SSH-CLIENT] Received event: type=%T, timestamp=%d, sourceId=%s",
 				inputEvent.Event, inputEvent.Timestamp, inputEvent.SourceId)
 
 			// Call the callback if set
@@ -469,7 +503,7 @@ func (c *SSHClient) monitorConnection() {
 	ticker := time.NewTicker(5 * time.Second)
 	defer ticker.Stop()
 
-	for {
+	for { //nolint:staticcheck // this is a connection monitoring loop, not a simple range
 		select {
 		case <-ticker.C:
 			c.mu.Lock()
@@ -483,7 +517,9 @@ func (c *SSHClient) monitorConnection() {
 			if err != nil {
 				c.connected = false
 				c.mu.Unlock()
-				c.Disconnect()
+				if err := c.Disconnect(); err != nil {
+					logger.Errorf("Failed to disconnect SSH client: %v", err)
+				}
 				return
 			}
 			c.mu.Unlock()

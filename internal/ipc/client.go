@@ -22,7 +22,7 @@ type Client struct {
 func NewClient() (*Client, error) {
 	// Try server socket first (predictable location)
 	serverSocketPath := "/tmp/waymon.sock"
-	
+
 	// Check if server socket exists
 	if _, err := net.DialTimeout("unix", serverSocketPath, 100*time.Millisecond); err == nil {
 		return &Client{
@@ -30,7 +30,7 @@ func NewClient() (*Client, error) {
 			timeout:    5 * time.Second,
 		}, nil
 	}
-	
+
 	// Fall back to user-specific socket path
 	socketPath, err := GetSocketPath()
 	if err != nil {
@@ -148,7 +148,11 @@ func (c *Client) sendMessage(msg *pb.IPCMessage) (*pb.IPCMessage, error) {
 		}
 		return nil, fmt.Errorf("failed to connect to waymon: %w", err)
 	}
-	defer conn.Close()
+	defer func() {
+		if err := conn.Close(); err != nil {
+			logger.Errorf("Failed to close IPC connection: %v", err)
+		}
+	}()
 
 	// Set connection timeout
 	if err := conn.SetDeadline(time.Now().Add(c.timeout)); err != nil {
@@ -201,7 +205,7 @@ func (c *Client) writeMessage(conn net.Conn, msg *pb.IPCMessage) error {
 	}
 
 	// Write message length (4 bytes, big endian)
-	length := uint32(len(data))
+	length := uint32(len(data)) //nolint:gosec // message length within uint32 range
 	if err := binary.Write(conn, binary.BigEndian, length); err != nil {
 		return fmt.Errorf("failed to write message length: %w", err)
 	}

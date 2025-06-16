@@ -69,17 +69,17 @@ func (p *portalBackend) getMonitorsXRandr() ([]*Monitor, error) {
 								res := strings.Split(resPos[0], "x")
 								if len(res) == 2 {
 									if w, err := strconv.Atoi(res[0]); err == nil {
-										monitor.Width = int32(w)
+										monitor.Width = int32(w) //nolint:gosec // display dimensions within int32 range
 									}
 									if h, err := strconv.Atoi(res[1]); err == nil {
-										monitor.Height = int32(h)
+										monitor.Height = int32(h) //nolint:gosec // display dimensions within int32 range
 									}
 								}
 								if x, err := strconv.Atoi(resPos[1]); err == nil {
-									monitor.X = int32(x)
+									monitor.X = int32(x) //nolint:gosec // display coordinates within int32 range
 								}
 								if y, err := strconv.Atoi(resPos[2]); err == nil {
-									monitor.Y = int32(y)
+									monitor.Y = int32(y) //nolint:gosec // display coordinates within int32 range
 								}
 							}
 						}

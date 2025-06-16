@@ -180,7 +180,9 @@ func (s *DeviceSelector) findDevicesBySymlinks() []DeviceInfo {
 								Descriptive: fmt.Sprintf("%s (%s)", cleanName, filepath.Base(realPath)),
 							})
 						}
-						file.Close()
+						if err := file.Close(); err != nil {
+					logger.Debugf("Failed to close file %s: %v", realPath, err)
+						}
 					}
 				}
 			}
@@ -210,7 +212,9 @@ func (s *DeviceSelector) findDevicesBySymlinks() []DeviceInfo {
 									Descriptive: fmt.Sprintf("%s (%s)", cleanName, filepath.Base(realPath)),
 								})
 							}
-							file.Close()
+							if err := file.Close(); err != nil {
+					logger.Debugf("Failed to close file %s: %v", realPath, err)
+						}
 						}
 					}
 				}
@@ -234,7 +238,7 @@ func (s *DeviceSelector) findDevicesByCapabilities(detector *DeviceDetector) ([]
 		if !entry.IsDir() && strings.HasPrefix(entry.Name(), "event") {
 			path := filepath.Join(eventDir, entry.Name())
 
-			if file, err := os.OpenFile(path, os.O_RDONLY, 0); err == nil {
+			if file, err := os.OpenFile(path, os.O_RDONLY, 0); err == nil { //nolint:gosec // path is from /dev/input enumeration
 				if detector.isValidInputDevice(file) {
 					// Try to get a better name from the device
 					name := s.getDeviceName(path)
@@ -249,7 +253,9 @@ func (s *DeviceSelector) findDevicesByCapabilities(detector *DeviceDetector) ([]
 						Descriptive: fmt.Sprintf("%s (%s)", name, entry.Name()),
 					})
 				}
-				file.Close()
+				if err := file.Close(); err != nil {
+					logger.Debugf("Failed to close file %s: %v", path, err)
+				}
 			}
 		}
 	}
@@ -265,7 +271,7 @@ func (s *DeviceSelector) getDeviceName(path string) string {
 	eventName := filepath.Base(path)
 	sysPath := fmt.Sprintf("/sys/class/input/%s/device/name", eventName)
 
-	if data, err := os.ReadFile(sysPath); err == nil {
+	if data, err := os.ReadFile(sysPath); err == nil { //nolint:gosec // sysPath is constructed from device path
 		return strings.TrimSpace(string(data))
 	}
 

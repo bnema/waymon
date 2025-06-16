@@ -148,7 +148,7 @@ func runClientSetup() error {
 	fmt.Println("      • GNOME: Uses different protocols")
 	fmt.Println("      • KDE Plasma: Uses different protocols")
 	fmt.Println()
-	return fmt.Errorf("Wayland virtual input support required")
+	return fmt.Errorf("wayland virtual input support required")
 }
 
 func selectDevices() error {

@@ -29,11 +29,11 @@ func (w *wlrRandrBackend) GetMonitors() ([]*Monitor, error) {
 	// If running with sudo, we need to set the environment variables
 	if sudoUser := os.Getenv("SUDO_USER"); sudoUser != "" && os.Geteuid() == 0 {
 		logger.Debugf("Running wlr-randr with sudo, SUDO_USER=%s", sudoUser)
-		
+
 		sudoUID := os.Getenv("SUDO_UID")
 		if sudoUID == "" {
 			// Try to get UID from the user
-			uidCmd := exec.Command("id", "-u", sudoUser)
+			uidCmd := exec.Command("id", "-u", sudoUser) //nolint:gosec // sudoUser is from environment variable
 			if uidOutput, err := uidCmd.Output(); err == nil {
 				sudoUID = strings.TrimSpace(string(uidOutput))
 			}
@@ -58,7 +58,7 @@ func (w *wlrRandrBackend) GetMonitors() ([]*Monitor, error) {
 		} else {
 			logger.Warnf("Could not read socket directory %s: %v", socketPath, err)
 		}
-		
+
 		if waylandDisplay != "" {
 			cmd.Env = append(cmd.Env, fmt.Sprintf("WAYLAND_DISPLAY=%s", waylandDisplay))
 			logger.Debugf("Detected WAYLAND_DISPLAY=%s", waylandDisplay)
@@ -83,7 +83,7 @@ func (w *wlrRandrBackend) GetMonitors() ([]*Monitor, error) {
 		// If JSON flag doesn't work, try parsing text output
 		return w.getMonitorsText()
 	}
-	
+
 	logger.Debugf("wlr-randr --json output: %s", string(output))
 
 	// Parse JSON output
@@ -128,9 +128,9 @@ func (w *wlrRandrBackend) GetMonitors() ([]*Monitor, error) {
 			width = output.CurrentMode.Width
 			height = output.CurrentMode.Height
 		}
-		
-		logger.Debugf("Monitor %s: base dimensions %dx%d, current mode %dx%d", 
-			output.Name, output.Width, output.Height, 
+
+		logger.Debugf("Monitor %s: base dimensions %dx%d, current mode %dx%d",
+			output.Name, output.Width, output.Height,
 			output.CurrentMode.Width, output.CurrentMode.Height)
 
 		// Use position if available
@@ -155,7 +155,7 @@ func (w *wlrRandrBackend) GetMonitors() ([]*Monitor, error) {
 		monitor := &Monitor{
 			ID:      fmt.Sprintf("%d", i),
 			Name:    output.Name,
-			X:       int32(x),
+			X:       int32(x), //nolint:gosec // display coordinates are safe to convert
 			Y:       int32(y),
 			Width:   int32(width),
 			Height:  int32(height),
@@ -201,11 +201,11 @@ func (w *wlrRandrBackend) getMonitorsText() ([]*Monitor, error) {
 	// If running with sudo, we need to set the environment variables
 	if sudoUser := os.Getenv("SUDO_USER"); sudoUser != "" && os.Geteuid() == 0 {
 		logger.Debugf("Running wlr-randr with sudo, SUDO_USER=%s", sudoUser)
-		
+
 		sudoUID := os.Getenv("SUDO_UID")
 		if sudoUID == "" {
 			// Try to get UID from the user
-			uidCmd := exec.Command("id", "-u", sudoUser)
+			uidCmd := exec.Command("id", "-u", sudoUser) //nolint:gosec // sudoUser is from environment variable
 			if uidOutput, err := uidCmd.Output(); err == nil {
 				sudoUID = strings.TrimSpace(string(uidOutput))
 			}
@@ -230,7 +230,7 @@ func (w *wlrRandrBackend) getMonitorsText() ([]*Monitor, error) {
 		} else {
 			logger.Warnf("Could not read socket directory %s: %v", socketPath, err)
 		}
-		
+
 		if waylandDisplay != "" {
 			cmd.Env = append(cmd.Env, fmt.Sprintf("WAYLAND_DISPLAY=%s", waylandDisplay))
 			logger.Debugf("Detected WAYLAND_DISPLAY=%s", waylandDisplay)
@@ -301,8 +301,12 @@ func (w *wlrRandrBackend) getMonitorsText() ([]*Monitor, error) {
 					// Format is usually "x,y"
 					coords := strings.Split(parts[i+1], ",")
 					if len(coords) == 2 {
-						fmt.Sscanf(coords[0], "%d", &currentMonitor.X)
-						fmt.Sscanf(coords[1], "%d", &currentMonitor.Y)
+						if _, err := fmt.Sscanf(coords[0], "%d", &currentMonitor.X); err != nil {
+							logger.Debugf("Failed to parse X coordinate %s: %v", coords[0], err)
+						}
+						if _, err := fmt.Sscanf(coords[1], "%d", &currentMonitor.Y); err != nil {
+							logger.Debugf("Failed to parse Y coordinate %s: %v", coords[1], err)
+						}
 					}
 				}
 			}
@@ -317,8 +321,14 @@ func (w *wlrRandrBackend) getMonitorsText() ([]*Monitor, error) {
 					dims := strings.Split(part, "x")
 					if len(dims) == 2 {
 						var w, h int
-						fmt.Sscanf(dims[0], "%d", &w)
-						fmt.Sscanf(dims[1], "%d", &h)
+						if _, err := fmt.Sscanf(dims[0], "%d", &w); err != nil {
+							logger.Debugf("Failed to parse width %s: %v", dims[0], err)
+							continue
+						}
+						if _, err := fmt.Sscanf(dims[1], "%d", &h); err != nil {
+							logger.Debugf("Failed to parse height %s: %v", dims[1], err)
+							continue
+						}
 						currentMonitor.Width = int32(w)
 						currentMonitor.Height = int32(h)
 					}
@@ -331,7 +341,9 @@ func (w *wlrRandrBackend) getMonitorsText() ([]*Monitor, error) {
 			parts := strings.Fields(line)
 			for i, part := range parts {
 				if part == "Scale:" && i+1 < len(parts) {
-					fmt.Sscanf(parts[i+1], "%f", &currentMonitor.Scale)
+					if _, err := fmt.Sscanf(parts[i+1], "%f", &currentMonitor.Scale); err != nil {
+						logger.Debugf("Failed to parse scale %s: %v", parts[i+1], err)
+					}
 				}
 			}
 		}

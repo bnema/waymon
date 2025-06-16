@@ -135,7 +135,7 @@ func (c *ConnectionList) View() string {
 				indicator = ConnectedIndicator
 			}
 			if conn.Active {
-				style = style.Copy().Foreground(ColorActive)
+				style = style.Foreground(ColorActive)
 			}
 
 			line := fmt.Sprintf("%s %s (%s)",

@@ -378,7 +378,11 @@ func (cm *ClientManager) HandleInputEvent(event *protocol.InputEvent) {
 	client, exists := cm.clients[cm.activeClientID]
 	if !exists {
 		logger.Warnf("[SERVER-MANAGER] Active client %s not found, switching to local", cm.activeClientID)
-		go cm.SwitchToLocal() // Switch back to local asynchronously
+		go func() { // Switch back to local asynchronously
+			if err := cm.SwitchToLocal(); err != nil {
+				logger.Errorf("Failed to switch to local: %v", err)
+			}
+		}()
 		return
 	}
 
@@ -534,10 +538,10 @@ func (cm *ClientManager) updateClientConfiguration(config *protocol.ClientConfig
 	// Try exact matches first
 	for id, client := range cm.clients {
 		// Check if the client ID matches the config ID, name, or source ID
-		if client.ID == config.ClientId || client.Name == config.ClientName || 
-		   id == config.ClientId || id == sourceID || client.Address == sourceID {
+		if client.ID == config.ClientId || client.Name == config.ClientName ||
+			id == config.ClientId || id == sourceID || client.Address == sourceID {
 			targetClient = client
-			logger.Debugf("[SERVER-MANAGER] Found client by match: id=%s, name=%s, address=%s", 
+			logger.Debugf("[SERVER-MANAGER] Found client by match: id=%s, name=%s, address=%s",
 				client.ID, client.Name, client.Address)
 			break
 		}
@@ -970,10 +974,10 @@ func (cm *ClientManager) HandleStatusQuery(query *pb.StatusQuery) (*pb.IPCMessag
 	for i, id := range clientIDs {
 		client := cm.clients[id]
 		computerNames = append(computerNames, client.Name)
-		
+
 		// If this is the active client, set the current index
 		if !cm.controllingLocal && id == cm.activeClientID {
-			currentIndex = int32(i + 1) // +1 because server is at index 0
+			currentIndex = int32(i + 1) //nolint:gosec // client index conversion is safe
 		}
 	}
 
@@ -991,7 +995,7 @@ func (cm *ClientManager) HandleStatusQuery(query *pb.StatusQuery) (*pb.IPCMessag
 		connected,
 		serverHost,
 		currentIndex,
-		int32(len(computerNames)),
+		int32(len(computerNames)), //nolint:gosec // computer count conversion is safe
 		computerNames,
 	)
 }

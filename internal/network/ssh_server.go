@@ -32,7 +32,7 @@ type SSHServer struct {
 
 	// Authentication
 	pendingAuth map[string]chan bool // fingerprint -> approval channel
-	authMu      sync.Mutex
+	authMu      sync.Mutex           //nolint:unused // kept for future authentication features
 
 	// Lifecycle
 	stop     chan struct{}
@@ -116,7 +116,7 @@ func (s *SSHServer) Start(ctx context.Context) error {
 // SendEventToClient sends an input event to a specific client by address
 func (s *SSHServer) SendEventToClient(clientAddr string, event *protocol.InputEvent) error {
 	logger.Debugf("[SSH-SERVER] SendEventToClient called: clientAddr=%s, eventType=%T", clientAddr, event.Event)
-	
+
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
@@ -124,7 +124,7 @@ func (s *SSHServer) SendEventToClient(clientAddr string, event *protocol.InputEv
 	for _, client := range s.clients {
 		if client.addr == clientAddr {
 			logger.Debugf("[SSH-SERVER] Found client for address %s, writing event", clientAddr)
-			
+
 			// Use the same message format as the client expects
 			if err := s.writeInputEvent(client.writer, event); err != nil {
 				logger.Errorf("[SSH-SERVER] Failed to write event to client %s: %v", clientAddr, err)
@@ -245,9 +245,15 @@ func (s *SSHServer) sessionHandler() wish.Middleware {
 				s.mu.Unlock()
 				// Reject the session immediately
 				logger.Infof("Rejecting client - max clients reached addr=%s", sess.RemoteAddr().String())
-				fmt.Fprintf(sess, "Server already has maximum number of active clients\n")
-				sess.Exit(1)
-				sess.Close()
+				if _, err := fmt.Fprintf(sess, "Server already has maximum number of active clients\n"); err != nil {
+					logger.Errorf("Failed to write to SSH session: %v", err)
+				}
+				if err := sess.Exit(1); err != nil {
+					logger.Errorf("Failed to exit SSH session: %v", err)
+				}
+				if err := sess.Close(); err != nil {
+					logger.Errorf("Failed to close SSH session: %v", err)
+				}
 				return
 			}
 
@@ -288,8 +294,12 @@ func (s *SSHServer) sessionHandler() wish.Middleware {
 			}()
 
 			// Send welcome message
-			fmt.Fprintf(sess, "Waymon SSH connection established\n")
-			fmt.Fprintf(sess, "Public key: %s\n", publicKey)
+			if _, err := fmt.Fprintf(sess, "Waymon SSH connection established\n"); err != nil {
+				logger.Errorf("Failed to write to SSH session: %v", err)
+			}
+			if _, err := fmt.Fprintf(sess, "Public key: %s\n", publicKey); err != nil {
+				logger.Errorf("Failed to write public key to SSH session: %v", err)
+			}
 
 			// Handle mouse events with context
 			s.handleMouseEvents(s.ctx, sess)
@@ -315,10 +325,14 @@ func (s *SSHServer) handleMouseEvents(ctx context.Context, sess ssh.Session) {
 		select {
 		case <-ctx.Done():
 			// Context cancelled, close the session
-			sess.Close()
+			if err := sess.Close(); err != nil {
+				logger.Errorf("Failed to close SSH session: %v", err)
+			}
 		case <-s.stop:
 			// Server stopping, close the session
-			sess.Close()
+			if err := sess.Close(); err != nil {
+				logger.Errorf("Failed to close SSH session: %v", err)
+			}
 		case <-done:
 			// Reading finished normally
 		}
@@ -453,7 +467,7 @@ func (s *SSHServer) GetClientSessions() map[string]string {
 // writeInputEvent writes an input event to a client
 func (s *SSHServer) writeInputEvent(w io.Writer, event *protocol.InputEvent) error {
 	logger.Debugf("[SSH-SERVER] writeInputEvent: marshaling event type=%T", event.Event)
-	
+
 	data, err := proto.Marshal(event)
 	if err != nil {
 		logger.Errorf("[SSH-SERVER] Failed to marshal input event: %v", err)
@@ -463,7 +477,7 @@ func (s *SSHServer) writeInputEvent(w io.Writer, event *protocol.InputEvent) err
 	// Write length prefix (4 bytes, big-endian)
 	length := len(data)
 	logger.Debugf("[SSH-SERVER] Writing message: length=%d bytes", length)
-	
+
 	lengthBuf := []byte{
 		byte(length >> 24),
 		byte(length >> 16),

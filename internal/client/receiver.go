@@ -4,14 +4,25 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"strings"
 	"sync"
 	"time"
 
+	"github.com/bnema/waymon/internal/config"
 	"github.com/bnema/waymon/internal/display"
 	"github.com/bnema/waymon/internal/input"
 	"github.com/bnema/waymon/internal/logger"
 	"github.com/bnema/waymon/internal/network"
 	"github.com/bnema/waymon/internal/protocol"
+)
+
+// Modifier bit constants for keyboard events
+const (
+	ModifierShift = 1 << 0 // Shift modifier bit
+	ModifierCaps  = 1 << 1 // Caps lock modifier bit
+	ModifierCtrl  = 1 << 2 // Control modifier bit
+	ModifierAlt   = 1 << 3 // Alt modifier bit
+	ModifierMeta  = 1 << 6 // Meta/Super modifier bit
 )
 
 // InputReceiver manages receiving and injecting input from the server
@@ -36,6 +47,10 @@ type InputReceiver struct {
 	// Health check state
 	lastHealthCheckResponse time.Time
 	healthCheckTimeout      time.Duration
+
+	// Hotkey handling state
+	lastHotkeyPress  time.Time
+	hotkeyDebounceMs int64 // Minimum time between hotkey presses in milliseconds
 }
 
 // ControlStatus represents the current control status of the client
@@ -66,6 +81,7 @@ func NewInputReceiver(serverAddress string) (*InputReceiver, error) {
 		connected:          false,
 		clientID:           hostname,
 		healthCheckTimeout: 30 * time.Second, // 30 second timeout for health checks
+		hotkeyDebounceMs:   500,              // 500ms debounce for hotkey presses
 	}, nil
 }
 
@@ -91,7 +107,9 @@ func (ir *InputReceiver) Connect(ctx context.Context, privateKeyPath string) err
 
 	// Connect to server
 	if err := sshConnection.Connect(ctx, ir.serverAddress); err != nil {
-		ir.inputBackend.Stop()
+			if err := ir.inputBackend.Stop(); err != nil {
+			logger.Errorf("Failed to stop input backend: %v", err)
+		}
 		return fmt.Errorf("failed to connect to server: %w", err)
 	}
 
@@ -135,12 +153,16 @@ func (ir *InputReceiver) Disconnect() error {
 
 	// Disconnect SSH connection
 	if ir.sshConnection != nil {
-		ir.sshConnection.Disconnect()
+		if err := ir.sshConnection.Disconnect(); err != nil {
+			logger.Errorf("Failed to disconnect SSH connection: %v", err)
+		}
 		ir.sshConnection = nil
 	}
 
 	// Stop input backend
-	ir.inputBackend.Stop()
+	if err := ir.inputBackend.Stop(); err != nil {
+		logger.Errorf("Failed to stop input backend: %v", err)
+	}
 
 	ir.connected = false
 	ir.controlStatus = ControlStatus{}
@@ -179,9 +201,9 @@ func (ir *InputReceiver) OnStatusChange(callback func(ControlStatus)) {
 
 // processInputEvent processes a received input event
 func (ir *InputReceiver) processInputEvent(event *protocol.InputEvent) {
-	logger.Debugf("[CLIENT-RECEIVER] Processing input event: type=%T, timestamp=%d, sourceId=%s", 
+	logger.Debugf("[CLIENT-RECEIVER] Processing input event: type=%T, timestamp=%d, sourceId=%s",
 		event.Event, event.Timestamp, event.SourceId)
-	
+
 	// Handle control events first
 	if controlEvent := event.GetControl(); controlEvent != nil {
 		logger.Debugf("[CLIENT-RECEIVER] Event is control event: type=%v", controlEvent.Type)
@@ -195,12 +217,27 @@ func (ir *InputReceiver) processInputEvent(event *protocol.InputEvent) {
 	controllerName := ir.controlStatus.ControllerName
 	ir.mu.RUnlock()
 
-	logger.Debugf("[CLIENT-RECEIVER] Control status: beingControlled=%v, controller=%s", 
+	logger.Debugf("[CLIENT-RECEIVER] Control status: beingControlled=%v, controller=%s",
 		beingControlled, controllerName)
 
 	if !beingControlled {
 		logger.Debug("[CLIENT-RECEIVER] Not being controlled, ignoring input event")
 		return
+	}
+
+	// Check for hotkey combination before injecting keyboard events
+	if keyboardEvent := event.GetKeyboard(); keyboardEvent != nil && beingControlled {
+		if ir.isControlSwitchHotkey(keyboardEvent) {
+			logger.Info("[CLIENT-RECEIVER] Switch hotkey detected - requesting control release")
+			if err := ir.requestControlRelease(); err != nil {
+				logger.Errorf("[CLIENT-RECEIVER] Failed to request control release: %v", err)
+				// If release request fails, still inject the hotkey so user isn't stuck
+				logger.Warn("[CLIENT-RECEIVER] Injecting hotkey despite failure to allow manual recovery")
+			} else {
+				// Don't inject the hotkey combination if request was successful
+				return
+			}
+		}
 	}
 
 	// Inject the input event based on type
@@ -215,7 +252,7 @@ func (ir *InputReceiver) processInputEvent(event *protocol.InputEvent) {
 // handleControlEvent processes control events from the server
 func (ir *InputReceiver) handleControlEvent(control *protocol.ControlEvent) {
 	logger.Debugf("[CLIENT-RECEIVER] Handling control event: type=%v, targetId=%s", control.Type, control.TargetId)
-	
+
 	ir.mu.Lock()
 	defer ir.mu.Unlock()
 
@@ -249,7 +286,9 @@ func (ir *InputReceiver) handleControlEvent(control *protocol.ControlEvent) {
 		// Don't call Disconnect() here as it will cleanup input injector and disable reconnection
 		// Just disconnect the SSH connection
 		if ir.sshConnection != nil {
-			ir.sshConnection.Disconnect()
+			if err := ir.sshConnection.Disconnect(); err != nil {
+				logger.Errorf("Failed to disconnect SSH connection: %v", err)
+			}
 			ir.sshConnection = nil
 		}
 		// Notify that we're starting reconnection
@@ -293,6 +332,139 @@ func (ir *InputReceiver) RequestControlRelease() error {
 	return nil
 }
 
+// requestControlRelease sends a control release request to the server
+func (ir *InputReceiver) requestControlRelease() error {
+	ir.mu.RLock()
+	sshConnection := ir.sshConnection
+	clientID := ir.clientID
+	ir.mu.RUnlock()
+
+	if sshConnection == nil {
+		return fmt.Errorf("SSH connection not available")
+	}
+
+	// Create control release event
+	controlEvent := &protocol.ControlEvent{
+		Type: protocol.ControlEvent_RELEASE_CONTROL,
+	}
+	inputEvent := &protocol.InputEvent{
+		Event: &protocol.InputEvent_Control{
+			Control: controlEvent,
+		},
+		Timestamp: time.Now().UnixNano(),
+		SourceId:  clientID,
+	}
+
+	// Send via SSH connection
+	if err := sshConnection.SendInputEvent(inputEvent); err != nil {
+		return fmt.Errorf("failed to send control release request: %w", err)
+	}
+
+	// Update local control state immediately
+	ir.mu.Lock()
+	ir.controlStatus.BeingControlled = false
+	ir.controlStatus.ControllerName = ""
+	ir.mu.Unlock()
+
+	// Notify status change
+	if ir.onStatusChange != nil {
+		ir.onStatusChange(ir.controlStatus)
+	}
+
+	logger.Info("[CLIENT-RECEIVER] Control release request sent to server")
+	return nil
+}
+
+// isControlSwitchHotkey checks if the keyboard event is the switch hotkey based on configuration
+func (ir *InputReceiver) isControlSwitchHotkey(keyEvent *protocol.KeyboardEvent) bool {
+	// Only trigger on key press, not release
+	if !keyEvent.Pressed {
+		return false
+	}
+
+	// Debounce hotkey presses to prevent rapid switching
+	now := time.Now()
+	timeSinceLastPress := now.Sub(ir.lastHotkeyPress).Milliseconds()
+	if timeSinceLastPress < ir.hotkeyDebounceMs {
+		logger.Debugf("[CLIENT-RECEIVER] Hotkey debounced - ignoring press (last press %dms ago)", timeSinceLastPress)
+		return false
+	}
+
+	// Get configuration
+	cfg := config.Get()
+
+	// Parse the configured hotkey
+	expectedKey := ir.parseHotkeyKey(cfg.Client.HotkeyKey)
+	expectedModifiers := ir.parseHotkeyModifiers(cfg.Client.HotkeyModifier)
+
+	if expectedKey == 0 {
+		logger.Warnf("[CLIENT-RECEIVER] Invalid hotkey key configuration: '%s', falling back to 's'", cfg.Client.HotkeyKey)
+		expectedKey = 31 // Default to 's' key
+	}
+
+	if expectedModifiers == 0 {
+		logger.Warnf("[CLIENT-RECEIVER] Invalid hotkey modifier configuration: '%s', falling back to 'ctrl+alt'", cfg.Client.HotkeyModifier)
+		expectedModifiers = ModifierCtrl | ModifierAlt // Default to Ctrl+Alt
+	}
+
+	// Check if this is the configured key
+	if keyEvent.Key != expectedKey {
+		return false
+	}
+
+	// Check if the required modifiers are active
+	if (keyEvent.Modifiers & expectedModifiers) == expectedModifiers {
+		// Update last hotkey press time
+		ir.lastHotkeyPress = now
+
+		logger.Debugf("[CLIENT-RECEIVER] Switch hotkey detected: %s+%s (key=%d, modifiers=0x%x)",
+			cfg.Client.HotkeyModifier, cfg.Client.HotkeyKey, keyEvent.Key, keyEvent.Modifiers)
+		return true
+	}
+
+	return false
+}
+
+// parseHotkeyKey converts a key name to its key code
+func (ir *InputReceiver) parseHotkeyKey(keyName string) uint32 {
+	// Key codes from wayland-virtual-input-go
+	keyMap := map[string]uint32{
+		"a": 30, "b": 48, "c": 46, "d": 32, "e": 18, "f": 33, "g": 34, "h": 35,
+		"i": 23, "j": 36, "k": 37, "l": 38, "m": 50, "n": 49, "o": 24, "p": 25,
+		"q": 16, "r": 19, "s": 31, "t": 20, "u": 22, "v": 47, "w": 17, "x": 45,
+		"y": 21, "z": 44,
+		"1": 2, "2": 3, "3": 4, "4": 5, "5": 6, "6": 7, "7": 8, "8": 9, "9": 10, "0": 11,
+		"space": 57, "enter": 28, "tab": 15, "backspace": 14, "esc": 1,
+	}
+
+	return keyMap[strings.ToLower(keyName)]
+}
+
+// parseHotkeyModifiers converts modifier names to a bitmask
+func (ir *InputReceiver) parseHotkeyModifiers(modifierString string) uint32 {
+
+	var modifiers uint32
+	parts := strings.Split(strings.ToLower(modifierString), "+")
+
+	for _, part := range parts {
+		part = strings.TrimSpace(part)
+		switch part {
+		case "ctrl", "control":
+			modifiers |= ModifierCtrl
+		case "alt":
+			modifiers |= ModifierAlt
+		case "shift":
+			modifiers |= ModifierShift
+		case "meta", "super", "cmd":
+			modifiers |= ModifierMeta
+		case "caps":
+			modifiers |= ModifierCaps
+		}
+	}
+
+	return modifiers
+}
+
 // sendClientConfiguration sends the client's monitor and capability information to the server
 func (ir *InputReceiver) sendClientConfiguration() error {
 
@@ -301,7 +473,11 @@ func (ir *InputReceiver) sendClientConfiguration() error {
 	if err != nil {
 		return fmt.Errorf("failed to initialize display for config: %w", err)
 	}
-	defer disp.Close()
+	defer func() {
+		if err := disp.Close(); err != nil {
+			logger.Errorf("Failed to close display: %v", err)
+		}
+	}()
 
 	monitors := disp.GetMonitors()
 
@@ -326,7 +502,7 @@ func (ir *InputReceiver) sendClientConfiguration() error {
 		CanReceiveMouse:    true,
 		CanReceiveScroll:   true,
 		WaylandCompositor:  getWaylandCompositor(),
-		UinputVersion: "wayland-virtual-input-v0.1.3", // Using Wayland virtual input
+		UinputVersion:      "wayland-virtual-input-v0.1.3", // Using Wayland virtual input
 	}
 
 	// Create client configuration
@@ -388,17 +564,6 @@ func (ir *InputReceiver) enableReconnection(ctx context.Context) {
 	go ir.monitorConnection()
 }
 
-// disableReconnection disables automatic reconnection
-func (ir *InputReceiver) disableReconnection() {
-	ir.mu.Lock()
-	defer ir.mu.Unlock()
-
-	ir.reconnectEnabled = false
-	if ir.reconnectCancel != nil {
-		ir.reconnectCancel()
-		ir.reconnectCancel = nil
-	}
-}
 
 // SetOnReconnectStatus sets a callback for reconnection status updates
 func (ir *InputReceiver) SetOnReconnectStatus(callback func(status string)) {
@@ -547,7 +712,9 @@ func (ir *InputReceiver) reconnectToServer(ctx context.Context) error {
 
 	// Clean up any existing connection
 	if ir.sshConnection != nil {
-		ir.sshConnection.Disconnect()
+		if err := ir.sshConnection.Disconnect(); err != nil {
+			logger.Errorf("Failed to disconnect SSH connection: %v", err)
+		}
 		ir.sshConnection = nil
 	}
 
@@ -627,27 +794,27 @@ func (ir *InputReceiver) injectEvent(event *protocol.InputEvent) error {
 
 	switch e := event.Event.(type) {
 	case *protocol.InputEvent_MouseMove:
-		logger.Debugf("[CLIENT-RECEIVER] Injecting mouse move: dx=%d, dy=%d", e.MouseMove.Dx, e.MouseMove.Dy)
+		logger.Debugf("[CLIENT-RECEIVER] Injecting mouse move: dx=%.2f, dy=%.2f", e.MouseMove.Dx, e.MouseMove.Dy)
 		return backend.InjectMouseMove(e.MouseMove.Dx, e.MouseMove.Dy)
-		
+
 	case *protocol.InputEvent_MouseButton:
 		logger.Debugf("[CLIENT-RECEIVER] Injecting mouse button: button=%d, pressed=%v", e.MouseButton.Button, e.MouseButton.Pressed)
 		return backend.InjectMouseButton(e.MouseButton.Button, e.MouseButton.Pressed)
-		
+
 	case *protocol.InputEvent_MouseScroll:
-		logger.Debugf("[CLIENT-RECEIVER] Injecting mouse scroll: dx=%d, dy=%d", e.MouseScroll.Dx, e.MouseScroll.Dy)
+		logger.Debugf("[CLIENT-RECEIVER] Injecting mouse scroll: dx=%.2f, dy=%.2f", e.MouseScroll.Dx, e.MouseScroll.Dy)
 		return backend.InjectMouseScroll(e.MouseScroll.Dx, e.MouseScroll.Dy)
-		
+
 	case *protocol.InputEvent_Keyboard:
 		logger.Debugf("[CLIENT-RECEIVER] Injecting keyboard event: key=%d, pressed=%v", e.Keyboard.Key, e.Keyboard.Pressed)
 		return backend.InjectKeyEvent(e.Keyboard.Key, e.Keyboard.Pressed)
-		
+
 	case *protocol.InputEvent_MousePosition:
-		logger.Debugf("[CLIENT-RECEIVER] Received mouse position event: x=%d, y=%d (not implemented)", 
+		logger.Debugf("[CLIENT-RECEIVER] Received mouse position event: x=%d, y=%d (not implemented)",
 			e.MousePosition.X, e.MousePosition.Y)
 		// TODO: Implement absolute positioning if needed
 		return nil
-		
+
 	default:
 		logger.Errorf("[CLIENT-RECEIVER] Unsupported input event type: %T", event.Event)
 		return fmt.Errorf("unsupported input event type: %T", event.Event)
