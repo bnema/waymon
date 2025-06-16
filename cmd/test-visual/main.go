@@ -62,13 +62,17 @@ func main() {
 		os.Exit(1)
 	}
 	logger.Info("✅ Wayland virtual input: SUCCESS")
-	defer waylandBackend.Stop()
+	defer func() {
+		if err := waylandBackend.Stop(); err != nil {
+			logger.Errorf("Failed to stop Wayland backend: %v", err)
+		}
+	}()
 
 	// Test 3: Evdev capture with Wayland injection (full pipeline)
 	logger.Info("\n🔍 Test 3: Full capture + injection pipeline")
 	if err := testFullPipeline(cfg.Input.MouseDevice, waylandBackend); err != nil {
 		logger.Errorf("❌ Full pipeline test failed: %v", err)
-		os.Exit(1)
+		return // Exit gracefully to allow defer to run
 	}
 
 	logger.Info("✅ All tests passed!")
@@ -123,7 +127,11 @@ func testDirectEvdev(devicePath string) error {
 			return fmt.Errorf("failed to grab device: %w", err)
 		}
 		logger.Info("✓ Device grabbed successfully")
-		defer device.Release()
+		defer func() {
+			if err := device.Release(); err != nil {
+				logger.Errorf("Failed to release device: %v", err)
+			}
+		}()
 
 		// Test reading events with grab
 		ctx2, cancel2 := context.WithTimeout(context.Background(), 3*time.Second)
@@ -301,7 +309,11 @@ func testFullPipeline(devicePath string, waylandBackend *input.WaylandVirtualInp
 	if err := evdevBackend.Start(ctx); err != nil {
 		return fmt.Errorf("failed to start evdev capture: %w", err)
 	}
-	defer evdevBackend.Stop()
+	defer func() {
+		if err := evdevBackend.Stop(); err != nil {
+			logger.Errorf("Failed to stop evdev backend: %v", err)
+		}
+	}()
 
 	// Set target to enable capture
 	if err := evdevBackend.SetTarget("test-client"); err != nil {

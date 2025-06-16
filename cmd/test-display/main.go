@@ -16,7 +16,11 @@ func main() {
 	if err != nil {
 		logger.Fatal("Failed to create display manager: %v", err)
 	}
-	defer disp.Close()
+	defer func() {
+		if err := disp.Close(); err != nil {
+			logger.Errorf("Failed to close display: %v", err)
+		}
+	}()
 
 	// Show monitors
 	monitors := disp.GetMonitors()

@@ -50,15 +50,15 @@ func CreateServerBackend() (InputBackend, error) {
 	// For servers, we MUST have evdev for actual input capture
 	if IsEvdevAvailable() {
 		logger.Info("Using evdev backend for server input capture")
-		
+
 		// Check if devices are configured
 		cfg := config.Get()
 		if cfg != nil && (cfg.Input.MouseDevice != "" || cfg.Input.KeyboardDevice != "") {
-			logger.Infof("Using configured devices - Mouse: %s, Keyboard: %s", 
+			logger.Infof("Using configured devices - Mouse: %s, Keyboard: %s",
 				cfg.Input.MouseDevice, cfg.Input.KeyboardDevice)
 			return NewEvdevCaptureWithDevices(cfg.Input.MouseDevice, cfg.Input.KeyboardDevice), nil
 		}
-		
+
 		return NewEvdevCapture(), nil
 	}
 
@@ -75,5 +75,5 @@ func CreateClientBackend() (InputBackend, error) {
 		return backend, nil
 	}
 
-	return nil, fmt.Errorf("Wayland virtual input protocols not supported by compositor")
+	return nil, fmt.Errorf("wayland virtual input protocols not supported by compositor")
 }

@@ -43,8 +43,12 @@ func init() {
 	serverCmd.Flags().BoolVar(&debugTUI, "debug-tui", false, "Use minimal debug TUI")
 
 	// Bind flags to viper
-	viper.BindPFlag("server.port", serverCmd.Flags().Lookup("port"))
-	viper.BindPFlag("server.bind_address", serverCmd.Flags().Lookup("bind"))
+	if err := viper.BindPFlag("server.port", serverCmd.Flags().Lookup("port")); err != nil {
+		logger.Errorf("Failed to bind port flag: %v", err)
+	}
+	if err := viper.BindPFlag("server.bind_address", serverCmd.Flags().Lookup("bind")); err != nil {
+		logger.Errorf("Failed to bind address flag: %v", err)
+	}
 }
 
 // initializeServer performs all server initialization steps
@@ -116,7 +120,7 @@ func initializeServer(ctx context.Context, srv *server.Server, cfg *config.Confi
 				return true
 			}
 		}
-		
+
 		// Set up client connection handlers
 		sshSrv.OnClientConnected = func(addr, publicKey string) {
 			if cm := srv.GetClientManager(); cm != nil {
@@ -126,14 +130,14 @@ func initializeServer(ctx context.Context, srv *server.Server, cfg *config.Confi
 				logger.Infof("Client connected and registered: %s", addr)
 			}
 		}
-		
+
 		sshSrv.OnClientDisconnected = func(addr string) {
 			if cm := srv.GetClientManager(); cm != nil {
 				cm.UnregisterClient(addr)
 				logger.Infof("Client disconnected and unregistered: %s", addr)
 			}
 		}
-		
+
 		// Set up input event handler to forward events from SSH to ClientManager
 		sshSrv.OnInputEvent = func(event *protocol.InputEvent) {
 			if cm := srv.GetClientManager(); cm != nil {
@@ -228,18 +232,22 @@ func runServer(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return fmt.Errorf("failed to setup file logging: %w", err)
 	}
-	defer logFile.Close()
+	defer func() {
+		if err := logFile.Close(); err != nil {
+			logger.Errorf("Failed to close log file: %v", err)
+		}
+	}()
 
 	// Get configuration
 	cfg := config.Get()
 
 	// Run device setup for evdev input capture
 	deviceSetup := setup.NewDeviceSetup()
-	
+
 	// Validate existing devices first
 	if err := deviceSetup.ValidateDevices(); err != nil {
 		logger.Warnf("Device validation failed: %v", err)
-		
+
 		// If we have invalid devices, run interactive setup
 		if !noTUI {
 			fmt.Println("⚠️  Device configuration issue detected.")
@@ -405,7 +413,7 @@ func ensureServerConfig() error {
 
 		// Create /etc/waymon directory if it doesn't exist
 		configDir := filepath.Dir(configPath)
-		if err := os.MkdirAll(configDir, 0755); err != nil {
+		if err := os.MkdirAll(configDir, 0750); err != nil {
 			return fmt.Errorf("failed to create config directory %s: %w", configDir, err)
 		}
 

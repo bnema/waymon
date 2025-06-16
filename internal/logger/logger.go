@@ -163,9 +163,9 @@ func SetupFileLogging(prefix string) (*os.File, error) {
 	if os.Geteuid() == 0 && prefix == "SERVER" {
 		logDir = "/var/log/waymon"
 		logPath = filepath.Join(logDir, "waymon.log")
-		
+
 		// Create /var/log/waymon directory if it doesn't exist
-		if err := os.MkdirAll(logDir, 0755); err != nil {
+		if err := os.MkdirAll(logDir, 0750); err != nil {
 			return nil, fmt.Errorf("failed to create system log directory: %v", err)
 		}
 	} else {
@@ -178,10 +178,10 @@ func SetupFileLogging(prefix string) (*os.File, error) {
 
 		// Create logs directory in user's home
 		logDir = filepath.Join(homeDir, ".local", "share", "waymon")
-		if err := os.MkdirAll(logDir, 0755); err != nil {
+		if err := os.MkdirAll(logDir, 0750); err != nil {
 			// Fallback to simpler path
 			logDir = filepath.Join(homeDir, ".waymon")
-			if err := os.MkdirAll(logDir, 0755); err != nil {
+			if err := os.MkdirAll(logDir, 0750); err != nil {
 				return nil, fmt.Errorf("failed to create log directory: %v", err)
 			}
 		}
@@ -189,15 +189,18 @@ func SetupFileLogging(prefix string) (*os.File, error) {
 		logPath = filepath.Join(logDir, "waymon.log")
 	}
 
-	// Open or create the log file with world-readable permissions
-	logFile, err := os.OpenFile(logPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
+	// Open or create the log file with secure permissions
+	logFile, err := os.OpenFile(logPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0600) //nolint:gosec // logPath is validated
 	if err != nil {
 		return nil, fmt.Errorf("failed to open log file %s: %v", logPath, err)
 	}
 
 	// Log where we're writing
-	fmt.Fprintf(logFile, "\n%s %s: === New session started === (log: %s)\n",
-		time.Now().Format("15:04:05"), prefix, logPath)
+	if _, err := fmt.Fprintf(logFile, "\n%s %s: === New session started === (log: %s)\n",
+		time.Now().Format("15:04:05"), prefix, logPath); err != nil {
+		// Cannot use logger here as we're in the logger package - use stderr
+		fmt.Fprintf(os.Stderr, "Warning: Failed to write to log file: %v\n", err)
+	}
 
 	// Create file logger for charmbracelet/log
 	fileLogger := log.NewWithOptions(logFile, log.Options{

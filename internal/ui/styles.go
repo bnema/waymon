@@ -100,16 +100,16 @@ var (
 // Component-specific styles
 var (
 	// Server UI styles
-	ServerHeaderStyle = HeaderStyle.Copy().
+	ServerHeaderStyle = HeaderStyle.
 				Render("Waymon Server")
 
-	ServerStatusStyle = SubtleStyle.Copy()
+	ServerStatusStyle = SubtleStyle
 
 	// Client UI styles
-	ClientHeaderStyle = HeaderStyle.Copy().
+	ClientHeaderStyle = HeaderStyle.
 				Render("Waymon Client")
 
-	ClientStatusStyle = SubtleStyle.Copy()
+	ClientStatusStyle = SubtleStyle
 
 	// Connection status styles
 	ConnectedIndicator = lipgloss.NewStyle().
@@ -121,7 +121,7 @@ var (
 				Render("○")
 
 	// Control help styles
-	ControlsHeaderStyle = SubheaderStyle.Copy().
+	ControlsHeaderStyle = SubheaderStyle.
 				MarginTop(1)
 
 	ControlKeyStyle = lipgloss.NewStyle().
@@ -148,7 +148,7 @@ func FormatStatus(connected bool, status string) string {
 func FormatListItem(item string, active bool) string {
 	style := ListItemStyle
 	if active {
-		style = style.Copy().Foreground(ColorActive)
+		style = style.Foreground(ColorActive)
 	}
 	return "  • " + style.Render(item)
 }

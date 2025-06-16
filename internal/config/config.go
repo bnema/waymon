@@ -70,7 +70,7 @@ type InputConfig struct {
 	ScrollSpeed      float64 `mapstructure:"scroll_speed"`
 	EnableKeyboard   bool    `mapstructure:"enable_keyboard"`
 	KeyboardLayout   string  `mapstructure:"keyboard_layout"`
-	
+
 	// Device paths for evdev backend (server-side only)
 	MouseDevice    string `mapstructure:"mouse_device"`    // Path to mouse device (e.g., /dev/input/event3)
 	KeyboardDevice string `mapstructure:"keyboard_device"` // Path to keyboard device (e.g., /dev/input/event4)
@@ -131,7 +131,7 @@ var (
 
 	// Global config instance
 	cfg *Config
-	
+
 	// Override config path if set
 	configPathOverride string
 )
@@ -234,7 +234,7 @@ func Save() error {
 
 	// Create directory if it doesn't exist
 	dir := filepath.Dir(configPath)
-	if err := os.MkdirAll(dir, 0755); err != nil {
+	if err := os.MkdirAll(dir, 0750); err != nil {
 		// If we can't create it (e.g., /etc/waymon needs sudo), provide helpful message
 		if os.IsPermission(err) && strings.Contains(configPath, "/etc/") {
 			return fmt.Errorf("failed to create config directory %s: permission denied. Try running with sudo", dir)
@@ -256,7 +256,7 @@ func GetConfigPath() string {
 	if configPathOverride != "" {
 		return configPathOverride
 	}
-	
+
 	// Check if config file is already loaded
 	if viper.ConfigFileUsed() != "" {
 		return viper.ConfigFileUsed()

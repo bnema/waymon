@@ -6,12 +6,12 @@ import (
 	"sync"
 	"time"
 
+	"github.com/bnema/wayland-virtual-input-go/keyboard_shortcuts_inhibitor"
+	"github.com/bnema/wayland-virtual-input-go/pointer_constraints"
+	"github.com/bnema/wayland-virtual-input-go/virtual_keyboard"
+	"github.com/bnema/wayland-virtual-input-go/virtual_pointer"
 	"github.com/bnema/waymon/internal/logger"
 	"github.com/bnema/waymon/internal/protocol"
-	"github.com/bnema/wayland-virtual-input-go/virtual_pointer"
-	"github.com/bnema/wayland-virtual-input-go/virtual_keyboard"
-	"github.com/bnema/wayland-virtual-input-go/pointer_constraints"
-	"github.com/bnema/wayland-virtual-input-go/keyboard_shortcuts_inhibitor"
 	"github.com/rajveermalviya/go-wayland/wayland/client"
 )
 
@@ -19,28 +19,28 @@ import (
 // This backend is designed for Hyprland and other wlroots-based compositors
 type WaylandVirtualInput struct {
 	// Virtual input for injection (server mode)
-	pointerMgr    virtual_pointer.VirtualPointerManager
-	keyboardMgr   virtual_keyboard.VirtualKeyboardManager
-	virtualPtr    virtual_pointer.VirtualPointer
-	virtualKbd    virtual_keyboard.VirtualKeyboard
-	
+	pointerMgr  *virtual_pointer.VirtualPointerManager
+	keyboardMgr *virtual_keyboard.VirtualKeyboardManager
+	virtualPtr  *virtual_pointer.VirtualPointer
+	virtualKbd  *virtual_keyboard.VirtualKeyboard
+
 	// Wayland capture infrastructure
-	display       *client.Display
-	registry      *client.Registry
-	seat          *client.Seat
-	pointer       *client.Pointer
-	keyboard      *client.Keyboard
-	surface       *client.Surface
-	compositor    *client.Compositor
-	
+	display    *client.Display
+	registry   *client.Registry     //nolint:unused // part of wayland infrastructure, may be used in future
+	seat       *client.Seat
+	pointer    *client.Pointer
+	keyboard   *client.Keyboard     //nolint:unused // part of wayland infrastructure, may be used in future
+	surface    *client.Surface
+	compositor *client.Compositor   //nolint:unused // part of wayland infrastructure, may be used in future
+
 	// Pointer constraints for exclusive capture
-	constraintsMgr      pointer_constraints.PointerConstraintsManager
-	lockedPointer       pointer_constraints.LockedPointer
-	
+	constraintsMgr pointer_constraints.PointerConstraintsManager
+	lockedPointer  pointer_constraints.LockedPointer
+
 	// Keyboard shortcuts inhibitor for exclusive keyboard capture
 	shortcutsInhibitorMgr keyboard_shortcuts_inhibitor.KeyboardShortcutsInhibitorManager
 	shortcutsInhibitor    keyboard_shortcuts_inhibitor.KeyboardShortcutsInhibitor
-	
+
 	onInputEvent  func(*protocol.InputEvent)
 	currentTarget string
 	capturing     bool
@@ -51,29 +51,31 @@ type WaylandVirtualInput struct {
 // NewWaylandVirtualInput creates a new Wayland virtual input backend
 func NewWaylandVirtualInput() (*WaylandVirtualInput, error) {
 	w := &WaylandVirtualInput{}
-	
+
 	// Connect to Wayland display
 	display, err := client.Connect("")
 	if err != nil {
 		return nil, fmt.Errorf("failed to connect to Wayland display: %w", err)
 	}
 	w.display = display
-	
+
 	// Get registry and bind to required globals
 	if err := w.setupWaylandGlobals(); err != nil {
-		display.Destroy()
+		if err := display.Destroy(); err != nil {
+			logger.Errorf("Failed to destroy display: %v", err)
+		}
 		return nil, fmt.Errorf("failed to setup Wayland globals: %w", err)
 	}
-	
+
 	ctx := context.Background()
-	
+
 	// Create virtual pointer manager for injection
 	pointerMgr, err := virtual_pointer.NewVirtualPointerManager(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create virtual pointer manager: %w", err)
 	}
 	w.pointerMgr = pointerMgr
-	
+
 	// Create virtual keyboard manager for injection
 	keyboardMgr, err := virtual_keyboard.NewVirtualKeyboardManager(ctx)
 	if err != nil {
@@ -81,7 +83,7 @@ func NewWaylandVirtualInput() (*WaylandVirtualInput, error) {
 	} else {
 		w.keyboardMgr = keyboardMgr
 	}
-	
+
 	// Create pointer constraints manager for exclusive capture
 	constraintsMgr, err := pointer_constraints.NewPointerConstraintsManager(ctx)
 	if err != nil {
@@ -89,7 +91,7 @@ func NewWaylandVirtualInput() (*WaylandVirtualInput, error) {
 	} else {
 		w.constraintsMgr = constraintsMgr
 	}
-	
+
 	// Create keyboard shortcuts inhibitor manager for exclusive keyboard capture
 	shortcutsInhibitorMgr, err := keyboard_shortcuts_inhibitor.NewKeyboardShortcutsInhibitorManager(ctx)
 	if err != nil {
@@ -97,7 +99,7 @@ func NewWaylandVirtualInput() (*WaylandVirtualInput, error) {
 	} else {
 		w.shortcutsInhibitorMgr = shortcutsInhibitorMgr
 	}
-	
+
 	return w, nil
 }
 
@@ -106,10 +108,10 @@ func (w *WaylandVirtualInput) setupWaylandGlobals() error {
 	// For now, we'll provide a simplified setup that doesn't require complex protocol binding
 	// This allows the backend to be created and tested, even if exclusive capture isn't fully functional yet
 	logger.Info("Wayland globals setup - using simplified implementation")
-	
+
 	// The actual protocol binding would require proper integration with a Wayland client library
 	// For now, we'll set up stub components to allow the backend to function for injection
-	
+
 	return nil
 }
 
@@ -117,18 +119,18 @@ func (w *WaylandVirtualInput) setupWaylandGlobals() error {
 func (w *WaylandVirtualInput) Start(ctx context.Context) error {
 	w.mu.Lock()
 	defer w.mu.Unlock()
-	
+
 	if w.capturing {
 		return fmt.Errorf("already started")
 	}
-	
+
 	ctx, cancel := context.WithCancel(ctx)
 	w.cancel = cancel
 	w.capturing = true
-	
+
 	// Create virtual pointer for injection
 	if w.pointerMgr != nil {
-		virtualPtr, err := w.pointerMgr.CreateVirtualPointer(nil)
+		virtualPtr, err := w.pointerMgr.CreatePointer()
 		if err != nil {
 			logger.Warnf("Failed to create virtual pointer: %v", err)
 		} else {
@@ -136,10 +138,10 @@ func (w *WaylandVirtualInput) Start(ctx context.Context) error {
 			logger.Info("Virtual pointer created successfully")
 		}
 	}
-	
+
 	// Create virtual keyboard for injection
 	if w.keyboardMgr != nil {
-		virtualKbd, err := w.keyboardMgr.CreateVirtualKeyboard(nil)
+		virtualKbd, err := w.keyboardMgr.CreateKeyboard()
 		if err != nil {
 			logger.Warnf("Failed to create virtual keyboard: %v", err)
 		} else {
@@ -147,15 +149,17 @@ func (w *WaylandVirtualInput) Start(ctx context.Context) error {
 			logger.Info("Virtual keyboard created successfully")
 		}
 	}
-	
+
 	logger.Info("Wayland virtual input backend started")
-	
+
 	// Monitor context for shutdown
 	go func() {
 		<-ctx.Done()
-		w.Stop()
+		if err := w.Stop(); err != nil {
+			logger.Errorf("Failed to stop Wayland backend: %v", err)
+		}
 	}()
-	
+
 	return nil
 }
 
@@ -175,7 +179,7 @@ func (w *WaylandVirtualInput) enableExclusiveCapture() error {
 			logger.Info("Pointer locked for exclusive capture")
 		}
 	}
-	
+
 	// Inhibit keyboard shortcuts for exclusive keyboard capture
 	if w.shortcutsInhibitorMgr != nil && w.surface != nil && w.seat != nil {
 		inhibitor, err := w.shortcutsInhibitorMgr.InhibitShortcuts(w.surface, w.seat)
@@ -186,7 +190,7 @@ func (w *WaylandVirtualInput) enableExclusiveCapture() error {
 			logger.Info("Keyboard shortcuts inhibited for exclusive capture")
 		}
 	}
-	
+
 	return nil
 }
 
@@ -201,7 +205,7 @@ func (w *WaylandVirtualInput) disableExclusiveCapture() error {
 		}
 		w.lockedPointer = nil
 	}
-	
+
 	// Re-enable keyboard shortcuts
 	if w.shortcutsInhibitor != nil {
 		if err := w.shortcutsInhibitor.Destroy(); err != nil {
@@ -211,7 +215,7 @@ func (w *WaylandVirtualInput) disableExclusiveCapture() error {
 		}
 		w.shortcutsInhibitor = nil
 	}
-	
+
 	return nil
 }
 
@@ -219,53 +223,67 @@ func (w *WaylandVirtualInput) disableExclusiveCapture() error {
 func (w *WaylandVirtualInput) Stop() error {
 	w.mu.Lock()
 	defer w.mu.Unlock()
-	
+
 	if !w.capturing {
 		return nil
 	}
-	
+
 	w.capturing = false
-	
+
 	if w.cancel != nil {
 		w.cancel()
 		w.cancel = nil
 	}
-	
+
 	// Clean up virtual devices
 	if w.virtualPtr != nil {
-		w.virtualPtr.Destroy()
+		if err := w.virtualPtr.Close(); err != nil {
+			logger.Errorf("Failed to close virtual pointer: %v", err)
+		}
 		w.virtualPtr = nil
 	}
-	
+
 	if w.virtualKbd != nil {
-		w.virtualKbd.Destroy()
+		if err := w.virtualKbd.Close(); err != nil {
+			logger.Errorf("Failed to close virtual keyboard: %v", err)
+		}
 		w.virtualKbd = nil
 	}
-	
+
 	// Disable exclusive capture first
-	w.disableExclusiveCapture()
-	
+	if err := w.disableExclusiveCapture(); err != nil {
+		logger.Errorf("Failed to disable exclusive capture: %v", err)
+	}
+
 	// Clean up managers
 	if w.pointerMgr != nil {
-		w.pointerMgr.Destroy()
+		if err := w.pointerMgr.Close(); err != nil {
+			logger.Errorf("Failed to close pointer manager: %v", err)
+		}
 		w.pointerMgr = nil
 	}
-	
+
 	if w.keyboardMgr != nil {
-		w.keyboardMgr.Destroy()
+		if err := w.keyboardMgr.Close(); err != nil {
+			logger.Errorf("Failed to close keyboard manager: %v", err)
+		}
 		w.keyboardMgr = nil
 	}
-	
+
 	if w.constraintsMgr != nil {
-		w.constraintsMgr.Destroy()
+		if err := w.constraintsMgr.Destroy(); err != nil {
+			logger.Errorf("Failed to destroy constraints manager: %v", err)
+		}
 		w.constraintsMgr = nil
 	}
-	
+
 	if w.shortcutsInhibitorMgr != nil {
-		w.shortcutsInhibitorMgr.Destroy()
+		if err := w.shortcutsInhibitorMgr.Destroy(); err != nil {
+			logger.Errorf("Failed to destroy shortcuts inhibitor manager: %v", err)
+		}
 		w.shortcutsInhibitorMgr = nil
 	}
-	
+
 	logger.Info("Wayland virtual input backend stopped")
 	return nil
 }
@@ -274,10 +292,10 @@ func (w *WaylandVirtualInput) Stop() error {
 func (w *WaylandVirtualInput) SetTarget(clientID string) error {
 	w.mu.Lock()
 	defer w.mu.Unlock()
-	
+
 	oldTarget := w.currentTarget
 	w.currentTarget = clientID
-	
+
 	if clientID == "" {
 		// Returning to local control - disable exclusive capture
 		if oldTarget != "" {
@@ -297,7 +315,7 @@ func (w *WaylandVirtualInput) SetTarget(clientID string) error {
 		// Note: This backend is used for CLIENT injection only.
 		// Server-side input capture is handled by the evdev backend.
 	}
-	
+
 	return nil
 }
 
@@ -314,16 +332,16 @@ func (w *WaylandVirtualInput) OnInputEvent(callback func(*protocol.InputEvent)) 
 func (w *WaylandVirtualInput) InjectMouseMove(dx, dy float64) error {
 	w.mu.Lock()
 	defer w.mu.Unlock()
-	
+
 	if !w.capturing || w.virtualPtr == nil {
 		return fmt.Errorf("virtual pointer not available")
 	}
-	
+
 	// Use relative motion for mouse movement
 	if err := w.virtualPtr.Motion(time.Now(), dx, dy); err != nil {
 		return fmt.Errorf("failed to inject mouse motion: %w", err)
 	}
-	
+
 	// Frame the event
 	return w.virtualPtr.Frame()
 }
@@ -332,24 +350,24 @@ func (w *WaylandVirtualInput) InjectMouseMove(dx, dy float64) error {
 func (w *WaylandVirtualInput) InjectMouseButton(button uint32, pressed bool) error {
 	w.mu.Lock()
 	defer w.mu.Unlock()
-	
+
 	if !w.capturing || w.virtualPtr == nil {
 		return fmt.Errorf("virtual pointer not available")
 	}
-	
+
 	// Convert button state
-	var state uint32
+	var state virtual_pointer.ButtonState
 	if pressed {
-		state = virtual_pointer.BUTTON_STATE_PRESSED
+		state = virtual_pointer.ButtonStatePressed
 	} else {
-		state = virtual_pointer.BUTTON_STATE_RELEASED
+		state = virtual_pointer.ButtonStateReleased
 	}
-	
+
 	// Inject button event
 	if err := w.virtualPtr.Button(time.Now(), button, state); err != nil {
 		return fmt.Errorf("failed to inject mouse button: %w", err)
 	}
-	
+
 	// Frame the event
 	return w.virtualPtr.Frame()
 }
@@ -358,32 +376,32 @@ func (w *WaylandVirtualInput) InjectMouseButton(button uint32, pressed bool) err
 func (w *WaylandVirtualInput) InjectMouseScroll(dx, dy float64) error {
 	w.mu.Lock()
 	defer w.mu.Unlock()
-	
+
 	if !w.capturing || w.virtualPtr == nil {
 		return fmt.Errorf("virtual pointer not available")
 	}
-	
+
 	// Set axis source to wheel
-	if err := w.virtualPtr.AxisSource(virtual_pointer.AXIS_SOURCE_WHEEL); err != nil {
+	if err := w.virtualPtr.AxisSource(virtual_pointer.AxisSourceWheel); err != nil {
 		return fmt.Errorf("failed to set axis source: %w", err)
 	}
-	
+
 	now := time.Now()
-	
+
 	// Inject vertical scroll if dy != 0
 	if dy != 0 {
-		if err := w.virtualPtr.Axis(now, virtual_pointer.AXIS_VERTICAL_SCROLL, -dy); err != nil {
+		if err := w.virtualPtr.Axis(now, virtual_pointer.AxisVertical, -dy); err != nil {
 			return fmt.Errorf("failed to inject vertical scroll: %w", err)
 		}
 	}
-	
+
 	// Inject horizontal scroll if dx != 0
 	if dx != 0 {
-		if err := w.virtualPtr.Axis(now, virtual_pointer.AXIS_HORIZONTAL_SCROLL, dx); err != nil {
+		if err := w.virtualPtr.Axis(now, virtual_pointer.AxisHorizontal, dx); err != nil {
 			return fmt.Errorf("failed to inject horizontal scroll: %w", err)
 		}
 	}
-	
+
 	// Frame the event
 	return w.virtualPtr.Frame()
 }
@@ -392,39 +410,36 @@ func (w *WaylandVirtualInput) InjectMouseScroll(dx, dy float64) error {
 func (w *WaylandVirtualInput) InjectKeyEvent(key uint32, pressed bool) error {
 	w.mu.Lock()
 	defer w.mu.Unlock()
-	
+
 	if !w.capturing || w.virtualKbd == nil {
 		return fmt.Errorf("virtual keyboard not available")
 	}
-	
+
 	// Convert key state
-	var state uint32
+	var state virtual_keyboard.KeyState
 	if pressed {
-		state = virtual_keyboard.KEY_STATE_PRESSED
+		state = virtual_keyboard.KeyStatePressed
 	} else {
-		state = virtual_keyboard.KEY_STATE_RELEASED
+		state = virtual_keyboard.KeyStateReleased
 	}
-	
-	// Get current timestamp (simplified)
-	timestamp := uint32(time.Now().UnixMilli() & 0xFFFFFFFF)
-	
+
 	// Inject key event
-	return w.virtualKbd.Key(timestamp, key, state)
+	return w.virtualKbd.Key(time.Now(), key, state)
 }
 
 // Input event handlers for capture
 
 // handlePointerMotion handles pointer motion events
-func (w *WaylandVirtualInput) handlePointerMotion(event client.PointerMotionEvent) {
+func (w *WaylandVirtualInput) handlePointerMotion(event client.PointerMotionEvent) { //nolint:unused // event handler kept for future use
 	w.mu.RLock()
 	target := w.currentTarget
 	callback := w.onInputEvent
 	w.mu.RUnlock()
-	
+
 	if target == "" || callback == nil {
 		return // Only forward if we have a target
 	}
-	
+
 	// Create mouse move event
 	inputEvent := &protocol.InputEvent{
 		Event: &protocol.InputEvent_MouseMove{
@@ -436,21 +451,21 @@ func (w *WaylandVirtualInput) handlePointerMotion(event client.PointerMotionEven
 		Timestamp: time.Now().UnixNano(),
 		SourceId:  "wayland-capture",
 	}
-	
+
 	callback(inputEvent)
 }
 
 // handlePointerButton handles pointer button events
-func (w *WaylandVirtualInput) handlePointerButton(event client.PointerButtonEvent) {
+func (w *WaylandVirtualInput) handlePointerButton(event client.PointerButtonEvent) { //nolint:unused // event handler kept for future use
 	w.mu.RLock()
 	target := w.currentTarget
 	callback := w.onInputEvent
 	w.mu.RUnlock()
-	
+
 	if target == "" || callback == nil {
 		return
 	}
-	
+
 	// Create mouse button event
 	inputEvent := &protocol.InputEvent{
 		Event: &protocol.InputEvent_MouseButton{
@@ -462,21 +477,21 @@ func (w *WaylandVirtualInput) handlePointerButton(event client.PointerButtonEven
 		Timestamp: time.Now().UnixNano(),
 		SourceId:  "wayland-capture",
 	}
-	
+
 	callback(inputEvent)
 }
 
 // handlePointerAxis handles pointer axis (scroll) events
-func (w *WaylandVirtualInput) handlePointerAxis(event client.PointerAxisEvent) {
+func (w *WaylandVirtualInput) handlePointerAxis(event client.PointerAxisEvent) { //nolint:unused // event handler kept for future use
 	w.mu.RLock()
 	target := w.currentTarget
 	callback := w.onInputEvent
 	w.mu.RUnlock()
-	
+
 	if target == "" || callback == nil {
 		return
 	}
-	
+
 	// Create mouse scroll event
 	dx, dy := 0.0, 0.0
 	if event.Axis == 0 { // WL_POINTER_AXIS_VERTICAL_SCROLL
@@ -484,7 +499,7 @@ func (w *WaylandVirtualInput) handlePointerAxis(event client.PointerAxisEvent) {
 	} else { // WL_POINTER_AXIS_HORIZONTAL_SCROLL
 		dx = float64(event.Value)
 	}
-	
+
 	inputEvent := &protocol.InputEvent{
 		Event: &protocol.InputEvent_MouseScroll{
 			MouseScroll: &protocol.MouseScrollEvent{
@@ -495,66 +510,66 @@ func (w *WaylandVirtualInput) handlePointerAxis(event client.PointerAxisEvent) {
 		Timestamp: time.Now().UnixNano(),
 		SourceId:  "wayland-capture",
 	}
-	
+
 	callback(inputEvent)
 }
 
 // handlePointerEnter handles pointer enter events
-func (w *WaylandVirtualInput) handlePointerEnter(event client.PointerEnterEvent) {
+func (w *WaylandVirtualInput) handlePointerEnter(event client.PointerEnterEvent) { //nolint:unused // event handler kept for future use
 	// Could be used for edge detection later
 	logger.Debugf("Pointer entered surface at (%.2f, %.2f)", event.SurfaceX, event.SurfaceY)
 }
 
 // handlePointerLeave handles pointer leave events
-func (w *WaylandVirtualInput) handlePointerLeave(event client.PointerLeaveEvent) {
+func (w *WaylandVirtualInput) handlePointerLeave(event client.PointerLeaveEvent) { //nolint:unused // event handler kept for future use
 	// Could be used for edge detection later
 	logger.Debug("Pointer left surface")
 }
 
 // handleKeyboardKey handles keyboard key events
-func (w *WaylandVirtualInput) handleKeyboardKey(event client.KeyboardKeyEvent) {
+func (w *WaylandVirtualInput) handleKeyboardKey(event client.KeyboardKeyEvent) { //nolint:unused // event handler kept for future use
 	w.mu.RLock()
 	target := w.currentTarget
 	callback := w.onInputEvent
 	w.mu.RUnlock()
-	
+
 	if target == "" || callback == nil {
 		return
 	}
-	
+
 	// Create keyboard event
 	inputEvent := &protocol.InputEvent{
 		Event: &protocol.InputEvent_Keyboard{
 			Keyboard: &protocol.KeyboardEvent{
 				Key:       event.Key,
 				Pressed:   event.State == 1, // WL_KEYBOARD_KEY_STATE_PRESSED
-				Modifiers: 0, // TODO: Track modifiers properly
+				Modifiers: 0,                // TODO: Track modifiers properly
 			},
 		},
 		Timestamp: time.Now().UnixNano(),
 		SourceId:  "wayland-capture",
 	}
-	
+
 	callback(inputEvent)
 }
 
 // handleKeyboardKeymap handles keyboard keymap events
-func (w *WaylandVirtualInput) handleKeyboardKeymap(event client.KeyboardKeymapEvent) {
+func (w *WaylandVirtualInput) handleKeyboardKeymap(event client.KeyboardKeymapEvent) { //nolint:unused // event handler kept for future use
 	logger.Debug("Keyboard keymap updated")
 }
 
 // handleKeyboardEnter handles keyboard enter events
-func (w *WaylandVirtualInput) handleKeyboardEnter(event client.KeyboardEnterEvent) {
+func (w *WaylandVirtualInput) handleKeyboardEnter(event client.KeyboardEnterEvent) { //nolint:unused // event handler kept for future use
 	logger.Debug("Keyboard focus entered")
 }
 
 // handleKeyboardLeave handles keyboard leave events
-func (w *WaylandVirtualInput) handleKeyboardLeave(event client.KeyboardLeaveEvent) {
+func (w *WaylandVirtualInput) handleKeyboardLeave(event client.KeyboardLeaveEvent) { //nolint:unused // event handler kept for future use
 	logger.Debug("Keyboard focus left")
 }
 
 // handleKeyboardModifiers handles keyboard modifier events
-func (w *WaylandVirtualInput) handleKeyboardModifiers(event client.KeyboardModifiersEvent) {
-	logger.Debugf("Keyboard modifiers: depressed=%d, latched=%d, locked=%d", 
+func (w *WaylandVirtualInput) handleKeyboardModifiers(event client.KeyboardModifiersEvent) { //nolint:unused // event handler kept for future use
+	logger.Debugf("Keyboard modifiers: depressed=%d, latched=%d, locked=%d",
 		event.ModsDepressed, event.ModsLatched, event.ModsLocked)
 }

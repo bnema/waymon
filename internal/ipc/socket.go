@@ -61,7 +61,7 @@ func (s *SocketServer) Start() error {
 	}
 
 	// Create socket directory if it doesn't exist
-	if err := os.MkdirAll(filepath.Dir(s.socketPath), 0755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(s.socketPath), 0750); err != nil {
 		return fmt.Errorf("failed to create socket directory: %w", err)
 	}
 
@@ -79,7 +79,9 @@ func (s *SocketServer) Start() error {
 		perms = 0666
 	}
 	if err := os.Chmod(s.socketPath, perms); err != nil {
-		listener.Close()
+		if err := listener.Close(); err != nil {
+			logger.Errorf("Failed to close listener: %v", err)
+		}
 		return fmt.Errorf("failed to set socket permissions: %w", err)
 	}
 
@@ -111,13 +113,17 @@ func (s *SocketServer) Stop() {
 	}
 
 	if s.listener != nil {
-		s.listener.Close()
+		if err := s.listener.Close(); err != nil {
+			logger.Errorf("Failed to close listener: %v", err)
+		}
 	}
 
 	s.wg.Wait()
 
 	// Clean up socket file
-	os.RemoveAll(s.socketPath)
+	if err := os.RemoveAll(s.socketPath); err != nil {
+		logger.Errorf("Failed to remove socket path %s: %v", s.socketPath, err)
+	}
 
 	logger.Info("IPC socket server stopped")
 }
@@ -151,7 +157,11 @@ func (s *SocketServer) acceptConnections(ctx context.Context) {
 // handleConnection handles a single client connection
 func (s *SocketServer) handleConnection(ctx context.Context, conn net.Conn) {
 	defer s.wg.Done()
-	defer conn.Close()
+	defer func() {
+		if err := conn.Close(); err != nil {
+			logger.Errorf("Failed to close IPC connection: %v", err)
+		}
+	}()
 
 	logger.Debug("New IPC connection established")
 
@@ -244,7 +254,7 @@ func (s *SocketServer) writeMessage(conn net.Conn, msg *pb.IPCMessage) error {
 	}
 
 	// Write message length (4 bytes, big endian)
-	length := uint32(len(data))
+	length := uint32(len(data)) //nolint:gosec // message length within uint32 range
 	if err := binary.Write(conn, binary.BigEndian, length); err != nil {
 		return fmt.Errorf("failed to write message length: %w", err)
 	}
@@ -263,7 +273,7 @@ func getSocketPath() (string, error) {
 	if os.Geteuid() == 0 {
 		return "/tmp/waymon.sock", nil
 	}
-	
+
 	// For client mode (regular user), include username in socket path
 	currentUser, err := user.Current()
 	if err != nil {

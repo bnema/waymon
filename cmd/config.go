@@ -61,15 +61,21 @@ var configShowCmd = &cobra.Command{
 		if len(cfg.Hosts) > 0 {
 			logger.Info("\n[Hosts]")
 			w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
-			fmt.Fprintln(w, "  Name\tAddress\tPosition\tAuth")
+			if _, err := fmt.Fprintln(w, "  Name\tAddress\tPosition\tAuth"); err != nil {
+				logger.Errorf("Failed to write header: %v", err)
+			}
 			for _, host := range cfg.Hosts {
 				auth := "No"
 				if host.AuthToken != "" {
 					auth = "Yes"
 				}
-				fmt.Fprintf(w, "  %s\t%s\t%s\t%s\n", host.Name, host.Address, host.Position, auth)
+				if _, err := fmt.Fprintf(w, "  %s\t%s\t%s\t%s\n", host.Name, host.Address, host.Position, auth); err != nil {
+				logger.Errorf("Failed to write host info: %v", err)
 			}
-			w.Flush()
+			}
+			if err := w.Flush(); err != nil {
+				logger.Errorf("Failed to flush writer: %v", err)
+			}
 		}
 
 		return nil
@@ -158,15 +164,21 @@ var configHostListCmd = &cobra.Command{
 		}
 
 		w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
-		fmt.Fprintln(w, "Name\tAddress\tPosition\tAuth")
-		fmt.Fprintln(w, "----\t-------\t--------\t----")
+		if _, err := fmt.Fprintln(w, "Name\tAddress\tPosition\tAuth"); err != nil {
+			logger.Errorf("Failed to write header: %v", err)
+		}
+		if _, err := fmt.Fprintln(w, "----\t-------\t--------\t----"); err != nil {
+			logger.Errorf("Failed to write separator: %v", err)
+		}
 
 		for _, host := range hosts {
 			auth := "No"
 			if host.AuthToken != "" {
 				auth = "Yes"
 			}
-			fmt.Fprintf(w, "%s\t%s\t%s\t%s\n", host.Name, host.Address, host.Position, auth)
+			if _, err := fmt.Fprintf(w, "%s\t%s\t%s\t%s\n", host.Name, host.Address, host.Position, auth); err != nil {
+				logger.Errorf("Failed to write host: %v", err)
+			}
 		}
 
 		return w.Flush()

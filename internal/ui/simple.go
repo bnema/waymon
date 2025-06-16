@@ -62,7 +62,11 @@ func (m *SimpleClientModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.edgeDetector.Stop()
 					m.capturing = false
 				} else {
-					m.edgeDetector.Start()
+					if err := m.edgeDetector.Start(); err != nil {
+						// Edge detector start failed, update error
+						m.err = fmt.Errorf("failed to start edge detector: %w", err)
+						return m, nil
+					}
 					m.capturing = true
 				}
 			}

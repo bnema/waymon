@@ -55,7 +55,11 @@ func runMonitors(cmd *cobra.Command, args []string) error {
 		}
 		return fmt.Errorf("failed to initialize display detection: %w", err)
 	}
-	defer disp.Close()
+	defer func() {
+		if err := disp.Close(); err != nil {
+			logger.Errorf("Failed to close display: %v", err)
+		}
+	}()
 
 	// Get monitor information
 	monitors := disp.GetMonitors()

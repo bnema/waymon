@@ -25,7 +25,7 @@ func main() {
 
 		if sudoUID != "" {
 			env := os.Environ()
-			
+
 			// Set XDG_RUNTIME_DIR
 			xdgRuntimeDir := fmt.Sprintf("/run/user/%s", sudoUID)
 			env = append(env, fmt.Sprintf("XDG_RUNTIME_DIR=%s", xdgRuntimeDir))
@@ -67,7 +67,7 @@ func runWlrRandr(env []string) {
 	if env != nil {
 		cmd.Env = env
 	}
-	
+
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		fmt.Printf("Error: %v\n", err)
@@ -76,7 +76,7 @@ func runWlrRandr(env []string) {
 		}
 	} else {
 		fmt.Printf("Success! Output length: %d bytes\n", len(output))
-		
+
 		// Try to parse JSON
 		var outputs []map[string]interface{}
 		if err := json.Unmarshal(output, &outputs); err != nil {
@@ -101,7 +101,7 @@ func runWlrRandr(env []string) {
 	if env != nil {
 		cmd.Env = env
 	}
-	
+
 	output, err = cmd.CombinedOutput()
 	if err != nil {
 		fmt.Printf("Error: %v\n", err)

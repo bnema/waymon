@@ -135,7 +135,9 @@ func (ds *DeviceSetup) hasInputPermission() bool {
 	// Try to open a test event device
 	testPath := "/dev/input/event0"
 	if file, err := os.Open(testPath); err == nil {
-		file.Close()
+		if err := file.Close(); err != nil {
+			logger.Debugf("Failed to close test file %s: %v", testPath, err)
+		}
 		return true
 	}
 
@@ -157,7 +159,9 @@ func (ds *DeviceSetup) ValidateDevices() error {
 		} else {
 			// Check if device actually has mouse capabilities
 			caps := detector.GetDeviceCapabilities(file)
-			file.Close()
+			if err := file.Close(); err != nil {
+				logger.Debugf("Failed to close mouse device file: %v", err)
+			}
 
 			// Check for REL_X and REL_Y
 			hasMouseMovement := false
@@ -192,7 +196,9 @@ func (ds *DeviceSetup) ValidateDevices() error {
 		} else {
 			// Check if device actually has keyboard capabilities
 			caps := detector.GetDeviceCapabilities(file)
-			file.Close()
+			if err := file.Close(); err != nil {
+				logger.Debugf("Failed to close keyboard device file: %v", err)
+			}
 
 			// Check for keyboard keys
 			keyboardKeys := 0

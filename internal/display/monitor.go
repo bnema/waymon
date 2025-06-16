@@ -87,7 +87,9 @@ func New() (*Display, error) {
 
 	monitors, err := backend.GetMonitors()
 	if err != nil {
-		backend.Close()
+		if closeErr := backend.Close(); closeErr != nil {
+			return nil, fmt.Errorf("failed to get monitors: %w (also failed to close backend: %v)", err, closeErr)
+		}
 		return nil, err
 	}
 
