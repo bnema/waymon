@@ -193,16 +193,18 @@ func (c *SSHClient) Connect(ctx context.Context, serverAddr string) error {
 		return fmt.Errorf("failed to get stdout pipe: %w", err)
 	}
 
-	// Start the session
-	if err := session.Shell(); err != nil {
-		if err := session.Close(); err != nil {
-			logger.Errorf("Failed to close SSH session: %v", err)
+	// Don't start a shell - we're using raw stdin/stdout for protocol buffers
+	// Starting a shell would send shell prompts and other text that interferes with our protocol
+	logger.Debug("[SSH-CLIENT] Using raw session without shell for clean protocol communication")
+
+	// Start the session without a command (raw mode)
+	// This is necessary to establish the data channels
+	go func() {
+		if err := session.Run(""); err != nil {
+			// This is expected to return an error when session closes
+			logger.Debugf("[SSH-CLIENT] Session ended: %v", err)
 		}
-		if err := client.Close(); err != nil {
-			logger.Errorf("Failed to close SSH client: %v", err)
-		}
-		return fmt.Errorf("failed to start SSH session: %w", err)
-	}
+	}()
 
 	// No handshake messages expected from server anymore
 	// Server only sends protocol buffer messages or error text
@@ -296,6 +298,7 @@ func (c *SSHClient) receiveInputEvents(ctx context.Context) {
 
 	// Buffer to store any text messages
 	textBuffer := make([]byte, 0, 1024)
+	messageCount := 0
 
 	for {
 		select {
@@ -313,11 +316,12 @@ func (c *SSHClient) receiveInputEvents(ctx context.Context) {
 				return
 			}
 
-			// Read length prefix (4 bytes) with timeout
-			lengthBuf := make([]byte, 4)
-			logger.Debug("[SSH-CLIENT] Reading length prefix (4 bytes)...")
+			logger.Debugf("[SSH-CLIENT] Waiting for message #%d", messageCount+1)
 
-			// Use a timeout to avoid hanging on read
+			// Read length prefix (4 bytes) - blocking read
+			lengthBuf := make([]byte, 4)
+
+			// Use a goroutine to make the read cancellable
 			readChan := make(chan error, 1)
 			go func() {
 				_, err := io.ReadFull(reader, lengthBuf)
@@ -337,15 +341,10 @@ func (c *SSHClient) receiveInputEvents(ctx context.Context) {
 					logger.Errorf("[SSH-CLIENT] Failed to read message length: %v", err)
 					continue
 				}
-			case <-time.After(2 * time.Second):
-				logger.Debug("[SSH-CLIENT] Read timeout, checking context")
-				continue
 			}
 
 			// Decode length
 			length := int(lengthBuf[0])<<24 | int(lengthBuf[1])<<16 | int(lengthBuf[2])<<8 | int(lengthBuf[3])
-			logger.Debugf("[SSH-CLIENT] Decoded message length: %d bytes (raw bytes: %02x %02x %02x %02x)",
-				length, lengthBuf[0], lengthBuf[1], lengthBuf[2], lengthBuf[3])
 
 			// Check if this looks like text instead of a protocol buffer length
 			// Protocol buffer lengths are typically small and positive
@@ -400,9 +399,8 @@ func (c *SSHClient) receiveInputEvents(ctx context.Context) {
 				}
 			}
 
-			// Read message data with timeout
+			// Read message data
 			msgBuf := make([]byte, length)
-			logger.Debugf("[SSH-CLIENT] Reading message data (%d bytes)...", length)
 
 			readChan = make(chan error, 1)
 			go func() {
@@ -419,21 +417,18 @@ func (c *SSHClient) receiveInputEvents(ctx context.Context) {
 					logger.Errorf("[SSH-CLIENT] Failed to read message data: %v", err)
 					continue
 				}
-			case <-time.After(2 * time.Second):
-				logger.Debug("[SSH-CLIENT] Message read timeout, checking context")
-				continue
 			}
 
 			// Unmarshal input event
 			var inputEvent protocol.InputEvent
-			logger.Debug("[SSH-CLIENT] Unmarshaling protocol buffer...")
 			if err := proto.Unmarshal(msgBuf, &inputEvent); err != nil {
 				logger.Errorf("[SSH-CLIENT] Failed to unmarshal input event: %v", err)
 				continue
 			}
 
-			logger.Debugf("[SSH-CLIENT] Received event: type=%T, timestamp=%d, sourceId=%s",
-				inputEvent.Event, inputEvent.Timestamp, inputEvent.SourceId)
+			messageCount++
+			logger.Debugf("[SSH-CLIENT] Successfully received message #%d: type=%T, sourceId=%s",
+				messageCount, inputEvent.Event, inputEvent.SourceId)
 
 			// Call the callback if set
 			c.mu.Lock()
@@ -441,7 +436,7 @@ func (c *SSHClient) receiveInputEvents(ctx context.Context) {
 			c.mu.Unlock()
 
 			if callback != nil {
-				logger.Debug("[SSH-CLIENT] Calling onInputEvent callback")
+				logger.Debugf("[SSH-CLIENT] Calling onInputEvent callback for message #%d", messageCount)
 				callback(&inputEvent)
 			} else {
 				logger.Warn("[SSH-CLIENT] No onInputEvent callback set")

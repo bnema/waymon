@@ -245,9 +245,7 @@ func (s *SSHServer) sessionHandler() wish.Middleware {
 				s.mu.Unlock()
 				// Reject the session immediately
 				logger.Infof("Rejecting client - max clients reached addr=%s", sess.RemoteAddr().String())
-				if _, err := fmt.Fprintf(sess, "Server already has maximum number of active clients\n"); err != nil {
-					logger.Errorf("Failed to write to SSH session: %v", err)
-				}
+				// Don't send plain text - just close the connection
 				if err := sess.Exit(1); err != nil {
 					logger.Errorf("Failed to exit SSH session: %v", err)
 				}
@@ -265,6 +263,7 @@ func (s *SSHServer) sessionHandler() wish.Middleware {
 			}
 
 			// Get session writer for sending input events to client
+			// Use the session directly as writer - it implements io.Writer
 			writer := sess
 
 			// Create and register client entry
@@ -488,6 +487,16 @@ func (s *SSHServer) writeInputEvent(w io.Writer, event *protocol.InputEvent) err
 	if _, err := w.Write(data); err != nil {
 		logger.Errorf("[SSH-SERVER] Failed to write data: %v", err)
 		return fmt.Errorf("failed to write data: %w", err)
+	}
+
+	// Check if the writer supports flushing
+	if flusher, ok := w.(interface{ Flush() error }); ok {
+		if err := flusher.Flush(); err != nil {
+			logger.Errorf("[SSH-SERVER] Failed to flush writer: %v", err)
+			// Don't fail on flush error, data was already written
+		} else {
+			logger.Debugf("[SSH-SERVER] Flushed writer after writing")
+		}
 	}
 
 	logger.Debugf("[SSH-SERVER] Successfully wrote %d bytes to client", length)
