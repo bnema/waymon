@@ -53,10 +53,49 @@ func CreateServerBackend() (InputBackend, error) {
 
 		// Check if devices are configured
 		cfg := config.Get()
-		if cfg != nil && (cfg.Input.MouseDevice != "" || cfg.Input.KeyboardDevice != "") {
-			logger.Infof("Using configured devices - Mouse: %s, Keyboard: %s",
-				cfg.Input.MouseDevice, cfg.Input.KeyboardDevice)
-			return NewEvdevCaptureWithDevices(cfg.Input.MouseDevice, cfg.Input.KeyboardDevice), nil
+		if cfg != nil {
+			var mousePath, keyboardPath string
+			
+			// Try to resolve persistent device info first
+			if cfg.Input.MouseDeviceInfo != nil {
+				deviceInfo := &PersistentDeviceInfo{
+					Name:       cfg.Input.MouseDeviceInfo.Name,
+					ByIDPath:   cfg.Input.MouseDeviceInfo.ByIDPath,
+					ByPathPath: cfg.Input.MouseDeviceInfo.ByPathPath,
+					VendorID:   cfg.Input.MouseDeviceInfo.VendorID,
+					ProductID:  cfg.Input.MouseDeviceInfo.ProductID,
+					Phys:       cfg.Input.MouseDeviceInfo.Phys,
+				}
+				if path, err := deviceInfo.ResolveToEventPath(); err == nil {
+					mousePath = path
+					logger.Infof("Resolved mouse device '%s' to %s", deviceInfo.Name, path)
+				} else {
+					logger.Warnf("Could not resolve mouse device '%s': %v", deviceInfo.Name, err)
+				}
+			}
+			
+			if cfg.Input.KeyboardDeviceInfo != nil {
+				deviceInfo := &PersistentDeviceInfo{
+					Name:       cfg.Input.KeyboardDeviceInfo.Name,
+					ByIDPath:   cfg.Input.KeyboardDeviceInfo.ByIDPath,
+					ByPathPath: cfg.Input.KeyboardDeviceInfo.ByPathPath,
+					VendorID:   cfg.Input.KeyboardDeviceInfo.VendorID,
+					ProductID:  cfg.Input.KeyboardDeviceInfo.ProductID,
+					Phys:       cfg.Input.KeyboardDeviceInfo.Phys,
+				}
+				if path, err := deviceInfo.ResolveToEventPath(); err == nil {
+					keyboardPath = path
+					logger.Infof("Resolved keyboard device '%s' to %s", deviceInfo.Name, path)
+				} else {
+					logger.Warnf("Could not resolve keyboard device '%s': %v", deviceInfo.Name, err)
+				}
+			}
+			
+			
+			if mousePath != "" || keyboardPath != "" {
+				logger.Infof("Using configured devices - Mouse: %s, Keyboard: %s", mousePath, keyboardPath)
+				return NewEvdevCaptureWithDevices(mousePath, keyboardPath), nil
+			}
 		}
 
 		return NewEvdevCapture(), nil

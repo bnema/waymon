@@ -3,6 +3,7 @@ package setup
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 
 	"github.com/bnema/waymon/internal/config"
 	"github.com/bnema/waymon/internal/input"
@@ -28,7 +29,7 @@ func (ds *DeviceSetup) RunInteractiveSetup() error {
 	cfg := config.Get()
 
 	// Check if devices are already configured
-	if cfg.Input.MouseDevice != "" && cfg.Input.KeyboardDevice != "" {
+	if cfg.Input.MouseDeviceInfo != nil && cfg.Input.KeyboardDeviceInfo != nil {
 		logger.Info("Input devices already configured")
 		// Validate that configured devices actually exist and have proper capabilities
 		if err := ds.ValidateDevices(); err != nil {
@@ -53,20 +54,38 @@ func (ds *DeviceSetup) RunInteractiveSetup() error {
 	fmt.Println("we select devices that can properly capture mouse/keyboard input.")
 
 	// Select mouse device if not configured
-	if cfg.Input.MouseDevice == "" {
+	if cfg.Input.MouseDeviceInfo == nil {
 		fmt.Println("📌 Step 1: Select Mouse Device")
 		fmt.Println("Looking for devices with X/Y movement capabilities...")
 		mousePath, err := ds.selector.SelectMouseDeviceEnhanced()
 		if err != nil {
 			return fmt.Errorf("mouse selection failed: %w", err)
 		}
-		cfg.Input.MouseDevice = mousePath
-		viper.Set("input.mouse_device", mousePath)
-		fmt.Printf("✓ Selected mouse: %s\n\n", mousePath)
+		
+		// Get persistent device info
+		persistentInfo, err := input.ResolveToPersistentPath(mousePath)
+		if err != nil {
+			return fmt.Errorf("could not get persistent device info for mouse: %w", err)
+		}
+		
+		deviceInfo := &config.DeviceInfo{
+			Name:       persistentInfo.Name,
+			ByIDPath:   persistentInfo.ByIDPath,
+			ByPathPath: persistentInfo.ByPathPath,
+			VendorID:   persistentInfo.VendorID,
+			ProductID:  persistentInfo.ProductID,
+			Phys:       persistentInfo.Phys,
+		}
+		cfg.Input.MouseDeviceInfo = deviceInfo
+		viper.Set("input.mouse_device_info", deviceInfo)
+		fmt.Printf("✓ Selected mouse: %s\n", persistentInfo.Name)
+		if persistentInfo.ByIDPath != "" {
+			fmt.Printf("  Persistent ID: %s\n\n", filepath.Base(persistentInfo.ByIDPath))
+		}
 	}
 
 	// Select keyboard device if not configured
-	if cfg.Input.KeyboardDevice == "" {
+	if cfg.Input.KeyboardDeviceInfo == nil {
 		fmt.Println("📌 Step 2: Select Keyboard Device")
 		fmt.Println("Looking for devices with keyboard key capabilities...")
 		keyboardPath, err := ds.selector.SelectKeyboardDeviceEnhanced()
@@ -75,9 +94,27 @@ func (ds *DeviceSetup) RunInteractiveSetup() error {
 			logger.Warnf("Keyboard selection failed: %v", err)
 			fmt.Println("⚠️  No keyboard selected. You can add one later in the config file.")
 		} else {
-			cfg.Input.KeyboardDevice = keyboardPath
-			viper.Set("input.keyboard_device", keyboardPath)
-			fmt.Printf("✓ Selected keyboard: %s\n\n", keyboardPath)
+			// Get persistent device info
+			persistentInfo, err := input.ResolveToPersistentPath(keyboardPath)
+			if err != nil {
+				logger.Warnf("Could not get persistent device info for keyboard: %v", err)
+				fmt.Println("⚠️  Could not get persistent device info. Device may not work after reconnection.")
+			} else {
+				deviceInfo := &config.DeviceInfo{
+					Name:       persistentInfo.Name,
+					ByIDPath:   persistentInfo.ByIDPath,
+					ByPathPath: persistentInfo.ByPathPath,
+					VendorID:   persistentInfo.VendorID,
+					ProductID:  persistentInfo.ProductID,
+					Phys:       persistentInfo.Phys,
+				}
+				cfg.Input.KeyboardDeviceInfo = deviceInfo
+				viper.Set("input.keyboard_device_info", deviceInfo)
+				fmt.Printf("✓ Selected keyboard: %s\n", persistentInfo.Name)
+				if persistentInfo.ByIDPath != "" {
+					fmt.Printf("  Persistent ID: %s\n\n", filepath.Base(persistentInfo.ByIDPath))
+				}
+			}
 		}
 	}
 
@@ -118,8 +155,8 @@ func (ds *DeviceSetup) PromptDeviceReselection() error {
 	}
 
 	// Clear existing device configuration
-	viper.Set("input.mouse_device", "")
-	viper.Set("input.keyboard_device", "")
+	viper.Set("input.mouse_device_info", nil)
+	viper.Set("input.keyboard_device_info", nil)
 
 	// Run setup again
 	return ds.RunInteractiveSetup()
@@ -150,12 +187,24 @@ func (ds *DeviceSetup) ValidateDevices() error {
 	detector := input.NewDeviceDetector()
 
 	// Validate mouse device
-	if cfg.Input.MouseDevice != "" {
-		if _, err := os.Stat(cfg.Input.MouseDevice); os.IsNotExist(err) {
-			return fmt.Errorf("configured mouse device %s no longer exists", cfg.Input.MouseDevice)
+	if cfg.Input.MouseDeviceInfo != nil {
+		// Resolve persistent device info to current path
+		deviceInfo := &input.PersistentDeviceInfo{
+			Name:       cfg.Input.MouseDeviceInfo.Name,
+			ByIDPath:   cfg.Input.MouseDeviceInfo.ByIDPath,
+			ByPathPath: cfg.Input.MouseDeviceInfo.ByPathPath,
+			VendorID:   cfg.Input.MouseDeviceInfo.VendorID,
+			ProductID:  cfg.Input.MouseDeviceInfo.ProductID,
+			Phys:       cfg.Input.MouseDeviceInfo.Phys,
 		}
-		if file, err := os.Open(cfg.Input.MouseDevice); err != nil {
-			return fmt.Errorf("cannot access mouse device %s: %w", cfg.Input.MouseDevice, err)
+		
+		mousePath, err := deviceInfo.ResolveToEventPath()
+		if err != nil {
+			return fmt.Errorf("configured mouse device '%s' no longer available: %w", deviceInfo.Name, err)
+		}
+		
+		if file, err := os.Open(mousePath); err != nil {
+			return fmt.Errorf("cannot access mouse device %s: %w", mousePath, err)
 		} else {
 			// Check if device actually has mouse capabilities
 			caps := detector.GetDeviceCapabilities(file)
@@ -180,19 +229,30 @@ func (ds *DeviceSetup) ValidateDevices() error {
 			}
 
 			if !hasMouseMovement {
-				return fmt.Errorf("configured mouse device %s does not have X/Y movement capabilities", cfg.Input.MouseDevice)
+				return fmt.Errorf("configured mouse device '%s' does not have X/Y movement capabilities", deviceInfo.Name)
 			}
-			logger.Infof("✓ Mouse device %s validated - has proper movement capabilities", cfg.Input.MouseDevice)
+			logger.Infof("✓ Mouse device '%s' validated - has proper movement capabilities", deviceInfo.Name)
 		}
 	}
 
 	// Validate keyboard device
-	if cfg.Input.KeyboardDevice != "" {
-		if _, err := os.Stat(cfg.Input.KeyboardDevice); os.IsNotExist(err) {
-			logger.Warnf("Configured keyboard device %s no longer exists", cfg.Input.KeyboardDevice)
+	if cfg.Input.KeyboardDeviceInfo != nil {
+		// Resolve persistent device info to current path
+		deviceInfo := &input.PersistentDeviceInfo{
+			Name:       cfg.Input.KeyboardDeviceInfo.Name,
+			ByIDPath:   cfg.Input.KeyboardDeviceInfo.ByIDPath,
+			ByPathPath: cfg.Input.KeyboardDeviceInfo.ByPathPath,
+			VendorID:   cfg.Input.KeyboardDeviceInfo.VendorID,
+			ProductID:  cfg.Input.KeyboardDeviceInfo.ProductID,
+			Phys:       cfg.Input.KeyboardDeviceInfo.Phys,
+		}
+		
+		keyboardPath, err := deviceInfo.ResolveToEventPath()
+		if err != nil {
+			logger.Warnf("Configured keyboard device '%s' no longer available: %v", deviceInfo.Name, err)
 			// Don't fail for keyboard, it's optional
-		} else if file, err := os.Open(cfg.Input.KeyboardDevice); err != nil {
-			logger.Warnf("Cannot access keyboard device %s: %v", cfg.Input.KeyboardDevice, err)
+		} else if file, err := os.Open(keyboardPath); err != nil {
+			logger.Warnf("Cannot access keyboard device %s: %v", keyboardPath, err)
 		} else {
 			// Check if device actually has keyboard capabilities
 			caps := detector.GetDeviceCapabilities(file)
@@ -211,9 +271,9 @@ func (ds *DeviceSetup) ValidateDevices() error {
 			}
 
 			if keyboardKeys < 20 {
-				logger.Warnf("Configured keyboard device %s has limited keyboard capabilities (%d keys)", cfg.Input.KeyboardDevice, keyboardKeys)
+				logger.Warnf("Configured keyboard device '%s' has limited keyboard capabilities (%d keys)", deviceInfo.Name, keyboardKeys)
 			} else {
-				logger.Infof("✓ Keyboard device %s validated - has %d keyboard keys", cfg.Input.KeyboardDevice, keyboardKeys)
+				logger.Infof("✓ Keyboard device '%s' validated - has %d keyboard keys", deviceInfo.Name, keyboardKeys)
 			}
 		}
 	}

@@ -89,13 +89,13 @@ func runServerSetup() error {
 
 	// Check if devices are already configured
 	cfg := config.Get()
-	if cfg.Input.MouseDevice != "" || cfg.Input.KeyboardDevice != "" {
+	if cfg.Input.MouseDeviceInfo != nil || cfg.Input.KeyboardDeviceInfo != nil {
 		fmt.Println(ui.SuccessStyle.Render("✓ Input devices already configured"))
-		if cfg.Input.MouseDevice != "" {
-			fmt.Printf("   Mouse: %s\n", cfg.Input.MouseDevice)
+		if cfg.Input.MouseDeviceInfo != nil {
+			fmt.Printf("   Mouse: %s\n", cfg.Input.MouseDeviceInfo.Name)
 		}
-		if cfg.Input.KeyboardDevice != "" {
-			fmt.Printf("   Keyboard: %s\n", cfg.Input.KeyboardDevice)
+		if cfg.Input.KeyboardDeviceInfo != nil {
+			fmt.Printf("   Keyboard: %s\n", cfg.Input.KeyboardDeviceInfo.Name)
 		}
 		fmt.Println()
 		fmt.Println("   To reconfigure devices, run: waymon setup --devices")
@@ -166,8 +166,22 @@ func selectDevices() error {
 		}
 		return err
 	}
-	cfg.Input.MouseDevice = mousePath
-	fmt.Println(ui.SuccessStyle.Render(fmt.Sprintf("✓ Mouse device selected: %s", mousePath)))
+	// Get persistent device info for mouse
+	persistentInfo, err := input.ResolveToPersistentPath(mousePath)
+	if err != nil {
+		return fmt.Errorf("could not get persistent device info for mouse: %w", err)
+	}
+	
+	mouseDeviceInfo := &config.DeviceInfo{
+		Name:       persistentInfo.Name,
+		ByIDPath:   persistentInfo.ByIDPath,
+		ByPathPath: persistentInfo.ByPathPath,
+		VendorID:   persistentInfo.VendorID,
+		ProductID:  persistentInfo.ProductID,
+		Phys:       persistentInfo.Phys,
+	}
+	cfg.Input.MouseDeviceInfo = mouseDeviceInfo
+	fmt.Println(ui.SuccessStyle.Render(fmt.Sprintf("✓ Mouse device selected: %s", persistentInfo.Name)))
 
 	// Select keyboard device (optional)
 	keyboardPath, err := selector.SelectKeyboardDeviceEnhanced()
@@ -179,13 +193,24 @@ func selectDevices() error {
 			fmt.Println("   Continuing without keyboard capture")
 		}
 	} else {
-		cfg.Input.KeyboardDevice = keyboardPath
-		fmt.Println(ui.SuccessStyle.Render(fmt.Sprintf("✓ Keyboard device selected: %s", keyboardPath)))
+		// Get persistent device info for keyboard
+		if persistentInfo, err := input.ResolveToPersistentPath(keyboardPath); err == nil {
+			keyboardDeviceInfo := &config.DeviceInfo{
+				Name:       persistentInfo.Name,
+				ByIDPath:   persistentInfo.ByIDPath,
+				ByPathPath: persistentInfo.ByPathPath,
+				VendorID:   persistentInfo.VendorID,
+				ProductID:  persistentInfo.ProductID,
+				Phys:       persistentInfo.Phys,
+			}
+			cfg.Input.KeyboardDeviceInfo = keyboardDeviceInfo
+			fmt.Println(ui.SuccessStyle.Render(fmt.Sprintf("✓ Keyboard device selected: %s", persistentInfo.Name)))
+		}
 	}
 
 	// Save configuration
-	viper.Set("input.mouse_device", cfg.Input.MouseDevice)
-	viper.Set("input.keyboard_device", cfg.Input.KeyboardDevice)
+	viper.Set("input.mouse_device_info", cfg.Input.MouseDeviceInfo)
+	viper.Set("input.keyboard_device_info", cfg.Input.KeyboardDeviceInfo)
 	if err := viper.WriteConfig(); err != nil {
 		fmt.Println(ui.ErrorStyle.Render(fmt.Sprintf("✗ Failed to save configuration: %v", err)))
 		return err

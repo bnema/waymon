@@ -38,17 +38,33 @@ func main() {
 	}
 
 	cfg := config.Get()
-	if cfg.Input.MouseDevice == "" {
+	if cfg.Input.MouseDeviceInfo == nil {
 		logger.Error("❌ No mouse device configured!")
 		logger.Info("Run 'waymon setup --devices' to configure devices")
 		os.Exit(1)
 	}
 
-	logger.Infof("📍 Using mouse device: %s", cfg.Input.MouseDevice)
+	// Resolve persistent device info to current path
+	deviceInfo := &input.PersistentDeviceInfo{
+		Name:       cfg.Input.MouseDeviceInfo.Name,
+		ByIDPath:   cfg.Input.MouseDeviceInfo.ByIDPath,
+		ByPathPath: cfg.Input.MouseDeviceInfo.ByPathPath,
+		VendorID:   cfg.Input.MouseDeviceInfo.VendorID,
+		ProductID:  cfg.Input.MouseDeviceInfo.ProductID,
+		Phys:       cfg.Input.MouseDeviceInfo.Phys,
+	}
+	
+	mousePath, err := deviceInfo.ResolveToEventPath()
+	if err != nil {
+		logger.Errorf("❌ Failed to resolve mouse device: %v", err)
+		os.Exit(1)
+	}
+
+	logger.Infof("📍 Using mouse device: %s (%s)", cfg.Input.MouseDeviceInfo.Name, mousePath)
 
 	// Test 1: Direct evdev access
 	logger.Info("\n🔍 Test 1: Direct evdev device access")
-	if err := testDirectEvdev(cfg.Input.MouseDevice); err != nil {
+	if err := testDirectEvdev(mousePath); err != nil {
 		logger.Errorf("❌ Direct evdev test failed: %v", err)
 		os.Exit(1)
 	}
@@ -70,7 +86,7 @@ func main() {
 
 	// Test 3: Evdev capture with Wayland injection (full pipeline)
 	logger.Info("\n🔍 Test 3: Full capture + injection pipeline")
-	if err := testFullPipeline(cfg.Input.MouseDevice, waylandBackend); err != nil {
+	if err := testFullPipeline(mousePath, waylandBackend); err != nil {
 		logger.Errorf("❌ Full pipeline test failed: %v", err)
 		return // Exit gracefully to allow defer to run
 	}
