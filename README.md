@@ -174,19 +174,24 @@ file_logging = false
 
 ## Architecture
 
-```mermaid
-graph LR
-  subgraph "Server (where physical mouse/keyboard are)"
-    direction TB
-    evdev["Linux Input Event Devices<br>(/dev/input/event*)"] --> server_app["Waymon Server Process<br>(captures evdev events)"]
-  end
-
-  subgraph "Client (controlled remotely)"
-    direction TB
-    client_app["Waymon Client Process<br>(receives events)"] --> virtual_input["Wayland Virtual Input<br>(injects events)"]
-  end
-
-  server_app -- "Input Events (Protobuf) over<br>Encrypted SSH Tunnel" --> client_app
+```
+┌─── SERVER (Physical Input) ────────────────────────────────────────┐
+│                                                                    │
+│   Linux Input Devices          Waymon Server Process              │
+│   (/dev/input/event*)    ────>  (captures evdev events)           │
+│                                        │                           │
+└────────────────────────────────────────┼───────────────────────────┘
+                                         │
+                    Input Events (Protobuf) over
+                      Encrypted SSH Tunnel
+                                         │
+                                         ▼
+┌─── CLIENT (Remote Control) ────────────────────────────────────────┐
+│                                                                    │
+│    Waymon Client Process         Wayland Virtual Input             │
+│    (receives events)      ────>  (injects mouse/keyboard)          │
+│                                                                    │
+└────────────────────────────────────────────────────────────────────┘
 ```
 
 ## Contributing
