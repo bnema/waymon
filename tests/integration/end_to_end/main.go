@@ -110,8 +110,8 @@ func testEndToEndFlow(tempDir string) TestResult {
 		}
 	}
 
-	// Create server manager
-	serverManager, err := server.NewClientManager()
+	// Create server manager with the capture backend
+	serverManager, err := server.NewClientManager(captureBackend)
 	if err != nil {
 		return TestResult{
 			Name:    "End-to-End Flow",

@@ -82,8 +82,12 @@ func (s *Server) StartNetworking(ctx context.Context) error {
 
 // initClientManager initializes the client manager for the redesigned architecture
 func (s *Server) initClientManager() error {
-	logger.Debug("Server.initClientManager: Creating client manager")
-	clientManager, err := NewClientManager()
+	if s.inputBackend == nil {
+		return fmt.Errorf("input backend must be initialized before client manager")
+	}
+
+	logger.Debug("Server.initClientManager: Creating client manager with shared input backend")
+	clientManager, err := NewClientManager(s.inputBackend)
 	if err != nil {
 		logger.Errorf("Server.initClientManager: Failed to create client manager: %v", err)
 		return err
@@ -91,8 +95,7 @@ func (s *Server) initClientManager() error {
 	logger.Debug("Server.initClientManager: Client manager created successfully")
 	s.clientManager = clientManager
 
-	// Input backend is managed by client manager directly
-	logger.Info("Server: Client manager has been set up with input backend")
+	logger.Info("Server: Client manager now shares the server's input backend")
 
 	return nil
 }
