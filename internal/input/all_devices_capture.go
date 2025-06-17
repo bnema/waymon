@@ -41,7 +41,7 @@ func NewAllDevicesCapture() *AllDevicesCapture {
 	return &AllDevicesCapture{
 		devices:        make(map[string]*deviceHandler),
 		ignoredDevices: make(map[string]bool),
-		eventChan:      make(chan *protocol.InputEvent, 100),
+		eventChan:      make(chan *protocol.InputEvent, 1000), // Increased buffer to handle bursts
 		capturing:      false,
 	}
 }
@@ -105,7 +105,7 @@ func (a *AllDevicesCapture) Stop() error {
 
 	// Close event channel
 	close(a.eventChan)
-	a.eventChan = make(chan *protocol.InputEvent, 100)
+	a.eventChan = make(chan *protocol.InputEvent, 1000) // Match the initial buffer size
 
 	a.capturing = false
 	logger.Info("All-devices input capture stopped")
