@@ -63,11 +63,9 @@ type ConnectedClient struct {
 }
 
 // NewClientManager creates a new client manager for the server
-func NewClientManager() (*ClientManager, error) {
-	// Create server input backend (evdev for capture)
-	inputBackend, err := input.CreateServerBackend()
-	if err != nil {
-		return nil, fmt.Errorf("failed to create server input backend: %w", err)
+func NewClientManager(inputBackend input.InputBackend) (*ClientManager, error) {
+	if inputBackend == nil {
+		return nil, fmt.Errorf("input backend is required")
 	}
 
 	return &ClientManager{
@@ -78,7 +76,7 @@ func NewClientManager() (*ClientManager, error) {
 	}, nil
 }
 
-// Start starts the client manager and input capture
+// Start starts the client manager SSH server
 func (cm *ClientManager) Start(ctx context.Context, port int) error {
 	// Get config for SSH server
 	cfg := config.Get()
@@ -90,16 +88,8 @@ func (cm *ClientManager) Start(ctx context.Context, port int) error {
 	// Create context for input event processing
 	cm.inputEventsCtx, cm.inputCancel = context.WithCancel(ctx)
 
-	// Set up event handler
-	logger.Debug("[SERVER-MANAGER] Setting up input event handler")
-	cm.inputBackend.OnInputEvent(cm.HandleInputEvent)
-
-	// Start input backend
-	logger.Debug("[SERVER-MANAGER] Starting input backend")
-	if err := cm.inputBackend.Start(ctx); err != nil {
-		return fmt.Errorf("failed to start input backend: %w", err)
-	}
-	logger.Debug("[SERVER-MANAGER] Input backend started successfully")
+	// Note: Input backend is already started by the Server
+	// We don't start it here to avoid duplicate backends
 
 	// Start SSH server
 	go func() {
@@ -108,7 +98,7 @@ func (cm *ClientManager) Start(ctx context.Context, port int) error {
 		}
 	}()
 
-	logger.Infof("Server started on port %d, controlling local system", port)
+	logger.Infof("Client manager started on port %d", port)
 	return nil
 }
 
@@ -117,10 +107,8 @@ func (cm *ClientManager) Stop() error {
 	cm.mu.Lock()
 	defer cm.mu.Unlock()
 
-	// Stop input backend
-	if err := cm.inputBackend.Stop(); err != nil {
-		logger.Errorf("Error stopping input backend: %v", err)
-	}
+	// Note: We don't stop the input backend here since it's owned by the Server
+	// The Server will handle stopping it
 
 	// Stop SSH server
 	if cm.sshServer != nil {

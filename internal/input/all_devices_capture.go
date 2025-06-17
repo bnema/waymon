@@ -26,13 +26,13 @@ type AllDevicesCapture struct {
 	ctx            context.Context
 	cancel         context.CancelFunc
 	deviceMonitor  *DeviceMonitor
-	
+
 	// Safety mechanisms
-	grabTimeout    time.Duration     // Auto-release timeout
-	grabTimer      *time.Timer       // Timer for auto-release
-	emergencyKey   uint16           // Key code for emergency release (e.g., ESC)
-	lastActivity   time.Time        // Last input activity time
-	noGrab         bool             // Disable exclusive grab (for safer testing)
+	grabTimeout  time.Duration // Auto-release timeout
+	grabTimer    *time.Timer   // Timer for auto-release
+	emergencyKey uint16        // Key code for emergency release (e.g., ESC)
+	lastActivity time.Time     // Last input activity time
+	noGrab       bool          // Disable exclusive grab (for safer testing)
 }
 
 // deviceHandler manages a single input device
@@ -102,8 +102,8 @@ func (a *AllDevicesCapture) Stop() error {
 	}
 
 	// Stop all device handlers
-	for path, handler := range a.devices {
-		a.stopDeviceHandler(path, handler)
+	for _, handler := range a.devices {
+		a.stopDeviceHandler(handler)
 	}
 
 	// Clear devices map
@@ -136,7 +136,7 @@ func (a *AllDevicesCapture) SetTarget(clientID string) error {
 			a.grabTimer.Stop()
 			a.grabTimer = nil
 		}
-		
+
 		// Release all devices when controlling local system
 		for _, handler := range a.devices {
 			if handler.device != nil {
@@ -151,13 +151,19 @@ func (a *AllDevicesCapture) SetTarget(clientID string) error {
 		if !a.noGrab {
 			// Grab all devices when controlling a client
 			var grabErrors []string
+			var successCount int
 			for _, handler := range a.devices {
 				if handler.device != nil {
 					if err := handler.device.Grab(); err != nil {
 						grabErrors = append(grabErrors, fmt.Sprintf("%s: %v", handler.path, err))
+						logger.Warnf("Failed to grab device %s (%s): %v", handler.name, handler.path, err)
+					} else {
+						successCount++
+						logger.Debugf("Successfully grabbed device %s (%s)", handler.name, handler.path)
 					}
 				}
 			}
+			logger.Infof("Grabbed %d/%d devices", successCount, len(a.devices))
 
 			if len(grabErrors) > 0 {
 				// Revert target on grab failure
@@ -205,6 +211,7 @@ func (a *AllDevicesCapture) discoverAndStartDevices() error {
 		return fmt.Errorf("failed to read input directory: %w", err)
 	}
 
+	logger.Infof("Discovering input devices in %s", eventDir)
 	deviceCount := 0
 	for _, entry := range entries {
 		if !entry.IsDir() && strings.HasPrefix(entry.Name(), "event") {
@@ -244,6 +251,7 @@ func (a *AllDevicesCapture) addDevice(path string) error {
 	// Try to open the device
 	device, err := evdev.Open(path)
 	if err != nil {
+		logger.Debugf("Cannot open device %s: %v", path, err)
 		return fmt.Errorf("failed to open device %s: %w", path, err)
 	}
 
@@ -283,13 +291,13 @@ func (a *AllDevicesCapture) removeDevice(path string) {
 		return
 	}
 
-	a.stopDeviceHandler(path, handler)
+	a.stopDeviceHandler(handler)
 	delete(a.devices, path)
 	logger.Infof("Removed input device: %s", path)
 }
 
 // stopDeviceHandler stops a device handler
-func (a *AllDevicesCapture) stopDeviceHandler(path string, handler *deviceHandler) {
+func (a *AllDevicesCapture) stopDeviceHandler(handler *deviceHandler) {
 	if handler.cancel != nil {
 		handler.cancel()
 	}
@@ -483,7 +491,7 @@ func (a *AllDevicesCapture) captureFromDevice(ctx context.Context, handler *devi
 					currentTarget := a.currentTarget
 					noGrab := a.noGrab
 					a.mu.RUnlock()
-					
+
 					// Only check emergency key if we're grabbing devices
 					if !noGrab && event.Code == emergencyKey && event.Value == 1 && currentTarget != "" {
 						logger.Warnf("Emergency release triggered - ESC key pressed")
@@ -495,7 +503,7 @@ func (a *AllDevicesCapture) captureFromDevice(ctx context.Context, handler *devi
 						}()
 						continue
 					}
-					
+
 					if event.Code >= evdev.BTN_LEFT && event.Code <= evdev.BTN_TASK {
 						a.sendMouseButtonEvent(event.Code, event.Value)
 					} else {
@@ -522,7 +530,7 @@ func (a *AllDevicesCapture) sendEvent(event *protocol.InputEvent) {
 		}
 	}
 	a.mu.Unlock()
-	
+
 	select {
 	case a.eventChan <- event:
 	default:
@@ -627,7 +635,12 @@ func (a *AllDevicesCapture) processEvents() {
 
 			// Only forward events if we have a target and callback
 			if target != "" && callback != nil {
+				logger.Debugf("Forwarding %T event to callback (target: %s)", event.Event, target)
 				callback(event)
+			} else if target == "" {
+				// Controlling local system, don't forward
+			} else if callback == nil {
+				logger.Warnf("No callback set for input events!")
 			}
 		}
 	}
