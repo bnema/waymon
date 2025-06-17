@@ -7,7 +7,6 @@
 ## Features
 
 ### Working
-- ✅ **Seamless mouse movement** between computers by moving to screen edges
 - ✅ **Mouse button events** (left, right, middle click)
 - ✅ **Keyboard input** forwarding
 - ✅ **Secure SSH transport** with key-based authentication
@@ -15,7 +14,8 @@
 - ✅ **Automatic input release** on client disconnect
 - ✅ **Emergency release** mechanisms (Ctrl+ESC, timeout, manual)
 
-### In Progress
+### Todo
+- 🚧 Screen edge detection and switching
 - 🚧 Absolute mouse positioning
 - 🚧 Cursor constraints
 - 🚧 Improved display boundary detection
@@ -112,7 +112,6 @@ bind_address = "0.0.0.0"
 name = "my-desktop"
 max_clients = 1
 ssh_whitelist_only = true
-log_level = "INFO"          # Set to "DEBUG" for troubleshooting
 
 [client]
 server_address = "192.168.1.100:52525"
@@ -123,17 +122,36 @@ edge_threshold = 5
 # hotkey_key = "s"
 # hotkey_modifier = "ctrl+alt"
 
-[display]
-backend = "auto"            # auto, wlr, sudo, or randr
+[logging]
+file_logging = true         # Enable/disable file logging (default: true)
+log_level = "INFO"          # Set to "DEBUG" for troubleshooting
 ```
 
 ## Troubleshooting
 
 ### Debug Logging
 
-Enable debug logs by setting the environment variable:
+Enable debug logs by either:
+
+1. Setting the environment variable:
 ```bash
 sudo LOG_LEVEL=DEBUG waymon server
+```
+
+2. Or in the config file:
+```toml
+[logging]
+log_level = "DEBUG"
+```
+
+Log files are stored in:
+- Server: `/var/log/waymon/waymon.log` (when run with sudo)
+- Client: `~/.local/share/waymon/waymon.log`
+
+To disable file logging (logs only in TUI):
+```toml
+[logging]
+file_logging = false
 ```
 
 ### Common Issues
