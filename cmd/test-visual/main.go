@@ -53,7 +53,7 @@ func main() {
 		ProductID:  cfg.Input.MouseDeviceInfo.ProductID,
 		Phys:       cfg.Input.MouseDeviceInfo.Phys,
 	}
-	
+
 	mousePath, err := deviceInfo.ResolveToEventPath()
 	if err != nil {
 		logger.Errorf("❌ Failed to resolve mouse device: %v", err)

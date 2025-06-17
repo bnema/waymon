@@ -48,7 +48,7 @@ func (dm *DeviceMonitor) Start(ctx context.Context, callback func(DeviceChange))
 	dm.pollTicker = time.NewTicker(2 * time.Second)
 
 	go dm.monitorWithPolling(callback)
-	
+
 	logger.Debug("Device monitor started with polling")
 	return nil
 }
@@ -143,7 +143,7 @@ func (dm *DeviceMonitor) getCurrentDevices() map[string]bool {
 // ListCurrentDevices returns a list of currently available input device paths
 func (dm *DeviceMonitor) ListCurrentDevices() []string {
 	var devices []string
-	
+
 	entries, err := os.ReadDir(dm.inputDir)
 	if err != nil {
 		logger.Warnf("Failed to read input directory: %v", err)

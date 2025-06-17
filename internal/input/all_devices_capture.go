@@ -16,16 +16,16 @@ import (
 
 // AllDevicesCapture captures input events from all available input devices
 type AllDevicesCapture struct {
-	mu            sync.RWMutex
-	devices       map[string]*deviceHandler
+	mu             sync.RWMutex
+	devices        map[string]*deviceHandler
 	ignoredDevices map[string]bool // devices that are not suitable for capture
-	eventChan     chan *protocol.InputEvent
-	onInputEvent  func(*protocol.InputEvent)
-	currentTarget string
-	capturing     bool
-	ctx           context.Context
-	cancel        context.CancelFunc
-	deviceMonitor *DeviceMonitor
+	eventChan      chan *protocol.InputEvent
+	onInputEvent   func(*protocol.InputEvent)
+	currentTarget  string
+	capturing      bool
+	ctx            context.Context
+	cancel         context.CancelFunc
+	deviceMonitor  *DeviceMonitor
 }
 
 // deviceHandler manages a single input device
@@ -141,13 +141,13 @@ func (a *AllDevicesCapture) SetTarget(clientID string) error {
 				}
 			}
 		}
-		
+
 		if len(grabErrors) > 0 {
 			// Revert target on grab failure
 			a.currentTarget = oldTarget
 			return fmt.Errorf("failed to grab input devices: %s", strings.Join(grabErrors, ", "))
 		}
-		
+
 		logger.Infof("Set input capture target to client: %s", clientID)
 	}
 	return nil
@@ -173,12 +173,12 @@ func (a *AllDevicesCapture) discoverAndStartDevices() error {
 	for _, entry := range entries {
 		if !entry.IsDir() && strings.HasPrefix(entry.Name(), "event") {
 			path := filepath.Join(eventDir, entry.Name())
-			
+
 			// Skip devices we've already determined are not suitable
 			if a.ignoredDevices[path] {
 				continue
 			}
-			
+
 			if err := a.addDevice(path); err != nil {
 				// Add to ignored devices list so we don't try again
 				a.ignoredDevices[path] = true
@@ -278,14 +278,14 @@ func (a *AllDevicesCapture) isValidInputDevice(device *evdev.InputDevice) bool {
 					return true
 				}
 				if cap.Code == evdev.KEY_SPACE || cap.Code == evdev.KEY_ENTER ||
-				   cap.Code == evdev.KEY_ESC || cap.Code == evdev.KEY_TAB {
+					cap.Code == evdev.KEY_ESC || cap.Code == evdev.KEY_TAB {
 					return true
 				}
 			}
 		} else if capType.Type == 2 { // EV_REL
 			for _, cap := range caps {
-				if cap.Code == evdev.REL_X || cap.Code == evdev.REL_Y || 
-				   cap.Code == evdev.REL_WHEEL || cap.Code == evdev.REL_HWHEEL {
+				if cap.Code == evdev.REL_X || cap.Code == evdev.REL_Y ||
+					cap.Code == evdev.REL_WHEEL || cap.Code == evdev.REL_HWHEEL {
 					return true
 				}
 			}

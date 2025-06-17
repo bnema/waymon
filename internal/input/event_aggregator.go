@@ -16,12 +16,12 @@ type EventAggregator struct {
 	filteredChan chan *protocol.InputEvent
 	ctx          context.Context
 	cancel       context.CancelFunc
-	
+
 	// Configuration
 	mouseSensitivity float64
 	scrollSpeed      float64
 	enableKeyboard   bool
-	
+
 	// Event filtering and aggregation
 	mouseAccumulator MouseAccumulator
 	eventFilters     []EventFilter
@@ -156,7 +156,7 @@ func (ea *EventAggregator) processEvent(event *protocol.InputEvent) *protocol.In
 		ea.mouseAccumulator.deltaX += e.MouseMove.Dx * ea.mouseSensitivity
 		ea.mouseAccumulator.deltaY += e.MouseMove.Dy * ea.mouseSensitivity
 		ea.mouseAccumulator.mu.Unlock()
-		
+
 		// Don't send the event immediately, let flushMouseMovements handle it
 		return nil
 
@@ -195,7 +195,7 @@ func (ea *EventAggregator) flushMouseMovements() {
 			return
 		case <-ticker.C:
 			ea.mouseAccumulator.mu.Lock()
-			
+
 			if ea.mouseAccumulator.deltaX != 0 || ea.mouseAccumulator.deltaY != 0 {
 				event := &protocol.InputEvent{
 					Event: &protocol.InputEvent_MouseMove{
@@ -220,7 +220,7 @@ func (ea *EventAggregator) flushMouseMovements() {
 					logger.Warnf("Filtered event channel full, dropping mouse movement")
 				}
 			}
-			
+
 			ea.mouseAccumulator.mu.Unlock()
 		}
 	}
@@ -259,17 +259,17 @@ func (df *DeduplicationFilter) eventsSimilar(e1, e2 *protocol.InputEvent) bool {
 		if event2, ok := e2.Event.(*protocol.InputEvent_MouseMove); ok {
 			// Consider movements similar if they're very small
 			return abs(event1.MouseMove.Dx) < 1 && abs(event1.MouseMove.Dy) < 1 &&
-				   abs(event2.MouseMove.Dx) < 1 && abs(event2.MouseMove.Dy) < 1
+				abs(event2.MouseMove.Dx) < 1 && abs(event2.MouseMove.Dy) < 1
 		}
 	case *protocol.InputEvent_MouseButton:
 		if event2, ok := e2.Event.(*protocol.InputEvent_MouseButton); ok {
 			return event1.MouseButton.Button == event2.MouseButton.Button &&
-				   event1.MouseButton.Pressed == event2.MouseButton.Pressed
+				event1.MouseButton.Pressed == event2.MouseButton.Pressed
 		}
 	case *protocol.InputEvent_Keyboard:
 		if event2, ok := e2.Event.(*protocol.InputEvent_Keyboard); ok {
 			return event1.Keyboard.Key == event2.Keyboard.Key &&
-				   event1.Keyboard.Pressed == event2.Keyboard.Pressed
+				event1.Keyboard.Pressed == event2.Keyboard.Pressed
 		}
 	}
 	return false

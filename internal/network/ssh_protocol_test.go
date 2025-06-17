@@ -40,19 +40,19 @@ func TestProtocolReaderWithMixedContent(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			reader := bytes.NewReader(tt.input)
-			
+
 			// Simulate reading like the SSH client does
 			lengthBuf := make([]byte, 4)
 			n, err := io.ReadFull(reader, lengthBuf)
 			if err != nil && err != io.EOF {
 				t.Fatalf("Failed to read length: %v", err)
 			}
-			
+
 			if n < 4 {
 				// Not enough data for a length prefix
 				return
 			}
-			
+
 			// Check if it's text
 			isText := true
 			for _, b := range lengthBuf {
@@ -61,7 +61,7 @@ func TestProtocolReaderWithMixedContent(t *testing.T) {
 					break
 				}
 			}
-			
+
 			if isText {
 				// It's text data
 				textBuf := append([]byte{}, lengthBuf...)
@@ -77,7 +77,7 @@ func TestProtocolReaderWithMixedContent(t *testing.T) {
 						break
 					}
 				}
-				
+
 				gotText := string(textBuf)
 				if gotText != tt.wantText && tt.wantText != "" {
 					t.Errorf("Got text %q, want %q", gotText, tt.wantText)
@@ -91,14 +91,14 @@ func TestProtocolReaderWithMixedContent(t *testing.T) {
 					}
 					return
 				}
-				
+
 				// Read protocol message
 				msgBuf := make([]byte, length)
 				_, err := io.ReadFull(reader, msgBuf)
 				if err != nil {
 					t.Fatalf("Failed to read protocol message: %v", err)
 				}
-				
+
 				// Try to unmarshal
 				var inputEvent protocol.InputEvent
 				if err := proto.Unmarshal(msgBuf, &inputEvent); err != nil {
@@ -114,18 +114,18 @@ func buildProtocolMessage(t *testing.T) []byte {
 	event := &protocol.InputEvent{
 		Event: &protocol.InputEvent_Control{
 			Control: &protocol.ControlEvent{
-				Type: protocol.ControlEvent_HEALTH_CHECK_PONG,
+				Type: protocol.ControlEvent_CLIENT_CONFIG,
 			},
 		},
 		Timestamp: 12345,
 		SourceId:  "test",
 	}
-	
+
 	data, err := proto.Marshal(event)
 	if err != nil {
 		t.Fatalf("Failed to marshal test event: %v", err)
 	}
-	
+
 	// Add length prefix
 	length := len(data)
 	lengthBuf := []byte{
@@ -134,7 +134,7 @@ func buildProtocolMessage(t *testing.T) []byte {
 		byte(length >> 8),
 		byte(length),
 	}
-	
+
 	return append(lengthBuf, data...)
 }
 

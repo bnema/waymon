@@ -115,17 +115,7 @@ func (s *SSHServer) Start(ctx context.Context) error {
 
 // SendEventToClient sends an input event to a specific client by address
 func (s *SSHServer) SendEventToClient(clientAddr string, event *protocol.InputEvent) error {
-	// Skip debug logs for health check events to reduce noise
-	isHealthCheck := false
-	if controlEvent := event.GetControl(); controlEvent != nil && 
-		(controlEvent.Type == protocol.ControlEvent_HEALTH_CHECK_PING || 
-		 controlEvent.Type == protocol.ControlEvent_HEALTH_CHECK_PONG) {
-		isHealthCheck = true
-	}
-
-	if !isHealthCheck {
-		logger.Debugf("[SSH-SERVER] SendEventToClient called: clientAddr=%s, eventType=%T", clientAddr, event.Event)
-	}
+	logger.Debugf("[SSH-SERVER] SendEventToClient called: clientAddr=%s, eventType=%T", clientAddr, event.Event)
 
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -133,9 +123,7 @@ func (s *SSHServer) SendEventToClient(clientAddr string, event *protocol.InputEv
 	// Find client by address
 	for _, client := range s.clients {
 		if client.addr == clientAddr {
-			if !isHealthCheck {
-				logger.Debugf("[SSH-SERVER] Found client for address %s, writing event", clientAddr)
-			}
+			logger.Debugf("[SSH-SERVER] Found client for address %s, writing event", clientAddr)
 
 			// Use the same message format as the client expects
 			if err := s.writeInputEvent(client.writer, event); err != nil {
@@ -143,9 +131,7 @@ func (s *SSHServer) SendEventToClient(clientAddr string, event *protocol.InputEv
 				return fmt.Errorf("failed to send event to client: %w", err)
 			}
 
-			if !isHealthCheck {
-				logger.Debugf("[SSH-SERVER] Successfully sent event to client %s", clientAddr)
-			}
+			logger.Debugf("[SSH-SERVER] Successfully sent event to client %s", clientAddr)
 			return nil
 		}
 	}
@@ -406,12 +392,7 @@ func (s *SSHServer) handleMouseEvents(ctx context.Context, sess ssh.Session) {
 
 			// Call event handler
 			if s.OnInputEvent != nil {
-				// Skip debug log for health check events to reduce noise
-				if controlEvent := inputEvent.GetControl(); controlEvent == nil || 
-					(controlEvent.Type != protocol.ControlEvent_HEALTH_CHECK_PING && 
-					 controlEvent.Type != protocol.ControlEvent_HEALTH_CHECK_PONG) {
-					logger.Debugf("[SSH-SERVER] Forwarding input event: type=%T, sourceId=%s", inputEvent.Event, inputEvent.SourceId)
-				}
+				logger.Debugf("[SSH-SERVER] Forwarding input event: type=%T, sourceId=%s", inputEvent.Event, inputEvent.SourceId)
 				s.OnInputEvent(&inputEvent)
 			}
 		}
@@ -480,17 +461,7 @@ func (s *SSHServer) GetClientSessions() map[string]string {
 
 // writeInputEvent writes an input event to a client
 func (s *SSHServer) writeInputEvent(w io.Writer, event *protocol.InputEvent) error {
-	// Skip debug logs for health check events to reduce noise
-	isHealthCheck := false
-	if controlEvent := event.GetControl(); controlEvent != nil && 
-		(controlEvent.Type == protocol.ControlEvent_HEALTH_CHECK_PING || 
-		 controlEvent.Type == protocol.ControlEvent_HEALTH_CHECK_PONG) {
-		isHealthCheck = true
-	}
-
-	if !isHealthCheck {
-		logger.Debugf("[SSH-SERVER] writeInputEvent: marshaling event type=%T", event.Event)
-	}
+	logger.Debugf("[SSH-SERVER] writeInputEvent: marshaling event type=%T", event.Event)
 
 	data, err := proto.Marshal(event)
 	if err != nil {
@@ -500,9 +471,7 @@ func (s *SSHServer) writeInputEvent(w io.Writer, event *protocol.InputEvent) err
 
 	// Write length prefix (4 bytes, big-endian)
 	length := len(data)
-	if !isHealthCheck {
-		logger.Debugf("[SSH-SERVER] Writing message: length=%d bytes", length)
-	}
+	logger.Debugf("[SSH-SERVER] Writing message: length=%d bytes", length)
 
 	lengthBuf := []byte{
 		byte(length >> 24),
@@ -521,8 +490,6 @@ func (s *SSHServer) writeInputEvent(w io.Writer, event *protocol.InputEvent) err
 		return fmt.Errorf("failed to write data: %w", err)
 	}
 
-	if !isHealthCheck {
-		logger.Debugf("[SSH-SERVER] Successfully wrote %d bytes to client", length)
-	}
+	logger.Debugf("[SSH-SERVER] Successfully wrote %d bytes to client", length)
 	return nil
 }

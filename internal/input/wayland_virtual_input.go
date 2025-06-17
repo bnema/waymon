@@ -26,12 +26,12 @@ type WaylandVirtualInput struct {
 
 	// Wayland capture infrastructure
 	display    *client.Display
-	registry   *client.Registry     //nolint:unused // part of wayland infrastructure, may be used in future
+	registry   *client.Registry //nolint:unused // part of wayland infrastructure, may be used in future
 	seat       *client.Seat
 	pointer    *client.Pointer
-	keyboard   *client.Keyboard     //nolint:unused // part of wayland infrastructure, may be used in future
+	keyboard   *client.Keyboard //nolint:unused // part of wayland infrastructure, may be used in future
 	surface    *client.Surface
-	compositor *client.Compositor   //nolint:unused // part of wayland infrastructure, may be used in future
+	compositor *client.Compositor //nolint:unused // part of wayland infrastructure, may be used in future
 
 	// Pointer constraints for exclusive capture
 	constraintsMgr pointer_constraints.PointerConstraintsManager
