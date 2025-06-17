@@ -259,12 +259,23 @@ func (ir *InputReceiver) handleControlEvent(control *protocol.ControlEvent) {
 		ir.controlStatus.ControllerName = control.TargetId // Server ID/name
 		ir.controlStatus.ConnectedAt = time.Now().Unix()
 		logger.Infof("[CLIENT-RECEIVER] Control granted to server: %s", control.TargetId)
+		
+		// Show notification to user
+		logger.Infof("🖥️  %s is now controlling your system", control.TargetId)
 
 	case protocol.ControlEvent_RELEASE_CONTROL:
 		// Server is releasing control of this client
+		previousController := ir.controlStatus.ControllerName
 		ir.controlStatus.BeingControlled = false
 		ir.controlStatus.ControllerName = ""
 		logger.Info("[CLIENT-RECEIVER] Control released by server")
+		
+		// Show notification to user
+		if previousController != "" {
+			logger.Infof("✅ %s has stopped controlling your system", previousController)
+		} else {
+			logger.Info("✅ Control released - your system is now idle")
+		}
 
 	case protocol.ControlEvent_SWITCH_TO_LOCAL:
 		// Server switched to local control (we're no longer being controlled)
@@ -602,7 +613,7 @@ func (ir *InputReceiver) monitorConnection() {
 			}
 
 			// Connection appears to be healthy, rely on SSH's built-in keepalive
-			logger.Debug("[CLIENT-MONITOR] Connection appears healthy")
+			// No need to log this regularly
 		}
 	}
 }

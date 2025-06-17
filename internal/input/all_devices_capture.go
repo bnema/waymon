@@ -11,7 +11,7 @@ import (
 
 	"github.com/bnema/waymon/internal/logger"
 	"github.com/bnema/waymon/internal/protocol"
-	"github.com/gvalkov/golang-evdev"
+	evdev "github.com/gvalkov/golang-evdev"
 )
 
 // AllDevicesCapture captures input events from all available input devices
@@ -26,6 +26,13 @@ type AllDevicesCapture struct {
 	ctx            context.Context
 	cancel         context.CancelFunc
 	deviceMonitor  *DeviceMonitor
+	
+	// Safety mechanisms
+	grabTimeout    time.Duration     // Auto-release timeout
+	grabTimer      *time.Timer       // Timer for auto-release
+	emergencyKey   uint16           // Key code for emergency release (e.g., ESC)
+	lastActivity   time.Time        // Last input activity time
+	noGrab         bool             // Disable exclusive grab (for safer testing)
 }
 
 // deviceHandler manages a single input device
@@ -43,6 +50,8 @@ func NewAllDevicesCapture() *AllDevicesCapture {
 		ignoredDevices: make(map[string]bool),
 		eventChan:      make(chan *protocol.InputEvent, 1000), // Increased buffer to handle bursts
 		capturing:      false,
+		grabTimeout:    30 * time.Second, // Default 30 second safety timeout
+		emergencyKey:   evdev.KEY_ESC,    // ESC key for emergency release
 	}
 }
 
@@ -122,6 +131,12 @@ func (a *AllDevicesCapture) SetTarget(clientID string) error {
 
 	// Handle device grabbing based on target
 	if clientID == "" {
+		// Cancel any existing grab timer
+		if a.grabTimer != nil {
+			a.grabTimer.Stop()
+			a.grabTimer = nil
+		}
+		
 		// Release all devices when controlling local system
 		for _, handler := range a.devices {
 			if handler.device != nil {
@@ -132,23 +147,44 @@ func (a *AllDevicesCapture) SetTarget(clientID string) error {
 		}
 		logger.Info("Input capture target cleared - controlling local system")
 	} else {
-		// Grab all devices when controlling a client
-		var grabErrors []string
-		for _, handler := range a.devices {
-			if handler.device != nil {
-				if err := handler.device.Grab(); err != nil {
-					grabErrors = append(grabErrors, fmt.Sprintf("%s: %v", handler.path, err))
+		// Only grab devices if not in no-grab mode
+		if !a.noGrab {
+			// Grab all devices when controlling a client
+			var grabErrors []string
+			for _, handler := range a.devices {
+				if handler.device != nil {
+					if err := handler.device.Grab(); err != nil {
+						grabErrors = append(grabErrors, fmt.Sprintf("%s: %v", handler.path, err))
+					}
 				}
 			}
-		}
 
-		if len(grabErrors) > 0 {
-			// Revert target on grab failure
-			a.currentTarget = oldTarget
-			return fmt.Errorf("failed to grab input devices: %s", strings.Join(grabErrors, ", "))
-		}
+			if len(grabErrors) > 0 {
+				// Revert target on grab failure
+				a.currentTarget = oldTarget
+				return fmt.Errorf("failed to grab input devices: %s", strings.Join(grabErrors, ", "))
+			}
 
-		logger.Infof("Set input capture target to client: %s", clientID)
+			// Set up safety timeout
+			a.lastActivity = time.Now()
+			a.grabTimer = time.AfterFunc(a.grabTimeout, func() {
+				logger.Warnf("Safety timeout reached - auto-releasing devices")
+				a.mu.Lock()
+				if a.currentTarget != "" {
+					a.currentTarget = ""
+					for _, handler := range a.devices {
+						if handler.device != nil {
+							handler.device.Release()
+						}
+					}
+				}
+				a.mu.Unlock()
+			})
+
+			logger.Infof("Set input capture target to client: %s (timeout: %v)", clientID, a.grabTimeout)
+		} else {
+			logger.Infof("Set input capture target to client: %s (no-grab mode enabled)", clientID)
+		}
 	}
 	return nil
 }
@@ -441,6 +477,25 @@ func (a *AllDevicesCapture) captureFromDevice(ctx context.Context, handler *devi
 						a.sendScrollEvent(float64(event.Value), 0)
 					}
 				case evdev.EV_KEY:
+					// Check for emergency release key
+					a.mu.RLock()
+					emergencyKey := a.emergencyKey
+					currentTarget := a.currentTarget
+					noGrab := a.noGrab
+					a.mu.RUnlock()
+					
+					// Only check emergency key if we're grabbing devices
+					if !noGrab && event.Code == emergencyKey && event.Value == 1 && currentTarget != "" {
+						logger.Warnf("Emergency release triggered - ESC key pressed")
+						// Use goroutine to avoid deadlock
+						go func() {
+							if err := a.SetTarget(""); err != nil {
+								logger.Errorf("Failed to release on emergency: %v", err)
+							}
+						}()
+						continue
+					}
+					
 					if event.Code >= evdev.BTN_LEFT && event.Code <= evdev.BTN_TASK {
 						a.sendMouseButtonEvent(event.Code, event.Value)
 					} else {
@@ -458,6 +513,16 @@ func (a *AllDevicesCapture) captureFromDevice(ctx context.Context, handler *devi
 
 // sendEvent sends an event to the event channel
 func (a *AllDevicesCapture) sendEvent(event *protocol.InputEvent) {
+	// Update activity timestamp and reset timer if we have an active grab
+	a.mu.Lock()
+	if a.currentTarget != "" {
+		a.lastActivity = time.Now()
+		if a.grabTimer != nil {
+			a.grabTimer.Reset(a.grabTimeout)
+		}
+	}
+	a.mu.Unlock()
+	
 	select {
 	case a.eventChan <- event:
 	default:
@@ -468,26 +533,10 @@ func (a *AllDevicesCapture) sendEvent(event *protocol.InputEvent) {
 
 // sendMouseButtonEvent sends a mouse button event
 func (a *AllDevicesCapture) sendMouseButtonEvent(code uint16, value int32) {
-	var button uint32
-	switch code {
-	case evdev.BTN_LEFT:
-		button = 1
-	case evdev.BTN_RIGHT:
-		button = 2
-	case evdev.BTN_MIDDLE:
-		button = 3
-	case evdev.BTN_SIDE:
-		button = 4
-	case evdev.BTN_EXTRA:
-		button = 5
-	default:
-		return
-	}
-
 	a.sendEvent(&protocol.InputEvent{
 		Event: &protocol.InputEvent_MouseButton{
 			MouseButton: &protocol.MouseButtonEvent{
-				Button:  button,
+				Button:  uint32(code),
 				Pressed: value == 1,
 			},
 		},
@@ -512,21 +561,46 @@ func (a *AllDevicesCapture) sendScrollEvent(dx, dy float64) {
 
 // sendKeyboardEvent sends a keyboard event
 func (a *AllDevicesCapture) sendKeyboardEvent(code uint16, value int32) {
-	// Only handle key press and release events (not repeat)
-	if value != 0 && value != 1 {
-		return
-	}
-
+	// value can be 0 (release), 1 (press), 2 (autorepeat)
+	// We treat autorepeat as a press
 	a.sendEvent(&protocol.InputEvent{
 		Event: &protocol.InputEvent_Keyboard{
 			Keyboard: &protocol.KeyboardEvent{
 				Key:     uint32(code),
-				Pressed: value == 1,
+				Pressed: value > 0,
 			},
 		},
 		Timestamp: time.Now().UnixNano(),
 		SourceId:  "all-devices-capture",
 	})
+}
+
+// SetGrabTimeout sets the safety timeout for device grabbing
+func (a *AllDevicesCapture) SetGrabTimeout(timeout time.Duration) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	a.grabTimeout = timeout
+	logger.Infof("Set device grab timeout to %v", timeout)
+}
+
+// SetEmergencyKey sets the key code for emergency release
+func (a *AllDevicesCapture) SetEmergencyKey(keyCode uint16) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	a.emergencyKey = keyCode
+	logger.Infof("Set emergency release key to code %d", keyCode)
+}
+
+// SetNoGrab enables or disables no-grab mode (non-exclusive capture)
+func (a *AllDevicesCapture) SetNoGrab(noGrab bool) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	a.noGrab = noGrab
+	if noGrab {
+		logger.Info("No-grab mode enabled - devices will not be grabbed exclusively")
+	} else {
+		logger.Info("No-grab mode disabled - devices will be grabbed exclusively when controlling clients")
+	}
 }
 
 // processEvents processes events from the event channel

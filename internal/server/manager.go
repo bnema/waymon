@@ -3,6 +3,7 @@ package server
 import (
 	"context"
 	"fmt"
+	"os"
 	"sort"
 	"sync"
 	"time"
@@ -177,9 +178,15 @@ func (cm *ClientManager) SwitchToClient(clientID string) error {
 
 	// Send control event to notify client they're being controlled
 	if cm.sshServer != nil {
+		// Get server hostname to identify who's controlling
+		serverName, err := os.Hostname()
+		if err != nil {
+			serverName = "waymon-server"
+		}
+		
 		controlEvent := &protocol.ControlEvent{
 			Type:     protocol.ControlEvent_REQUEST_CONTROL,
-			TargetId: cm.activeClientID,
+			TargetId: serverName, // Send server name so client knows who's controlling
 		}
 		inputEvent := &protocol.InputEvent{
 			Event: &protocol.InputEvent_Control{
@@ -189,11 +196,11 @@ func (cm *ClientManager) SwitchToClient(clientID string) error {
 			SourceId:  "server",
 		}
 
-		logger.Debugf("[SERVER-MANAGER] Sending REQUEST_CONTROL event to client %s", client.Name)
+		logger.Infof("[SERVER-MANAGER] Sending REQUEST_CONTROL event to client %s at %s", client.Name, client.Address)
 		if err := cm.sshServer.SendEventToClient(client.Address, inputEvent); err != nil {
 			logger.Errorf("[SERVER-MANAGER] Failed to send control request to client: %v", err)
 		} else {
-			logger.Debugf("[SERVER-MANAGER] Successfully sent control request to client %s", client.Name)
+			logger.Infof("[SERVER-MANAGER] Successfully sent control request to client %s", client.Name)
 		}
 
 		// Position cursor at center of main monitor (monitor at 0,0)
