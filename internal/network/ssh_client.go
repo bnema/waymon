@@ -261,19 +261,49 @@ func (c *SSHClient) ConnectWithTimeout(ctx context.Context, serverAddr string, t
 	}
 
 	// Check for connection status from server
-	buf := make([]byte, 512)
-	// Set a short timeout for the initial read
-	readChan := make(chan int, 1)
+	// Use a line reader to only consume the exact welcome messages
+	// This prevents accidentally reading part of the protocol messages
+	buf := make([]byte, 0, 512)
+	tempBuf := make([]byte, 1)
+	readChan := make(chan error, 1)
+	
+	// Read line by line to avoid consuming protocol messages
 	go func() {
-		n, _ := reader.Read(buf)
-		readChan <- n
+		for {
+			n, err := reader.Read(tempBuf)
+			if err != nil || n == 0 {
+				readChan <- err
+				return
+			}
+			buf = append(buf, tempBuf[0])
+			
+			// Check if we've read enough to determine the status
+			response := string(buf)
+			if strings.Contains(response, "maximum number of active clients") {
+				readChan <- fmt.Errorf("max clients")
+				return
+			}
+			
+			// Check if we've read both welcome lines
+			if strings.Contains(response, "Waymon SSH connection established") &&
+				strings.Contains(response, "Public key:") &&
+				strings.Count(response, "\n") >= 2 {
+				readChan <- nil
+				return
+			}
+			
+			// Safety check: don't read more than expected
+			if len(buf) > 256 {
+				readChan <- fmt.Errorf("unexpected response")
+				return
+			}
+		}
 	}()
 
 	select {
-	case n := <-readChan:
-		if n > 0 {
-			response := string(buf[:n])
-			if strings.Contains(response, "maximum number of active clients") {
+	case err := <-readChan:
+		if err != nil {
+			if err.Error() == "max clients" {
 				if err := session.Close(); err != nil {
 					logger.Errorf("Failed to close SSH session: %v", err)
 				}
@@ -282,24 +312,17 @@ func (c *SSHClient) ConnectWithTimeout(ctx context.Context, serverAddr string, t
 				}
 				return fmt.Errorf("connection rejected: server has maximum number of active clients")
 			}
-			// Wait for either approval or established message
-			if !strings.Contains(response, "Waymon SSH connection established") {
-				// Keep reading for final status
-				n2, _ := reader.Read(buf)
-				if n2 > 0 {
-					response += string(buf[:n2])
-				}
+			// Other errors mean connection not established
+			if err := session.Close(); err != nil {
+				logger.Errorf("Failed to close SSH session: %v", err)
 			}
-			if !strings.Contains(response, "Waymon SSH connection established") {
-				if err := session.Close(); err != nil {
-					logger.Errorf("Failed to close SSH session: %v", err)
-				}
-				if err := client.Close(); err != nil {
-					logger.Errorf("Failed to close SSH client: %v", err)
-				}
-				return fmt.Errorf("connection not established: waiting for server approval")
+			if err := client.Close(); err != nil {
+				logger.Errorf("Failed to close SSH client: %v", err)
 			}
+			return fmt.Errorf("connection not established: %v", err)
 		}
+		// Success - connection established
+		logger.Debug("SSH handshake complete")
 	case <-time.After(2 * time.Second):
 		// No immediate response, assume we're waiting for approval
 		if err := session.Close(); err != nil {
@@ -472,10 +495,12 @@ func (c *SSHClient) receiveInputEvents(ctx context.Context) {
 
 			// Decode length
 			length := int(lengthBuf[0])<<24 | int(lengthBuf[1])<<16 | int(lengthBuf[2])<<8 | int(lengthBuf[3])
-			logger.Debugf("[SSH-CLIENT] Decoded message length: %d bytes", length)
+			logger.Debugf("[SSH-CLIENT] Decoded message length: %d bytes (raw bytes: %02x %02x %02x %02x)", 
+				length, lengthBuf[0], lengthBuf[1], lengthBuf[2], lengthBuf[3])
 
 			if length <= 0 || length > 4096 {
-				logger.Errorf("[SSH-CLIENT] Invalid message length: %d", length)
+				logger.Errorf("[SSH-CLIENT] Invalid message length: %d (raw bytes: %02x %02x %02x %02x)", 
+					length, lengthBuf[0], lengthBuf[1], lengthBuf[2], lengthBuf[3])
 				continue
 			}
 
