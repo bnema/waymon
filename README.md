@@ -103,7 +103,7 @@ If input gets stuck while controlling a client, Waymon provides multiple release
 
 ## Configuration
 
-Waymon uses TOML configuration files. Create `~/.config/waymon/waymon.toml`:
+Waymon uses TOML configuration files. Create either `~/.config/waymon/waymon.toml` or for the server `/etc/waymon/waymon.toml`:
 
 ```toml
 [server]
