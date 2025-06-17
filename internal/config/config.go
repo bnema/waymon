@@ -71,9 +71,9 @@ type InputConfig struct {
 	EnableKeyboard   bool    `mapstructure:"enable_keyboard"`
 	KeyboardLayout   string  `mapstructure:"keyboard_layout"`
 
-	// Persistent device info
-	MouseDeviceInfo    *DeviceInfo `mapstructure:"mouse_device_info"`    // Persistent mouse device info
-	KeyboardDeviceInfo *DeviceInfo `mapstructure:"keyboard_device_info"` // Persistent keyboard device info
+	// Deprecated fields (kept for backward compatibility but not used)
+	MouseDeviceInfo    *DeviceInfo `mapstructure:"mouse_device_info"`    // Deprecated: no longer used
+	KeyboardDeviceInfo *DeviceInfo `mapstructure:"keyboard_device_info"` // Deprecated: no longer used
 }
 
 // DeviceInfo stores persistent device identification
