@@ -43,8 +43,8 @@ type EventFilter interface {
 // NewEventAggregator creates a new event aggregator
 func NewEventAggregator() *EventAggregator {
 	return &EventAggregator{
-		eventChan:        make(chan *protocol.InputEvent, 200),
-		filteredChan:     make(chan *protocol.InputEvent, 100),
+		eventChan:        make(chan *protocol.InputEvent, 1000), // Increased buffer
+		filteredChan:     make(chan *protocol.InputEvent, 500),  // Increased buffer
 		mouseSensitivity: 1.0,
 		scrollSpeed:      1.0,
 		enableKeyboard:   true,
