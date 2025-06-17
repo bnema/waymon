@@ -78,12 +78,12 @@ type InputConfig struct {
 
 // DeviceInfo stores persistent device identification
 type DeviceInfo struct {
-	Name       string `mapstructure:"name"`        // Human-readable device name
-	ByIDPath   string `mapstructure:"by_id_path"`  // Persistent /dev/input/by-id/ path
+	Name       string `mapstructure:"name"`         // Human-readable device name
+	ByIDPath   string `mapstructure:"by_id_path"`   // Persistent /dev/input/by-id/ path
 	ByPathPath string `mapstructure:"by_path_path"` // Persistent /dev/input/by-path/ path
-	VendorID   string `mapstructure:"vendor_id"`   // USB Vendor ID
-	ProductID  string `mapstructure:"product_id"`  // USB Product ID
-	Phys       string `mapstructure:"phys"`        // Physical location
+	VendorID   string `mapstructure:"vendor_id"`    // USB Vendor ID
+	ProductID  string `mapstructure:"product_id"`   // USB Product ID
+	Phys       string `mapstructure:"phys"`         // Physical location
 }
 
 // HostConfig represents a known host for quick connections

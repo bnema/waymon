@@ -71,8 +71,6 @@ message ControlEvent {
     CLIENT_LIST_RESPONSE = 5;
     CLIENT_CONFIG = 6;  // Client sends its configuration
     SERVER_SHUTDOWN = 7;  // Server is shutting down gracefully
-    HEALTH_CHECK_PING = 8;  // Client health check ping
-    HEALTH_CHECK_PONG = 9;  // Server health check response
   }
 }
 

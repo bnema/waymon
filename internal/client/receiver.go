@@ -44,10 +44,6 @@ type InputReceiver struct {
 	onReconnectStatus   func(status string) // Callback for reconnection status updates
 	reconnectInProgress bool                // Prevent multiple concurrent reconnection attempts
 
-	// Health check state
-	lastHealthCheckResponse time.Time
-	healthCheckTimeout      time.Duration
-
 	// Hotkey handling state
 	lastHotkeyPress  time.Time
 	hotkeyDebounceMs int64 // Minimum time between hotkey presses in milliseconds
@@ -76,12 +72,12 @@ func NewInputReceiver(serverAddress string) (*InputReceiver, error) {
 	}
 
 	return &InputReceiver{
-		serverAddress:      serverAddress,
-		inputBackend:       backend,
-		connected:          false,
-		clientID:           hostname,
-		healthCheckTimeout: 30 * time.Second, // 30 second timeout for health checks
-		hotkeyDebounceMs:   500,              // 500ms debounce for hotkey presses
+		serverAddress: serverAddress,
+		inputBackend:  backend,
+		connected:     false,
+		clientID:      hostname,
+		// removed health check timeout
+		hotkeyDebounceMs: 500, // 500ms debounce for hotkey presses
 	}, nil
 }
 
@@ -107,7 +103,7 @@ func (ir *InputReceiver) Connect(ctx context.Context, privateKeyPath string) err
 
 	// Connect to server
 	if err := sshConnection.Connect(ctx, ir.serverAddress); err != nil {
-			if err := ir.inputBackend.Stop(); err != nil {
+		if err := ir.inputBackend.Stop(); err != nil {
 			logger.Errorf("Failed to stop input backend: %v", err)
 		}
 		return fmt.Errorf("failed to connect to server: %w", err)
@@ -293,11 +289,6 @@ func (ir *InputReceiver) handleControlEvent(control *protocol.ControlEvent) {
 		}
 		// Notify that we're starting reconnection
 		ir.notifyReconnectStatus("Server shutdown detected - will reconnect shortly...")
-
-	case protocol.ControlEvent_HEALTH_CHECK_PONG:
-		// Server responded to health check
-		ir.lastHealthCheckResponse = time.Now()
-		logger.Debug("[CLIENT-RECEIVER] Received health check response from server")
 
 	default:
 		logger.Warnf("[CLIENT-RECEIVER] Unknown control event type: %v", control.Type)
@@ -564,7 +555,6 @@ func (ir *InputReceiver) enableReconnection(ctx context.Context) {
 	go ir.monitorConnection()
 }
 
-
 // SetOnReconnectStatus sets a callback for reconnection status updates
 func (ir *InputReceiver) SetOnReconnectStatus(callback func(status string)) {
 	ir.mu.Lock()
@@ -574,13 +564,8 @@ func (ir *InputReceiver) SetOnReconnectStatus(callback func(status string)) {
 
 // monitorConnection monitors the connection and triggers reconnection when needed
 func (ir *InputReceiver) monitorConnection() {
-	ticker := time.NewTicker(5 * time.Second) // Check every 5 seconds
+	ticker := time.NewTicker(10 * time.Second) // Check every 10 seconds
 	defer ticker.Stop()
-
-	// Initialize last health check response time
-	ir.mu.Lock()
-	ir.lastHealthCheckResponse = time.Now()
-	ir.mu.Unlock()
 
 	for {
 		select {
@@ -590,8 +575,6 @@ func (ir *InputReceiver) monitorConnection() {
 			ir.mu.RLock()
 			connected := ir.connected
 			enabled := ir.reconnectEnabled
-			lastHealthResponse := ir.lastHealthCheckResponse
-			healthTimeout := ir.healthCheckTimeout
 			ir.mu.RUnlock()
 
 			if !enabled {
@@ -618,26 +601,8 @@ func (ir *InputReceiver) monitorConnection() {
 				continue
 			}
 
-			// Send health check ping
-			if err := ir.sendHealthCheckPing(); err != nil {
-				logger.Warnf("Failed to send health check ping: %v", err)
-				// Treat as connection loss
-				ir.mu.Lock()
-				ir.connected = false
-				ir.mu.Unlock()
-				continue
-			} else {
-				logger.Debugf("Sent health check ping (last response: %v ago)", time.Since(lastHealthResponse))
-			}
-
-			// Check if server has responded to health checks recently
-			if time.Since(lastHealthResponse) > healthTimeout {
-				logger.Warnf("Health check timeout - server not responding (last response: %v ago)", time.Since(lastHealthResponse))
-				ir.mu.Lock()
-				ir.connected = false
-				ir.mu.Unlock()
-				// Will trigger reconnection on next iteration
-			}
+			// Connection appears to be healthy, rely on SSH's built-in keepalive
+			logger.Debug("[CLIENT-MONITOR] Connection appears healthy")
 		}
 	}
 }
@@ -700,10 +665,7 @@ func (ir *InputReceiver) attemptReconnection() {
 			cancel()
 			logger.Info("Successfully reconnected to server")
 			ir.notifyReconnectStatus("Reconnected successfully")
-			// Reset health check response time
-			ir.mu.Lock()
-			ir.lastHealthCheckResponse = time.Now()
-			ir.mu.Unlock()
+			// Connection successful, health check removed
 			return
 		}
 	}
@@ -755,36 +717,6 @@ func (ir *InputReceiver) notifyReconnectStatus(status string) {
 	if callback != nil {
 		callback(status)
 	}
-}
-
-// sendHealthCheckPing sends a health check ping to the server
-func (ir *InputReceiver) sendHealthCheckPing() error {
-	ir.mu.RLock()
-	sshConnection := ir.sshConnection
-	ir.mu.RUnlock()
-
-	if sshConnection == nil {
-		return fmt.Errorf("SSH connection not available")
-	}
-
-	// Create health check ping event
-	controlEvent := &protocol.ControlEvent{
-		Type: protocol.ControlEvent_HEALTH_CHECK_PING,
-	}
-	inputEvent := &protocol.InputEvent{
-		Event: &protocol.InputEvent_Control{
-			Control: controlEvent,
-		},
-		Timestamp: time.Now().UnixNano(),
-		SourceId:  ir.clientID,
-	}
-
-	// Send via SSH connection
-	if err := sshConnection.SendInputEvent(inputEvent); err != nil {
-		return fmt.Errorf("failed to send health check ping: %w", err)
-	}
-
-	return nil
 }
 
 // injectEvent injects an input event using the Wayland virtual input backend

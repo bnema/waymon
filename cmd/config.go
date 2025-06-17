@@ -70,8 +70,8 @@ var configShowCmd = &cobra.Command{
 					auth = "Yes"
 				}
 				if _, err := fmt.Fprintf(w, "  %s\t%s\t%s\t%s\n", host.Name, host.Address, host.Position, auth); err != nil {
-				logger.Errorf("Failed to write host info: %v", err)
-			}
+					logger.Errorf("Failed to write host info: %v", err)
+				}
 			}
 			if err := w.Flush(); err != nil {
 				logger.Errorf("Failed to flush writer: %v", err)

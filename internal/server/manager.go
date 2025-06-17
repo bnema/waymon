@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"sort"
-	"strings"
 	"sync"
 	"time"
 
@@ -351,13 +350,9 @@ func (cm *ClientManager) IsControllingLocal() bool {
 func (cm *ClientManager) HandleInputEvent(event *protocol.InputEvent) {
 	// Handle control events specially
 	if controlEvent := event.GetControl(); controlEvent != nil {
-		// Skip debug logs for health check events to reduce noise
-		if controlEvent.Type != protocol.ControlEvent_HEALTH_CHECK_PING && 
-		   controlEvent.Type != protocol.ControlEvent_HEALTH_CHECK_PONG {
-			logger.Debugf("[SERVER-MANAGER] handleInputEvent called: type=%T, timestamp=%d, sourceId=%s",
-				event.Event, event.Timestamp, event.SourceId)
-			logger.Debugf("[SERVER-MANAGER] Routing control event: type=%v", controlEvent.Type)
-		}
+		logger.Debugf("[SERVER-MANAGER] handleInputEvent called: type=%T, timestamp=%d, sourceId=%s",
+			event.Event, event.Timestamp, event.SourceId)
+		logger.Debugf("[SERVER-MANAGER] Routing control event: type=%v", controlEvent.Type)
 		cm.handleControlEvent(controlEvent, event.SourceId)
 		return
 	}
@@ -513,9 +508,6 @@ func (cm *ClientManager) handleControlEvent(controlEvent *protocol.ControlEvent,
 		if err := cm.SwitchToLocal(); err != nil {
 			logger.Errorf("Failed to release control from client %s: %v", sourceID, err)
 		}
-	case protocol.ControlEvent_HEALTH_CHECK_PING:
-		// Respond to health check ping
-		cm.handleHealthCheckPing(sourceID)
 	default:
 		logger.Warnf("Unknown control event type from %s: %v", sourceID, controlEvent.Type)
 	}
@@ -720,72 +712,6 @@ func (cm *ClientManager) NotifyShutdown() {
 	if len(cm.clients) > 0 {
 		logger.Info("Waiting for clients to process shutdown notification...")
 		time.Sleep(1 * time.Second)
-	}
-}
-
-// handleHealthCheckPing responds to a health check ping from a client
-func (cm *ClientManager) handleHealthCheckPing(sourceID string) {
-	cm.mu.RLock()
-	defer cm.mu.RUnlock()
-
-	if cm.sshServer == nil {
-		logger.Warn("Cannot respond to health check - SSH server not available")
-		return
-	}
-
-	// Find the client by source ID (checking ID, name, and address)
-	var clientAddr string
-	for _, client := range cm.clients {
-		if client.ID == sourceID || client.Name == sourceID || client.Address == sourceID {
-			clientAddr = client.Address
-			break
-		}
-	}
-
-	// Also check if sourceID matches just the client name without address
-	if clientAddr == "" {
-		for _, client := range cm.clients {
-			// Extract just the name part if the client name includes address info
-			clientName := client.Name
-			if idx := strings.Index(clientName, " ("); idx > 0 {
-				clientName = clientName[:idx]
-			}
-			if clientName == sourceID {
-				clientAddr = client.Address
-				break
-			}
-		}
-	}
-
-	if clientAddr == "" {
-		logger.Warnf("Received health check ping from unknown client: %s", sourceID)
-		logger.Debugf("Available clients: %v", func() []string {
-			var info []string
-			for _, c := range cm.clients {
-				info = append(info, fmt.Sprintf("id=%s, name=%s, addr=%s", c.ID, c.Name, c.Address))
-			}
-			return info
-		}())
-		return
-	}
-
-	// Create health check pong response
-	controlEvent := &protocol.ControlEvent{
-		Type: protocol.ControlEvent_HEALTH_CHECK_PONG,
-	}
-	inputEvent := &protocol.InputEvent{
-		Event: &protocol.InputEvent_Control{
-			Control: controlEvent,
-		},
-		Timestamp: time.Now().UnixNano(),
-		SourceId:  "server",
-	}
-
-	// Send response to the client
-	if err := cm.sshServer.SendEventToClient(clientAddr, inputEvent); err != nil {
-		logger.Errorf("Failed to send health check response to client %s: %v", sourceID, err)
-	} else {
-		logger.Debug("Sent health check response to client %s", sourceID)
 	}
 }
 

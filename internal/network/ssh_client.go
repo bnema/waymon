@@ -14,6 +14,7 @@ import (
 	"github.com/bnema/waymon/internal/logger"
 	"github.com/bnema/waymon/internal/protocol"
 	"golang.org/x/crypto/ssh"
+	"golang.org/x/crypto/ssh/agent"
 	"google.golang.org/protobuf/proto"
 )
 
@@ -50,33 +51,63 @@ func (c *SSHClient) Connect(ctx context.Context, serverAddr string) error {
 		return fmt.Errorf("already connected")
 	}
 
-	// Load private key
-	keyData, err := os.ReadFile(c.privateKeyPath)
-	if err != nil {
-		// Try expanding the path if it starts with ~
-		if strings.HasPrefix(c.privateKeyPath, "~") {
-			homeDir, err := os.UserHomeDir()
-			if err != nil {
-				return fmt.Errorf("failed to get home directory: %w", err)
+	// Get authentication methods - try SSH agent first, then private key files
+	var authMethods []ssh.AuthMethod
+
+	// Try SSH agent first
+	if sshAuthSock := os.Getenv("SSH_AUTH_SOCK"); sshAuthSock != "" {
+		conn, err := net.Dial("unix", sshAuthSock)
+		if err == nil {
+			agentClient := agent.NewClient(conn)
+			signers, err := agentClient.Signers()
+			if err == nil && len(signers) > 0 {
+				logger.Debugf("Using SSH agent with %d key(s)", len(signers))
+				authMethods = append(authMethods, ssh.PublicKeys(signers...))
+			} else {
+				logger.Debugf("SSH agent available but no keys loaded")
 			}
-			expandedPath := filepath.Join(homeDir, c.privateKeyPath[1:])
-			keyData, err = os.ReadFile(expandedPath)
-			if err != nil {
-				return fmt.Errorf("failed to read private key from %s: %w", expandedPath, err)
-			}
+			conn.Close()
 		} else {
-			return fmt.Errorf("failed to read private key: %w", err)
+			logger.Debugf("Failed to connect to SSH agent: %v", err)
+		}
+	} else {
+		logger.Debug("SSH_AUTH_SOCK not set, SSH agent not available")
+	}
+
+	// If we have a specific private key path configured, use it
+	if c.privateKeyPath != "" {
+		signer, err := c.loadPrivateKey(c.privateKeyPath)
+		if err != nil {
+			// If a specific key is configured but fails to load, that's an error
+			return fmt.Errorf("failed to load configured private key: %w", err)
+		}
+		logger.Debugf("Using configured SSH private key: %s", c.privateKeyPath)
+		authMethods = append(authMethods, ssh.PublicKeys(signer))
+	} else if len(authMethods) == 0 {
+		// No SSH agent and no configured key - try default locations
+		homeDir, err := os.UserHomeDir()
+		if err != nil {
+			return fmt.Errorf("failed to get home directory: %w", err)
+		}
+
+		// Try standard SSH key locations in order of preference
+		defaultPaths := []string{
+			filepath.Join(homeDir, ".ssh", "id_ed25519"),
+			filepath.Join(homeDir, ".ssh", "id_rsa"),
+			filepath.Join(homeDir, ".ssh", "id_ecdsa"),
+		}
+
+		for _, path := range defaultPaths {
+			if signer, err := c.loadPrivateKeyIfExists(path); err == nil && signer != nil {
+				logger.Debugf("Using SSH private key: %s", path)
+				authMethods = append(authMethods, ssh.PublicKeys(signer))
+				break
+			}
 		}
 	}
 
-	// Parse private key
-	signer, err := ssh.ParsePrivateKey(keyData)
-	if err != nil {
-		// Check if it's encrypted
-		if strings.Contains(err.Error(), "encrypted") {
-			return fmt.Errorf("SSH key is encrypted - encrypted keys are not supported")
-		}
-		return fmt.Errorf("failed to parse private key: %w", err)
+	if len(authMethods) == 0 {
+		return fmt.Errorf("no SSH authentication methods available. Please start ssh-agent, configure ssh_private_key, or create a key at ~/.ssh/id_ed25519")
 	}
 
 	// Get the username
@@ -88,9 +119,7 @@ func (c *SSHClient) Connect(ctx context.Context, serverAddr string) error {
 	// Create SSH client config
 	config := &ssh.ClientConfig{
 		User: username,
-		Auth: []ssh.AuthMethod{
-			ssh.PublicKeys(signer),
-		},
+		Auth: authMethods,
 		HostKeyCallback: func(hostname string, remote net.Addr, key ssh.PublicKey) error {
 			// For now, accept any host key
 			// TODO: Implement proper host key verification
@@ -100,11 +129,36 @@ func (c *SSHClient) Connect(ctx context.Context, serverAddr string) error {
 		Timeout: 10 * time.Second,
 	}
 
-	// Connect to SSH server
-	client, err := ssh.Dial("tcp", serverAddr, config)
+	// Connect to SSH server with TCP keepalive
+	conn, err := net.DialTimeout("tcp", serverAddr, 10*time.Second)
 	if err != nil {
 		return fmt.Errorf("failed to connect to SSH server: %w", err)
 	}
+
+	// Enable TCP keepalive for connection monitoring
+	if tcpConn, ok := conn.(*net.TCPConn); ok {
+		if err := tcpConn.SetKeepAlive(true); err != nil {
+			logger.Warnf("Failed to enable TCP keepalive: %v", err)
+		} else {
+			logger.Debug("TCP keepalive enabled")
+			// Set keepalive interval to 30 seconds
+			if err := tcpConn.SetKeepAlivePeriod(30 * time.Second); err != nil {
+				logger.Warnf("Failed to set TCP keepalive period: %v", err)
+			} else {
+				logger.Debug("TCP keepalive period set to 30 seconds")
+			}
+		}
+	}
+
+	// Create SSH connection over the TCP connection
+	sshConn, chans, reqs, err := ssh.NewClientConn(conn, serverAddr, config)
+	if err != nil {
+		conn.Close()
+		return fmt.Errorf("failed to create SSH connection: %w", err)
+	}
+
+	// Create SSH client from connection
+	client := ssh.NewClient(sshConn, chans, reqs)
 
 	// Create a session
 	session, err := client.NewSession()
@@ -163,9 +217,6 @@ func (c *SSHClient) Connect(ctx context.Context, serverAddr string) error {
 	logger.Info("[SSH-CLIENT] Starting receiveInputEvents goroutine")
 	go c.receiveInputEvents(ctx)
 
-	// Monitor connection
-	go c.monitorConnection(ctx)
-
 	return nil
 }
 
@@ -218,7 +269,6 @@ func (c *SSHClient) Reconnect(ctx context.Context, serverAddr string) error {
 	return c.Connect(ctx, serverAddr)
 }
 
-
 // SendInputEvent sends an input event to the server
 func (c *SSHClient) SendInputEvent(event *protocol.InputEvent) error {
 	c.mu.Lock()
@@ -266,7 +316,7 @@ func (c *SSHClient) receiveInputEvents(ctx context.Context) {
 			// Read length prefix (4 bytes) with timeout
 			lengthBuf := make([]byte, 4)
 			logger.Debug("[SSH-CLIENT] Reading length prefix (4 bytes)...")
-			
+
 			// Use a timeout to avoid hanging on read
 			readChan := make(chan error, 1)
 			go func() {
@@ -294,7 +344,7 @@ func (c *SSHClient) receiveInputEvents(ctx context.Context) {
 
 			// Decode length
 			length := int(lengthBuf[0])<<24 | int(lengthBuf[1])<<16 | int(lengthBuf[2])<<8 | int(lengthBuf[3])
-			logger.Debugf("[SSH-CLIENT] Decoded message length: %d bytes (raw bytes: %02x %02x %02x %02x)", 
+			logger.Debugf("[SSH-CLIENT] Decoded message length: %d bytes (raw bytes: %02x %02x %02x %02x)",
 				length, lengthBuf[0], lengthBuf[1], lengthBuf[2], lengthBuf[3])
 
 			// Check if this looks like text instead of a protocol buffer length
@@ -313,7 +363,7 @@ func (c *SSHClient) receiveInputEvents(ctx context.Context) {
 					logger.Warnf("[SSH-CLIENT] Detected text data instead of protocol buffer: %q", string(lengthBuf))
 					// Append to text buffer
 					textBuffer = append(textBuffer, lengthBuf...)
-					
+
 					// Read more text until we find a newline or hit a limit
 					tempBuf := make([]byte, 1)
 					for len(textBuffer) < 1024 {
@@ -326,11 +376,11 @@ func (c *SSHClient) receiveInputEvents(ctx context.Context) {
 							break
 						}
 					}
-					
+
 					// Process the text message
 					textMsg := string(textBuffer)
 					logger.Infof("[SSH-CLIENT] Server message: %s", strings.TrimSpace(textMsg))
-					
+
 					// Check for specific error messages
 					if strings.Contains(textMsg, "maximum number of active clients") {
 						logger.Error("[SSH-CLIENT] Server rejected connection: max clients reached")
@@ -339,12 +389,12 @@ func (c *SSHClient) receiveInputEvents(ctx context.Context) {
 						c.mu.Unlock()
 						return
 					}
-					
+
 					// Clear text buffer and continue
 					textBuffer = textBuffer[:0]
 					continue
 				} else {
-					logger.Errorf("[SSH-CLIENT] Invalid message length: %d (raw bytes: %02x %02x %02x %02x)", 
+					logger.Errorf("[SSH-CLIENT] Invalid message length: %d (raw bytes: %02x %02x %02x %02x)",
 						length, lengthBuf[0], lengthBuf[1], lengthBuf[2], lengthBuf[3])
 					continue
 				}
@@ -353,7 +403,7 @@ func (c *SSHClient) receiveInputEvents(ctx context.Context) {
 			// Read message data with timeout
 			msgBuf := make([]byte, length)
 			logger.Debugf("[SSH-CLIENT] Reading message data (%d bytes)...", length)
-			
+
 			readChan = make(chan error, 1)
 			go func() {
 				_, err := io.ReadFull(reader, msgBuf)
@@ -400,31 +450,6 @@ func (c *SSHClient) receiveInputEvents(ctx context.Context) {
 	}
 }
 
-// monitorConnection monitors the SSH connection health
-func (c *SSHClient) monitorConnection(ctx context.Context) {
-	ticker := time.NewTicker(30 * time.Second)
-	defer ticker.Stop()
-
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		case <-ticker.C:
-			c.mu.Lock()
-			connected := c.connected
-			c.mu.Unlock()
-
-			if !connected {
-				return
-			}
-
-			// Try to send a ping/keepalive
-			// SSH client has built-in keepalive, but we can add application-level checks here
-			logger.Debug("[SSH-CLIENT] Connection health check")
-		}
-	}
-}
-
 // writeMessage writes a protobuf message with length prefix
 func writeMessage(w io.Writer, msg proto.Message) error {
 	data, err := proto.Marshal(msg)
@@ -450,6 +475,43 @@ func writeMessage(w io.Writer, msg proto.Message) error {
 	}
 
 	return nil
+}
+
+// loadPrivateKey loads and parses a private key from the given path
+func (c *SSHClient) loadPrivateKey(keyPath string) (ssh.Signer, error) {
+	// Handle ~ expansion
+	if strings.HasPrefix(keyPath, "~") {
+		homeDir, err := os.UserHomeDir()
+		if err != nil {
+			return nil, fmt.Errorf("failed to get home directory: %w", err)
+		}
+		keyPath = filepath.Join(homeDir, keyPath[1:])
+	}
+
+	keyData, err := os.ReadFile(keyPath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read private key from %s: %w", keyPath, err)
+	}
+
+	signer, err := ssh.ParsePrivateKey(keyData)
+	if err != nil {
+		// Check if it's encrypted
+		if strings.Contains(err.Error(), "encrypted") {
+			return nil, fmt.Errorf("SSH key is encrypted - encrypted keys are not supported. Please use ssh-agent or an unencrypted key")
+		}
+		return nil, fmt.Errorf("failed to parse private key: %w", err)
+	}
+
+	return signer, nil
+}
+
+// loadPrivateKeyIfExists loads a private key if the file exists, returns nil if not
+func (c *SSHClient) loadPrivateKeyIfExists(keyPath string) (ssh.Signer, error) {
+	if _, err := os.Stat(keyPath); os.IsNotExist(err) {
+		return nil, nil // File doesn't exist, not an error
+	}
+
+	return c.loadPrivateKey(keyPath)
 }
 
 // writeInputMessage writes an InputEvent message with length prefix

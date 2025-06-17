@@ -61,7 +61,7 @@ func initializeServer(ctx context.Context, srv *server.Server, cfg *config.Confi
 	// NOW set up client connection callbacks AFTER the SSH server is created
 	if sshSrv := srv.GetNetworkServer(); sshSrv != nil {
 		logger.Debug("Setting up SSH server callbacks")
-		
+
 		// Set up client connection handler (only once!)
 		sshSrv.OnClientConnected = func(addr, publicKey string) {
 			// Register client with ClientManager
@@ -77,7 +77,7 @@ func initializeServer(ctx context.Context, srv *server.Server, cfg *config.Confi
 				p.Send(ui.ClientConnectedMsg{ClientAddr: addr})
 			}
 		}
-		
+
 		// Set up client disconnection handler
 		sshSrv.OnClientDisconnected = func(addr string) {
 			// Unregister client from ClientManager
@@ -91,7 +91,7 @@ func initializeServer(ctx context.Context, srv *server.Server, cfg *config.Confi
 				p.Send(ui.ClientDisconnectedMsg{ClientAddr: addr})
 			}
 		}
-		
+
 		// Set up authentication handler
 		sshSrv.OnAuthRequest = func(addr, publicKey, fingerprint string) bool {
 			if p != nil {
@@ -125,12 +125,7 @@ func initializeServer(ctx context.Context, srv *server.Server, cfg *config.Confi
 		// Set up input event handler to forward events from SSH to ClientManager
 		sshSrv.OnInputEvent = func(event *protocol.InputEvent) {
 			if cm := srv.GetClientManager(); cm != nil {
-				// Skip debug log for health check events to reduce noise
-				if controlEvent := event.GetControl(); controlEvent == nil || 
-					(controlEvent.Type != protocol.ControlEvent_HEALTH_CHECK_PING && 
-					 controlEvent.Type != protocol.ControlEvent_HEALTH_CHECK_PONG) {
-					logger.Debugf("[SSH-SERVER] Forwarding input event to ClientManager: type=%T, sourceId=%s", event.Event, event.SourceId)
-				}
+				logger.Debugf("[SSH-SERVER] Forwarding input event to ClientManager: type=%T, sourceId=%s", event.Event, event.SourceId)
 				cm.HandleInputEvent(event)
 			} else {
 				logger.Warn("[SSH-SERVER] No ClientManager available to handle input event")
@@ -310,21 +305,16 @@ func runServer(cmd *cobra.Command, args []string) error {
 	}
 
 	// Handle graceful shutdown
-	sigCh := make(chan os.Signal, 1)
-	signal.Notify(sigCh, os.Interrupt, syscall.SIGTERM)
+	done := make(chan os.Signal, 1)
+	signal.Notify(done, os.Interrupt, syscall.SIGTERM, syscall.SIGINT)
 
+	// Start server and TUI in background
+	serverErrCh := make(chan error, 1)
 	go func() {
-		<-sigCh
-		// Cancel context first to start shutdown
-		cancel()
-		// Stop server if it exists
-		if srv != nil {
-			srv.Stop()
-		}
-		// Then tell TUI to quit
-		if p != nil {
-			p.Send(tea.Quit())
-		}
+		defer close(serverErrCh)
+		// Server startup logic will be moved here if needed
+		// For now, just wait for context cancellation
+		<-ctx.Done()
 	}()
 
 	if p != nil {
@@ -358,12 +348,49 @@ func runServer(cmd *cobra.Command, args []string) error {
 		if _, err := p.Run(); err != nil {
 			return err
 		}
-	} else {
-		// In non-TUI mode, just wait for shutdown signal
-		<-sigCh
-		logger.Info("Shutting down server...")
 	}
 
+	// Wait for shutdown signal or server error
+	select {
+	case <-done:
+		logger.Info("Received shutdown signal")
+	case err := <-serverErrCh:
+		if err != nil {
+			logger.Errorf("Server error: %v", err)
+		}
+	}
+
+	// Cancel context to start shutdown
+	cancel()
+
+	// Create shutdown context with timeout
+	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer shutdownCancel()
+
+	// Graceful shutdown
+	logger.Info("Stopping Waymon server...")
+
+	// Tell TUI to quit if running
+	if p != nil {
+		p.Send(tea.Quit())
+	}
+
+	if srv != nil {
+		// Stop server gracefully
+		srv.Stop()
+	}
+
+	// Wait for server to finish or timeout
+	select {
+	case <-shutdownCtx.Done():
+		if shutdownCtx.Err() == context.DeadlineExceeded {
+			logger.Warn("Server shutdown timed out")
+		}
+	case <-time.After(100 * time.Millisecond):
+		// Small delay to allow server to finish
+	}
+
+	logger.Info("Waymon server stopped")
 	return nil
 }
 

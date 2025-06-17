@@ -36,7 +36,7 @@ func TestSSHClientServerIntegration(t *testing.T) {
 
 	// Create client
 	client := NewSSHClient("~/.ssh/id_rsa")
-	
+
 	// Track received events
 	var receivedEvent *protocol.InputEvent
 	client.OnInputEvent(func(event *protocol.InputEvent) {
@@ -55,7 +55,7 @@ func TestSSHClientServerIntegration(t *testing.T) {
 	// testEvent := &protocol.InputEvent{
 	// 	Event: &protocol.InputEvent_Control{
 	// 		Control: &protocol.ControlEvent{
-	// 			Type: protocol.ControlEvent_HEALTH_CHECK_PONG,
+	// 			Type: protocol.ControlEvent_CLIENT_CONFIG,
 	// 		},
 	// 	},
 	// 	Timestamp: time.Now().UnixNano(),
@@ -74,7 +74,7 @@ func TestSSHClientServerIntegration(t *testing.T) {
 		t.Fatal("Client did not receive event")
 	}
 
-	if control := receivedEvent.GetControl(); control == nil || control.Type != protocol.ControlEvent_HEALTH_CHECK_PONG {
+	if control := receivedEvent.GetControl(); control == nil || control.Type != protocol.ControlEvent_CLIENT_CONFIG {
 		t.Errorf("Unexpected event received: %v", receivedEvent)
 	}
 
@@ -82,7 +82,7 @@ func TestSSHClientServerIntegration(t *testing.T) {
 	clientEvent := &protocol.InputEvent{
 		Event: &protocol.InputEvent_Control{
 			Control: &protocol.ControlEvent{
-				Type: protocol.ControlEvent_HEALTH_CHECK_PING,
+				Type: protocol.ControlEvent_CLIENT_CONFIG,
 			},
 		},
 		Timestamp: time.Now().UnixNano(),
