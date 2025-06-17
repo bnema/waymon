@@ -26,7 +26,7 @@
 
 ## How It Works
 
-Waymon captures input events on the server (the one with the physical keyboard and mouse) using Linux's evdev interface, forwards them over an encrypted SSH connection to the client, and injects them using Wayland's virtual input protocols. When you move your mouse to the edge of your screen, control seamlessly switches between computers.
+Waymon captures input events on the server (the one with the physical keyboard and mouse) using Linux's evdev interface, forwards them over an encrypted SSH connection to the client, and injects them using Wayland's virtual input protocols.
 
 ## Requirements
 
@@ -76,9 +76,6 @@ go install github.com/bnema/waymon@latest
    ```
 
 3. **First connection**: You'll be prompted on the server to approve the client's SSH key
-
-4. **Start using**: Move your mouse to the edge of the screen to switch control!
-
 ## Server Controls
 
 When running the server, you can use these keyboard shortcuts in the TUI:
@@ -103,28 +100,137 @@ If input gets stuck while controlling a client, Waymon provides multiple release
 
 ## Configuration
 
-Waymon uses TOML configuration files. Create either `~/.config/waymon/waymon.toml` or for the server `/etc/waymon/waymon.toml`:
+Waymon uses TOML configuration files in the following order of precedence:
+1. `/etc/waymon/waymon.toml` (system-wide, preferred for servers)
+2. `~/.config/waymon/waymon.toml` (user-specific)
+3. `./waymon.toml` (current directory)
+
+### Server Configuration
+
+Server mode automatically creates `/etc/waymon/waymon.toml` on first startup with default values. You can also create it manually:
 
 ```toml
 [server]
+# Port to listen on for SSH connections
 port = 52525
+
+# Bind address - use "0.0.0.0" to listen on all interfaces
 bind_address = "0.0.0.0"
+
+# Human-readable server name (defaults to hostname)
 name = "my-desktop"
+
+# Maximum number of simultaneous client connections
 max_clients = 1
+
+# Path to SSH host key file (created automatically if doesn't exist)
+ssh_host_key_path = "/etc/waymon/host_key"
+
+# Path to SSH authorized_keys file for client authentication
+ssh_authorized_keys_path = "/etc/waymon/authorized_keys"
+
+# List of allowed SSH key fingerprints (empty = allow all authorized keys)
+ssh_whitelist = []
+
+# Only allow SSH keys in the whitelist (requires ssh_whitelist to be set)
 ssh_whitelist_only = true
 
+[logging]
+# Enable file logging to /var/log/waymon/waymon.log (when run with sudo)
+file_logging = true
+
+# Log level: "DEBUG", "INFO", "WARN", "ERROR" (empty = use LOG_LEVEL env var)
+log_level = ""
+
+# Known hosts for quick client connections (managed via CLI)
+[[hosts]]
+name = "laptop"
+address = "192.168.1.101:52525"
+position = "right"  # left, right, top, bottom
+```
+
+### Client Configuration
+
+Client mode uses in-memory defaults. To customize settings, create `~/.config/waymon/waymon.toml` manually or run `waymon config init`:
+
+```toml
 [client]
-server_address = "192.168.1.100:52525"
+# Default server address to connect to
+server_address = ""
+
+# Automatically connect to server on startup
 auto_connect = false
+
+# Delay in seconds before attempting to reconnect after disconnect
 reconnect_delay = 5
+
+# Pixel threshold for screen edge detection
 edge_threshold = 5
-# Hotkey switching disabled by default during alpha
-# hotkey_key = "s"
-# hotkey_modifier = "ctrl+alt"
+
+# Legacy screen position setting (deprecated - use edge_mappings instead)
+screen_position = "right"
+
+# Hotkey modifier combination for manual switching
+hotkey_modifier = "ctrl+alt"
+
+# Hotkey key for manual switching (combined with modifier)
+hotkey_key = "s"
+
+# Path to SSH private key for server authentication (empty = use SSH agent)
+ssh_private_key = ""
+
+# Monitor-specific edge mappings for multi-monitor setups
+[[client.edge_mappings]]
+monitor_id = "primary"  # Monitor ID, "primary", or "*" for any monitor
+edge = "right"          # "left", "right", "top", "bottom"
+host = "server-name"    # Host name or IP:port to connect to
+description = "Main server on the right"
 
 [logging]
-file_logging = true         # Enable/disable file logging (default: true)
-log_level = "INFO"          # Set to "DEBUG" for troubleshooting
+# Enable file logging to ~/.local/share/waymon/waymon.log
+file_logging = true
+
+# Log level: "DEBUG", "INFO", "WARN", "ERROR" (empty = use LOG_LEVEL env var)
+log_level = ""
+
+# Known hosts for quick connections
+[[hosts]]
+name = "desktop"
+address = "192.168.1.100:52525"
+position = "left"
+```
+
+### Complete Configuration Reference
+
+Here's a complete configuration file with all available options and their defaults:
+
+```toml
+[server]
+port = 52525                                      # SSH server port
+bind_address = "0.0.0.0"                         # Bind to all interfaces
+name = "hostname"                                 # Server name (auto-detected)
+max_clients = 1                                   # Maximum concurrent clients
+ssh_host_key_path = "/etc/waymon/host_key"        # SSH host key location
+ssh_authorized_keys_path = "/etc/waymon/authorized_keys"  # SSH authorized keys
+ssh_whitelist = []                                # Allowed key fingerprints
+ssh_whitelist_only = true                         # Only allow whitelisted keys
+
+[client]
+server_address = ""                               # Default server to connect to
+auto_connect = false                              # Auto-connect on startup
+reconnect_delay = 5                               # Reconnection delay (seconds)
+edge_threshold = 5                                # Edge detection sensitivity (pixels)
+screen_position = "right"                         # Legacy position (deprecated)
+hotkey_modifier = "ctrl+alt"                      # Hotkey modifier keys
+hotkey_key = "s"                                  # Hotkey activation key
+ssh_private_key = ""                              # SSH private key path
+edge_mappings = []                                # Monitor-specific edge configs
+
+[logging]
+file_logging = true                               # Enable file logging
+log_level = ""                                    # Log level (empty = env var)
+
+hosts = []                                        # Known hosts list (name, address, position)
 ```
 
 ## Troubleshooting

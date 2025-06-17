@@ -74,10 +74,9 @@ type DeviceInfo struct {
 
 // HostConfig represents a known host for quick connections
 type HostConfig struct {
-	Name      string `mapstructure:"name"`
-	Address   string `mapstructure:"address"`
-	Position  string `mapstructure:"position"` // left, right, top, bottom
-	AuthToken string `mapstructure:"auth_token"`
+	Name     string `mapstructure:"name"`
+	Address  string `mapstructure:"address"`
+	Position string `mapstructure:"position"` // left, right, top, bottom
 }
 
 // EdgeMapping defines which monitor edge connects to which host

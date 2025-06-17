@@ -51,15 +51,11 @@ var configShowCmd = &cobra.Command{
 		if len(cfg.Hosts) > 0 {
 			logger.Info("\n[Hosts]")
 			w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
-			if _, err := fmt.Fprintln(w, "  Name\tAddress\tPosition\tAuth"); err != nil {
+			if _, err := fmt.Fprintln(w, "  Name\tAddress\tPosition"); err != nil {
 				logger.Errorf("Failed to write header: %v", err)
 			}
 			for _, host := range cfg.Hosts {
-				auth := "No"
-				if host.AuthToken != "" {
-					auth = "Yes"
-				}
-				if _, err := fmt.Fprintf(w, "  %s\t%s\t%s\t%s\n", host.Name, host.Address, host.Position, auth); err != nil {
+				if _, err := fmt.Fprintf(w, "  %s\t%s\t%s\n", host.Name, host.Address, host.Position); err != nil {
 					logger.Errorf("Failed to write host info: %v", err)
 				}
 			}
@@ -107,14 +103,10 @@ var configHostAddCmd = &cobra.Command{
 			return fmt.Errorf("invalid position: %s (must be left, right, top, or bottom)", position)
 		}
 
-		// Get auth token if provided
-		authToken, _ := cmd.Flags().GetString("auth-token")
-
 		host := config.HostConfig{
-			Name:      name,
-			Address:   address,
-			Position:  position,
-			AuthToken: authToken,
+			Name:     name,
+			Address:  address,
+			Position: position,
 		}
 
 		if err := config.AddHost(host); err != nil {
@@ -154,19 +146,15 @@ var configHostListCmd = &cobra.Command{
 		}
 
 		w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
-		if _, err := fmt.Fprintln(w, "Name\tAddress\tPosition\tAuth"); err != nil {
+		if _, err := fmt.Fprintln(w, "Name\tAddress\tPosition"); err != nil {
 			logger.Errorf("Failed to write header: %v", err)
 		}
-		if _, err := fmt.Fprintln(w, "----\t-------\t--------\t----"); err != nil {
+		if _, err := fmt.Fprintln(w, "----\t-------\t--------"); err != nil {
 			logger.Errorf("Failed to write separator: %v", err)
 		}
 
 		for _, host := range hosts {
-			auth := "No"
-			if host.AuthToken != "" {
-				auth = "Yes"
-			}
-			if _, err := fmt.Fprintf(w, "%s\t%s\t%s\t%s\n", host.Name, host.Address, host.Position, auth); err != nil {
+			if _, err := fmt.Fprintf(w, "%s\t%s\t%s\n", host.Name, host.Address, host.Position); err != nil {
 				logger.Errorf("Failed to write host: %v", err)
 			}
 		}
@@ -302,6 +290,5 @@ func init() {
 	configSSHCmd.AddCommand(configSSHClearCmd)
 
 	// Add flags
-	configHostAddCmd.Flags().String("auth-token", "", "Authentication token for the host")
 	configInitCmd.Flags().Bool("force", false, "Force overwrite existing configuration")
 }

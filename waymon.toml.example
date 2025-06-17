@@ -5,95 +5,78 @@
 # - /etc/waymon/waymon.toml (system config)
 
 [server]
-# Port to listen on (default: 52525)
+# Port to listen on for SSH connections (default: 52525)
 port = 52525
 
-# Bind address (default: "0.0.0.0" for all interfaces)
+# Bind address - use "0.0.0.0" to listen on all interfaces (default: "0.0.0.0")
 bind_address = "0.0.0.0"
 
-# Server name (default: hostname)
+# Human-readable server name (default: hostname)
 name = "my-desktop"
 
-# Require authentication (default: false)
-require_auth = false
-
-# Authentication token (required if require_auth is true)
-auth_token = ""
-
-# Maximum number of simultaneous clients (default: 1)
+# Maximum number of simultaneous client connections (default: 1)
 max_clients = 1
 
-# Enable TLS encryption (default: false)
-enable_tls = false
+# Path to SSH host key file (default: "/etc/waymon/host_key")
+ssh_host_key_path = "/etc/waymon/host_key"
 
-# TLS certificate and key paths (required if enable_tls is true)
-tls_cert = ""
-tls_key = ""
+# Path to SSH authorized_keys file for client authentication (default: "/etc/waymon/authorized_keys")
+ssh_authorized_keys_path = "/etc/waymon/authorized_keys"
+
+# List of allowed SSH key fingerprints (default: empty = allow all authorized keys)
+ssh_whitelist = []
+
+# Only allow SSH keys in the whitelist (default: true)
+ssh_whitelist_only = true
 
 [client]
-# Default server address (can be overridden with --host flag)
+# Default server address to connect to (default: empty)
 server_address = ""
 
-# Auto-connect to server on startup (default: false)
+# Automatically connect to server on startup (default: false)
 auto_connect = false
 
-# Reconnect delay in seconds (default: 5)
+# Delay in seconds before attempting to reconnect after disconnect (default: 5)
 reconnect_delay = 5
 
-# Edge detection threshold in pixels (default: 5)
+# Pixel threshold for screen edge detection (default: 5)
 edge_threshold = 5
 
-# Hotkey for switching between computers (default: ctrl+alt+s)
+# Legacy screen position setting - deprecated, use edge_mappings instead (default: "right")
+screen_position = "right"
+
+# Hotkey modifier combination for manual switching (default: "ctrl+alt")
 hotkey_modifier = "ctrl+alt"
+
+# Hotkey key for manual switching (default: "s")
 hotkey_key = "s"
 
-# Enable TLS encryption (default: false)
-enable_tls = false
+# Path to SSH private key for server authentication (default: empty = use SSH agent)
+ssh_private_key = ""
 
-# Skip TLS certificate verification (default: false, use only for testing)
-tls_skip_verify = false
+# Monitor-specific edge mappings for multi-monitor setups
+# [[client.edge_mappings]]
+# monitor_id = "primary"  # Monitor ID, "primary", or "*" for any monitor
+# edge = "right"          # "left", "right", "top", "bottom"
+# host = "server-name"    # Host name or IP:port to connect to
+# description = "Main server on the right"
 
-[display]
-# Monitor refresh interval in seconds (default: 5)
-refresh_interval = 5
+[logging]
+# Enable file logging (default: true)
+# Server: /var/log/waymon/waymon.log (when run with sudo)
+# Client: ~/.local/share/waymon/waymon.log
+file_logging = true
 
-# Display backend (default: "auto")
-# Options: "auto", "compositor", "portal", "wayland", "sysfs"
-backend = "auto"
-
-# Enable cursor position tracking (default: true)
-cursor_tracking = true
-
-[input]
-# Mouse sensitivity multiplier (default: 1.0)
-mouse_sensitivity = 1.0
-
-# Scroll speed multiplier (default: 1.0)
-scroll_speed = 1.0
-
-# Enable keyboard input (default: true)
-enable_keyboard = true
-
-# Keyboard layout (default: "us")
-keyboard_layout = "us"
+# Log level: "DEBUG", "INFO", "WARN", "ERROR" (default: empty = use LOG_LEVEL env var)
+log_level = ""
 
 # Known hosts for quick connections
-# You can define multiple hosts with their positions relative to this computer
 [[hosts]]
 name = "laptop"
 address = "192.168.1.100:52525"
-position = "left"  # This computer is to the left of the current one
-auth_token = ""
+position = "left"  # left, right, top, bottom
 
 [[hosts]]
 name = "workstation"
 address = "192.168.1.101:52525"
-position = "right"  # This computer is to the right of the current one
-auth_token = ""
-
-# Example of a host with authentication
-# [[hosts]]
-# name = "secure-server"
-# address = "10.0.0.5:52525"
-# position = "top"
-# auth_token = "my-secret-token"
+position = "right"
