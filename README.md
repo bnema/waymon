@@ -177,19 +177,19 @@ file_logging = false
 ```
 ┌─── SERVER (Physical Input) ────────────────────────────────────────┐
 │                                                                    │
-│   Linux Input Devices          Waymon Server Process              │
-│   (/dev/input/event*)    ────>  (captures evdev events)           │
-│                                        │                           │
-└────────────────────────────────────────┼───────────────────────────┘
-                                         │
-                    Input Events (Protobuf) over
-                      Encrypted SSH Tunnel
-                                         │
-                                         ▼
+│      Linux Input Devices          Waymon Server Process            │
+│      (/dev/input/event*)   ────>  (captures evdev events)          │
+│                              │                                     │
+└──────────────────────────────┼─────────────────────────────────────┘
+                               │
+                  Input Events (Protobuf) over
+                    Encrypted SSH Tunnel
+                               │
+                               ▼
 ┌─── CLIENT (Remote Control) ────────────────────────────────────────┐
 │                                                                    │
-│    Waymon Client Process         Wayland Virtual Input             │
-│    (receives events)      ────>  (injects mouse/keyboard)          │
+│      Waymon Client Process         Wayland Virtual Input           │
+│      (receives events)      ────>  (injects mouse/keyboard)        │
 │                                                                    │
 └────────────────────────────────────────────────────────────────────┘
 ```
