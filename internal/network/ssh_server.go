@@ -307,13 +307,8 @@ func (s *SSHServer) sessionHandler() wish.Middleware {
 				}
 			}()
 
-			// Send welcome message
-			if _, err := fmt.Fprintf(sess, "Waymon SSH connection established\n"); err != nil {
-				logger.Errorf("Failed to write to SSH session: %v", err)
-			}
-			if _, err := fmt.Fprintf(sess, "Public key: %s\n", publicKey); err != nil {
-				logger.Errorf("Failed to write public key to SSH session: %v", err)
-			}
+			// Log connection info instead of sending to client
+			logger.Infof("Waymon SSH connection established - Public key: %s", publicKey)
 
 			// Handle mouse events with context
 			s.handleMouseEvents(s.ctx, sess)

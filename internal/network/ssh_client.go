@@ -36,22 +36,6 @@ type SSHClient struct {
 
 // NewSSHClient creates a new SSH client
 func NewSSHClient(privateKeyPath string) *SSHClient {
-	if privateKeyPath == "" {
-		// Default to ~/.ssh/id_rsa or ~/.ssh/id_ed25519
-		homeDir, _ := os.UserHomeDir()
-		keyPaths := []string{
-			filepath.Join(homeDir, ".ssh", "id_ed25519"),
-			filepath.Join(homeDir, ".ssh", "id_rsa"),
-		}
-
-		for _, path := range keyPaths {
-			if _, err := os.Stat(path); err == nil {
-				privateKeyPath = path
-				break
-			}
-		}
-	}
-
 	return &SSHClient{
 		privateKeyPath: privateKeyPath,
 	}
@@ -59,12 +43,6 @@ func NewSSHClient(privateKeyPath string) *SSHClient {
 
 // Connect establishes an SSH connection to the server
 func (c *SSHClient) Connect(ctx context.Context, serverAddr string) error {
-	return c.ConnectWithTimeout(ctx, serverAddr, 30*time.Second)
-}
-
-// ConnectWithTimeout establishes an SSH connection to the server with a specific timeout
-func (c *SSHClient) ConnectWithTimeout(ctx context.Context, serverAddr string, timeout time.Duration) error {
-
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
@@ -73,150 +51,62 @@ func (c *SSHClient) ConnectWithTimeout(ctx context.Context, serverAddr string, t
 	}
 
 	// Load private key
-	logger.Debugf("Loading SSH private key from: %s", c.privateKeyPath)
-	key, err := os.ReadFile(c.privateKeyPath)
+	keyData, err := os.ReadFile(c.privateKeyPath)
 	if err != nil {
-		logger.Errorf("Failed to read private key from %s: %v", c.privateKeyPath, err)
-		return fmt.Errorf("failed to read private key: %w", err)
+		// Try expanding the path if it starts with ~
+		if strings.HasPrefix(c.privateKeyPath, "~") {
+			homeDir, err := os.UserHomeDir()
+			if err != nil {
+				return fmt.Errorf("failed to get home directory: %w", err)
+			}
+			expandedPath := filepath.Join(homeDir, c.privateKeyPath[1:])
+			keyData, err = os.ReadFile(expandedPath)
+			if err != nil {
+				return fmt.Errorf("failed to read private key from %s: %w", expandedPath, err)
+			}
+		} else {
+			return fmt.Errorf("failed to read private key: %w", err)
+		}
 	}
-	logger.Debugf("Private key loaded, size: %d bytes", len(key))
 
-	signer, err := ssh.ParsePrivateKey(key)
+	// Parse private key
+	signer, err := ssh.ParsePrivateKey(keyData)
 	if err != nil {
-		logger.Errorf("Failed to parse private key: %v", err)
+		// Check if it's encrypted
+		if strings.Contains(err.Error(), "encrypted") {
+			return fmt.Errorf("SSH key is encrypted - encrypted keys are not supported")
+		}
 		return fmt.Errorf("failed to parse private key: %w", err)
 	}
-	logger.Debug("Private key parsed successfully")
 
-	// Configure SSH client
+	// Get the username
+	username := os.Getenv("USER")
+	if username == "" {
+		username = "waymon"
+	}
+
+	// Create SSH client config
 	config := &ssh.ClientConfig{
-		User: "waymon",
+		User: username,
 		Auth: []ssh.AuthMethod{
 			ssh.PublicKeys(signer),
 		},
-		HostKeyCallback: ssh.InsecureIgnoreHostKey(), //nolint:gosec // TODO: Implement proper host key checking
-		// Don't set a timeout here - let the context handle it
-		// Add client version to help with debugging
-		ClientVersion: "SSH-2.0-Waymon-Client",
-		// Reduce banner timeout to fail faster if server is unresponsive
-		BannerCallback: func(message string) error {
-			logger.Debugf("SSH server banner: %s", message)
+		HostKeyCallback: func(hostname string, remote net.Addr, key ssh.PublicKey) error {
+			// For now, accept any host key
+			// TODO: Implement proper host key verification
+			logger.Debugf("Accepting host key for %s: %s", hostname, ssh.FingerprintSHA256(key))
 			return nil
 		},
+		Timeout: 10 * time.Second,
 	}
 
-	// Log connection attempt details
-	logger.Debugf("SSH client config: user=%s, auth_method=publickey, key_path=%s", config.User, c.privateKeyPath)
-
-	// Parse host and port
-	host, port, err := net.SplitHostPort(serverAddr)
+	// Connect to SSH server
+	client, err := ssh.Dial("tcp", serverAddr, config)
 	if err != nil {
-		return fmt.Errorf("invalid server address format: %w", err)
+		return fmt.Errorf("failed to connect to SSH server: %w", err)
 	}
 
-	// If host is localhost, use 127.0.0.1 explicitly to avoid DNS issues
-	if host == "localhost" {
-		logger.Debugf("Replacing 'localhost' with '127.0.0.1' to avoid DNS delays")
-		host = "127.0.0.1"
-		serverAddr = net.JoinHostPort(host, port)
-	}
-
-	// If host is not an IP, resolve it first to catch DNS issues early
-	if net.ParseIP(host) == nil {
-		logger.Debugf("Resolving hostname '%s'...", host)
-		resolveStart := time.Now()
-		addrs, err := net.LookupHost(host)
-		resolveDuration := time.Since(resolveStart)
-		if err != nil {
-			logger.Errorf("Failed to resolve hostname '%s' after %v: %v", host, resolveDuration, err)
-			return fmt.Errorf("failed to resolve hostname: %w", err)
-		}
-		if len(addrs) == 0 {
-			return fmt.Errorf("no addresses found for hostname '%s'", host)
-		}
-		logger.Debugf("Resolved '%s' to %v in %v", host, addrs, resolveDuration)
-		// Use the first resolved address
-		serverAddr = net.JoinHostPort(addrs[0], port)
-		logger.Debugf("Using resolved address: %s", serverAddr)
-	}
-
-	logger.Debugf("Attempting SSH dial to %s", serverAddr)
-
-	// First, try a simple TCP connection to verify connectivity
-	logger.Debugf("Testing TCP connectivity to %s", serverAddr)
-	tcpStart := time.Now()
-	tcpConn, err := net.DialTimeout("tcp", serverAddr, 5*time.Second)
-	tcpDuration := time.Since(tcpStart)
-	if err != nil {
-		logger.Errorf("Failed to establish TCP connection to %s after %v: %v", serverAddr, tcpDuration, err)
-		return fmt.Errorf("failed to establish TCP connection: %w", err)
-	}
-	if err := tcpConn.Close(); err != nil {
-		logger.Errorf("Failed to close TCP connection: %v", err)
-	}
-	logger.Debugf("TCP connectivity test successful after %v", tcpDuration)
-
-	// Create a channel to track dial completion
-	dialDone := make(chan struct{})
-	var dialErr error
-	var client *ssh.Client
-
-	// Create a timeout context only for the dial operation
-	dialCtx, dialCancel := context.WithTimeout(ctx, timeout)
-	defer dialCancel()
-
-	// Use context-aware dialer
-	var dialer net.Dialer
-
-	// Perform dial in a goroutine so we can add extra logging
-	go func() {
-		logger.Debug("Starting SSH dial...")
-		logger.Info("Waiting for server to approve connection...")
-
-		// Log start time for debugging
-		dialStart := time.Now()
-
-		// Create a TCP connection with timeout context
-		conn, err := dialer.DialContext(dialCtx, "tcp", serverAddr)
-		if err != nil {
-			dialErr = fmt.Errorf("TCP dial failed: %w", err)
-			close(dialDone)
-			return
-		}
-
-		// Wrap the connection with the SSH client
-		sshConn, chans, reqs, err := ssh.NewClientConn(conn, serverAddr, config)
-		if err != nil {
-			if err := conn.Close(); err != nil {
-				logger.Errorf("Failed to close connection: %v", err)
-			}
-			logger.Errorf("SSH handshake failed: %v", err)
-			dialErr = fmt.Errorf("SSH handshake failed: %w", err)
-			close(dialDone)
-			return
-		}
-
-		client = ssh.NewClient(sshConn, chans, reqs)
-		dialDuration := time.Since(dialStart)
-		logger.Debugf("SSH dial completed successfully after %v", dialDuration)
-
-		close(dialDone)
-	}()
-
-	// Wait for dial to complete or timeout
-	select {
-	case <-dialDone:
-		if dialErr != nil {
-			logger.Errorf("SSH connection failed: %v", dialErr)
-			return dialErr
-		}
-		logger.Debug("SSH dial successful, creating session...")
-	case <-dialCtx.Done():
-		logger.Error("SSH connection cancelled or timed out")
-		return fmt.Errorf("SSH connection cancelled: %w", dialCtx.Err())
-	}
-
-	// Create session
+	// Create a session
 	session, err := client.NewSession()
 	if err != nil {
 		if err := client.Close(); err != nil {
@@ -260,79 +150,8 @@ func (c *SSHClient) ConnectWithTimeout(ctx context.Context, serverAddr string, t
 		return fmt.Errorf("failed to start SSH session: %w", err)
 	}
 
-	// Check for connection status from server
-	// Use a line reader to only consume the exact welcome messages
-	// This prevents accidentally reading part of the protocol messages
-	buf := make([]byte, 0, 512)
-	tempBuf := make([]byte, 1)
-	readChan := make(chan error, 1)
-	
-	// Read line by line to avoid consuming protocol messages
-	go func() {
-		for {
-			n, err := reader.Read(tempBuf)
-			if err != nil || n == 0 {
-				readChan <- err
-				return
-			}
-			buf = append(buf, tempBuf[0])
-			
-			// Check if we've read enough to determine the status
-			response := string(buf)
-			if strings.Contains(response, "maximum number of active clients") {
-				readChan <- fmt.Errorf("max clients")
-				return
-			}
-			
-			// Check if we've read both welcome lines
-			if strings.Contains(response, "Waymon SSH connection established") &&
-				strings.Contains(response, "Public key:") &&
-				strings.Count(response, "\n") >= 2 {
-				readChan <- nil
-				return
-			}
-			
-			// Safety check: don't read more than expected
-			if len(buf) > 256 {
-				readChan <- fmt.Errorf("unexpected response")
-				return
-			}
-		}
-	}()
-
-	select {
-	case err := <-readChan:
-		if err != nil {
-			if err.Error() == "max clients" {
-				if err := session.Close(); err != nil {
-					logger.Errorf("Failed to close SSH session: %v", err)
-				}
-				if err := client.Close(); err != nil {
-					logger.Errorf("Failed to close SSH client: %v", err)
-				}
-				return fmt.Errorf("connection rejected: server has maximum number of active clients")
-			}
-			// Other errors mean connection not established
-			if err := session.Close(); err != nil {
-				logger.Errorf("Failed to close SSH session: %v", err)
-			}
-			if err := client.Close(); err != nil {
-				logger.Errorf("Failed to close SSH client: %v", err)
-			}
-			return fmt.Errorf("connection not established: %v", err)
-		}
-		// Success - connection established
-		logger.Debug("SSH handshake complete")
-	case <-time.After(2 * time.Second):
-		// No immediate response, assume we're waiting for approval
-		if err := session.Close(); err != nil {
-			logger.Errorf("Failed to close SSH session: %v", err)
-		}
-		if err := client.Close(); err != nil {
-			logger.Errorf("Failed to close SSH client: %v", err)
-		}
-		return fmt.Errorf("connection pending: waiting for server approval")
-	}
+	// No handshake messages expected from server anymore
+	// Server only sends protocol buffer messages or error text
 
 	c.client = client
 	c.session = session
@@ -399,31 +218,8 @@ func (c *SSHClient) Reconnect(ctx context.Context, serverAddr string) error {
 	return c.Connect(ctx, serverAddr)
 }
 
-// SendMouseEvent sends a mouse event to the server
-func (c *SSHClient) SendMouseEvent(event *MouseEvent) error {
-	c.mu.Lock()
-	writer := c.writer
-	connected := c.connected
-	c.mu.Unlock()
 
-	if !connected || writer == nil {
-		return fmt.Errorf("not connected")
-	}
-
-	return writeMessage(writer, event.MouseEvent)
-}
-
-// SendMouseBatch sends multiple mouse events
-func (c *SSHClient) SendMouseBatch(events []*MouseEvent) error {
-	for _, event := range events {
-		if err := c.SendMouseEvent(event); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-// SendInputEvent sends an input event to the server (not used in redesigned architecture)
+// SendInputEvent sends an input event to the server
 func (c *SSHClient) SendInputEvent(event *protocol.InputEvent) error {
 	c.mu.Lock()
 	writer := c.writer
@@ -447,6 +243,9 @@ func (c *SSHClient) OnInputEvent(callback func(*protocol.InputEvent)) {
 // receiveInputEvents continuously receives input events from the server
 func (c *SSHClient) receiveInputEvents(ctx context.Context) {
 	logger.Info("[SSH-CLIENT] Starting receiveInputEvents goroutine")
+
+	// Buffer to store any text messages
+	textBuffer := make([]byte, 0, 1024)
 
 	for {
 		select {
@@ -498,10 +297,57 @@ func (c *SSHClient) receiveInputEvents(ctx context.Context) {
 			logger.Debugf("[SSH-CLIENT] Decoded message length: %d bytes (raw bytes: %02x %02x %02x %02x)", 
 				length, lengthBuf[0], lengthBuf[1], lengthBuf[2], lengthBuf[3])
 
+			// Check if this looks like text instead of a protocol buffer length
+			// Protocol buffer lengths are typically small and positive
 			if length <= 0 || length > 4096 {
-				logger.Errorf("[SSH-CLIENT] Invalid message length: %d (raw bytes: %02x %02x %02x %02x)", 
-					length, lengthBuf[0], lengthBuf[1], lengthBuf[2], lengthBuf[3])
-				continue
+				// This might be text data - check if the bytes are printable ASCII
+				isText := true
+				for _, b := range lengthBuf {
+					if b < 32 || b > 126 {
+						isText = false
+						break
+					}
+				}
+
+				if isText {
+					logger.Warnf("[SSH-CLIENT] Detected text data instead of protocol buffer: %q", string(lengthBuf))
+					// Append to text buffer
+					textBuffer = append(textBuffer, lengthBuf...)
+					
+					// Read more text until we find a newline or hit a limit
+					tempBuf := make([]byte, 1)
+					for len(textBuffer) < 1024 {
+						n, err := reader.Read(tempBuf)
+						if err != nil || n == 0 {
+							break
+						}
+						textBuffer = append(textBuffer, tempBuf[0])
+						if tempBuf[0] == '\n' {
+							break
+						}
+					}
+					
+					// Process the text message
+					textMsg := string(textBuffer)
+					logger.Infof("[SSH-CLIENT] Server message: %s", strings.TrimSpace(textMsg))
+					
+					// Check for specific error messages
+					if strings.Contains(textMsg, "maximum number of active clients") {
+						logger.Error("[SSH-CLIENT] Server rejected connection: max clients reached")
+						c.mu.Lock()
+						c.connected = false
+						c.mu.Unlock()
+						return
+					}
+					
+					// Clear text buffer and continue
+					textBuffer = textBuffer[:0]
+					continue
+				} else {
+					logger.Errorf("[SSH-CLIENT] Invalid message length: %d (raw bytes: %02x %02x %02x %02x)", 
+						length, lengthBuf[0], lengthBuf[1], lengthBuf[2], lengthBuf[3])
+					continue
+				}
 			}
 
 			// Read message data with timeout
@@ -556,32 +402,25 @@ func (c *SSHClient) receiveInputEvents(ctx context.Context) {
 
 // monitorConnection monitors the SSH connection health
 func (c *SSHClient) monitorConnection(ctx context.Context) {
-	ticker := time.NewTicker(5 * time.Second)
+	ticker := time.NewTicker(30 * time.Second)
 	defer ticker.Stop()
 
 	for {
 		select {
 		case <-ctx.Done():
-			logger.Info("[SSH-CLIENT] Context cancelled, stopping connection monitor")
 			return
 		case <-ticker.C:
 			c.mu.Lock()
-			if !c.connected || c.client == nil {
-				c.mu.Unlock()
+			connected := c.connected
+			c.mu.Unlock()
+
+			if !connected {
 				return
 			}
 
-			// Check if connection is still alive
-			_, _, err := c.client.SendRequest("keepalive@waymon", true, nil)
-			if err != nil {
-				c.connected = false
-				c.mu.Unlock()
-				if err := c.Disconnect(); err != nil {
-					logger.Errorf("Failed to disconnect SSH client: %v", err)
-				}
-				return
-			}
-			c.mu.Unlock()
+			// Try to send a ping/keepalive
+			// SSH client has built-in keepalive, but we can add application-level checks here
+			logger.Debug("[SSH-CLIENT] Connection health check")
 		}
 	}
 }
