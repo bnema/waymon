@@ -114,6 +114,9 @@ func (er *EmergencyRelease) monitorFileTriger() {
 func (er *EmergencyRelease) triggerRelease(reason string) {
 	logger.Warnf("[EMERGENCY] Emergency release triggered (reason: %s)", reason)
 	
+	// Mark emergency release to start cooldown period
+	er.manager.MarkEmergencyRelease()
+	
 	// Force switch to local control
 	if err := er.manager.SwitchToLocal(); err != nil {
 		logger.Errorf("[EMERGENCY] Failed to switch to local: %v", err)
