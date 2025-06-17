@@ -25,7 +25,8 @@ type Server struct {
 	emergency     *EmergencyRelease
 
 	// Synchronization
-	wg sync.WaitGroup
+	wg       sync.WaitGroup
+	stopOnce sync.Once
 }
 
 // New creates a new server instance
@@ -115,6 +116,22 @@ func (s *Server) initInput() error {
 	}
 	s.inputBackend = backend
 
+	// Set up emergency handler if backend supports it
+	if allDevices, ok := backend.(*input.AllDevicesCapture); ok {
+		logger.Info("Server: Setting up emergency handler for all-devices capture")
+		allDevices.SetEmergencyHandler(func() {
+			logger.Warn("Emergency handler triggered from input backend")
+			if s.clientManager != nil {
+				// Mark emergency release in client manager
+				s.clientManager.MarkEmergencyRelease()
+				// Force switch to local
+				if err := s.clientManager.SwitchToLocal(); err != nil {
+					logger.Errorf("Failed to switch to local on emergency: %v", err)
+				}
+			}
+		})
+	}
+
 	// NOTE: We set up the callback BEFORE starting the backend
 	// so the test event generator can start properly
 	logger.Info("Server: Setting up input event callback (before Start)")
@@ -174,27 +191,37 @@ func (s *Server) runNetworkServer(ctx context.Context) {
 
 // Stop stops the server
 func (s *Server) Stop() {
-	// Stop emergency release monitoring
-	if s.emergency != nil {
-		s.emergency.Stop()
-	}
-
-	// Notify clients about shutdown before stopping services
-	if s.clientManager != nil {
-		s.clientManager.NotifyShutdown()
-	}
-
-	if s.sshServer != nil {
-		s.sshServer.Stop()
-	}
-
-	if s.inputBackend != nil {
-		if err := s.inputBackend.Stop(); err != nil {
-			logger.Errorf("Failed to stop input backend: %v", err)
+	s.stopOnce.Do(func() {
+		logger.Info("Server.Stop: Beginning server shutdown")
+		
+		// Stop emergency release monitoring
+		if s.emergency != nil {
+			logger.Debug("Server.Stop: Stopping emergency release")
+			s.emergency.Stop()
 		}
-	}
 
-	s.wg.Wait()
+		// Notify clients about shutdown before stopping services
+		if s.clientManager != nil {
+			logger.Debug("Server.Stop: Notifying clients of shutdown")
+			s.clientManager.NotifyShutdown()
+		}
+
+		if s.sshServer != nil {
+			logger.Debug("Server.Stop: Stopping SSH server")
+			s.sshServer.Stop()
+		}
+
+		if s.inputBackend != nil {
+			logger.Debug("Server.Stop: Stopping input backend")
+			if err := s.inputBackend.Stop(); err != nil {
+				logger.Errorf("Failed to stop input backend: %v", err)
+			}
+		}
+
+		logger.Debug("Server.Stop: Waiting for all goroutines")
+		s.wg.Wait()
+		logger.Info("Server.Stop: Server shutdown complete")
+	})
 }
 
 // GetPort returns the server port

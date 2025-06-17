@@ -3,6 +3,7 @@ package server
 import (
 	"os"
 	"os/signal"
+	"sync"
 	"syscall"
 	"time"
 
@@ -15,6 +16,7 @@ type EmergencyRelease struct {
 	activityTimeout  time.Duration
 	lastActivity     time.Time
 	stopChan         chan struct{}
+	stopOnce         sync.Once
 }
 
 // NewEmergencyRelease creates a new emergency release handler
@@ -43,7 +45,9 @@ func (er *EmergencyRelease) Start() {
 
 // Stop stops all emergency monitoring
 func (er *EmergencyRelease) Stop() {
-	close(er.stopChan)
+	er.stopOnce.Do(func() {
+		close(er.stopChan)
+	})
 }
 
 // UpdateActivity updates the last activity timestamp
