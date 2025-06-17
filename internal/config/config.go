@@ -18,11 +18,9 @@ type Config struct {
 	// Client configuration
 	Client ClientConfig `mapstructure:"client"`
 
-	// Display configuration
-	Display DisplayConfig `mapstructure:"display"`
 
-	// Input configuration
-	Input InputConfig `mapstructure:"input"`
+	// Logging configuration
+	Logging LoggingConfig `mapstructure:"logging"`
 
 	// Known hosts for quick connections
 	Hosts []HostConfig `mapstructure:"hosts"`
@@ -57,23 +55,11 @@ type ClientConfig struct {
 	SSHPrivateKey string `mapstructure:"ssh_private_key"`
 }
 
-// DisplayConfig contains display detection settings
-type DisplayConfig struct {
-	RefreshInterval int    `mapstructure:"refresh_interval"`
-	Backend         string `mapstructure:"backend"`
-	CursorTracking  bool   `mapstructure:"cursor_tracking"`
-}
 
-// InputConfig contains input handling settings
-type InputConfig struct {
-	MouseSensitivity float64 `mapstructure:"mouse_sensitivity"`
-	ScrollSpeed      float64 `mapstructure:"scroll_speed"`
-	EnableKeyboard   bool    `mapstructure:"enable_keyboard"`
-	KeyboardLayout   string  `mapstructure:"keyboard_layout"`
-
-	// Deprecated fields (kept for backward compatibility but not used)
-	MouseDeviceInfo    *DeviceInfo `mapstructure:"mouse_device_info"`    // Deprecated: no longer used
-	KeyboardDeviceInfo *DeviceInfo `mapstructure:"keyboard_device_info"` // Deprecated: no longer used
+// LoggingConfig contains logging settings
+type LoggingConfig struct {
+	FileLogging bool   `mapstructure:"file_logging"` // Enable/disable file logging
+	LogLevel    string `mapstructure:"log_level"`    // Override LOG_LEVEL env var
 }
 
 // DeviceInfo stores persistent device identification
@@ -125,16 +111,9 @@ var (
 			HotkeyKey:      "s",
 			SSHPrivateKey:  "",
 		},
-		Display: DisplayConfig{
-			RefreshInterval: 5,
-			Backend:         "auto",
-			CursorTracking:  true,
-		},
-		Input: InputConfig{
-			MouseSensitivity: 1.0,
-			ScrollSpeed:      1.0,
-			EnableKeyboard:   true,
-			KeyboardLayout:   "us",
+		Logging: LoggingConfig{
+			FileLogging: true,  // Enable file logging by default
+			LogLevel:    "",    // Empty means use LOG_LEVEL env var
 		},
 		Hosts: []HostConfig{},
 	}
@@ -196,14 +175,9 @@ func Init() error {
 	viper.SetDefault("client.hotkey_key", DefaultConfig.Client.HotkeyKey)
 	viper.SetDefault("client.ssh_private_key", DefaultConfig.Client.SSHPrivateKey)
 
-	viper.SetDefault("display.refresh_interval", DefaultConfig.Display.RefreshInterval)
-	viper.SetDefault("display.backend", DefaultConfig.Display.Backend)
-	viper.SetDefault("display.cursor_tracking", DefaultConfig.Display.CursorTracking)
 
-	viper.SetDefault("input.mouse_sensitivity", DefaultConfig.Input.MouseSensitivity)
-	viper.SetDefault("input.scroll_speed", DefaultConfig.Input.ScrollSpeed)
-	viper.SetDefault("input.enable_keyboard", DefaultConfig.Input.EnableKeyboard)
-	viper.SetDefault("input.keyboard_layout", DefaultConfig.Input.KeyboardLayout)
+	viper.SetDefault("logging.file_logging", DefaultConfig.Logging.FileLogging)
+	viper.SetDefault("logging.log_level", DefaultConfig.Logging.LogLevel)
 
 	viper.SetDefault("hosts", DefaultConfig.Hosts)
 
