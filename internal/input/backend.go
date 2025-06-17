@@ -3,10 +3,11 @@ package input
 import (
 	"context"
 	"fmt"
+	"os"
 
-	"github.com/bnema/waymon/internal/config"
 	"github.com/bnema/waymon/internal/logger"
 	"github.com/bnema/waymon/internal/protocol"
+	"github.com/gvalkov/golang-evdev"
 )
 
 // InputBackend represents an input capture backend
@@ -29,10 +30,10 @@ type InputBackend interface {
 // For servers: tries evdev first (actual input capture), then falls back to Wayland virtual input
 // For clients: Wayland virtual input is used for injection
 func CreateBackend() (InputBackend, error) {
-	// First, try evdev backend (for server-side input capture)
+	// First, try all-devices capture backend (for server-side input capture)
 	if IsEvdevAvailable() {
-		logger.Info("Using evdev backend for input capture")
-		return NewEvdevCapture(), nil
+		logger.Info("Using all-devices capture backend for input capture")
+		return NewAllDevicesCapture(), nil
 	}
 
 	// Fall back to Wayland virtual input (primarily for client-side injection)
@@ -49,56 +50,8 @@ func CreateBackend() (InputBackend, error) {
 func CreateServerBackend() (InputBackend, error) {
 	// For servers, we MUST have evdev for actual input capture
 	if IsEvdevAvailable() {
-		logger.Info("Using evdev backend for server input capture")
-
-		// Check if devices are configured
-		cfg := config.Get()
-		if cfg != nil {
-			var mousePath, keyboardPath string
-			
-			// Try to resolve persistent device info first
-			if cfg.Input.MouseDeviceInfo != nil {
-				deviceInfo := &PersistentDeviceInfo{
-					Name:       cfg.Input.MouseDeviceInfo.Name,
-					ByIDPath:   cfg.Input.MouseDeviceInfo.ByIDPath,
-					ByPathPath: cfg.Input.MouseDeviceInfo.ByPathPath,
-					VendorID:   cfg.Input.MouseDeviceInfo.VendorID,
-					ProductID:  cfg.Input.MouseDeviceInfo.ProductID,
-					Phys:       cfg.Input.MouseDeviceInfo.Phys,
-				}
-				if path, err := deviceInfo.ResolveToEventPath(); err == nil {
-					mousePath = path
-					logger.Infof("Resolved mouse device '%s' to %s", deviceInfo.Name, path)
-				} else {
-					logger.Warnf("Could not resolve mouse device '%s': %v", deviceInfo.Name, err)
-				}
-			}
-			
-			if cfg.Input.KeyboardDeviceInfo != nil {
-				deviceInfo := &PersistentDeviceInfo{
-					Name:       cfg.Input.KeyboardDeviceInfo.Name,
-					ByIDPath:   cfg.Input.KeyboardDeviceInfo.ByIDPath,
-					ByPathPath: cfg.Input.KeyboardDeviceInfo.ByPathPath,
-					VendorID:   cfg.Input.KeyboardDeviceInfo.VendorID,
-					ProductID:  cfg.Input.KeyboardDeviceInfo.ProductID,
-					Phys:       cfg.Input.KeyboardDeviceInfo.Phys,
-				}
-				if path, err := deviceInfo.ResolveToEventPath(); err == nil {
-					keyboardPath = path
-					logger.Infof("Resolved keyboard device '%s' to %s", deviceInfo.Name, path)
-				} else {
-					logger.Warnf("Could not resolve keyboard device '%s': %v", deviceInfo.Name, err)
-				}
-			}
-			
-			
-			if mousePath != "" || keyboardPath != "" {
-				logger.Infof("Using configured devices - Mouse: %s, Keyboard: %s", mousePath, keyboardPath)
-				return NewEvdevCaptureWithDevices(mousePath, keyboardPath), nil
-			}
-		}
-
-		return NewEvdevCapture(), nil
+		logger.Info("Using all-devices capture backend for server input capture")
+		return NewAllDevicesCapture(), nil
 	}
 
 	return nil, fmt.Errorf("evdev not available - server requires evdev for input capture. " +
@@ -115,4 +68,20 @@ func CreateClientBackend() (InputBackend, error) {
 	}
 
 	return nil, fmt.Errorf("wayland virtual input protocols not supported by compositor")
+}
+
+// IsEvdevAvailable checks if evdev is available on this system
+func IsEvdevAvailable() bool {
+	// Check if /dev/input directory exists
+	if _, err := os.Stat("/dev/input"); os.IsNotExist(err) {
+		return false
+	}
+
+	// Try to list input devices
+	devices, err := evdev.ListInputDevices("/dev/input/event*")
+	if err != nil {
+		return false
+	}
+
+	return len(devices) > 0
 }
