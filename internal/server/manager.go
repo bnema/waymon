@@ -35,6 +35,10 @@ type ClientManager struct {
 
 	// Cursor position tracking for each client
 	clientCursors map[string]*cursorState
+
+	// Emergency release cooldown
+	emergencyReleaseTime time.Time
+	emergencyCooldown    time.Duration
 }
 
 // cursorState tracks cursor position for a client
@@ -73,6 +77,7 @@ func NewClientManager(inputBackend input.InputBackend) (*ClientManager, error) {
 		inputBackend:     inputBackend,
 		controllingLocal: true, // Start by controlling local system
 		clientCursors:    make(map[string]*cursorState),
+		emergencyCooldown: 5 * time.Second, // 5 second cooldown after emergency release
 	}, nil
 }
 
@@ -504,6 +509,16 @@ func (cm *ClientManager) handleControlEvent(controlEvent *protocol.ControlEvent,
 			cm.updateClientConfiguration(config, sourceID)
 		}
 	case protocol.ControlEvent_REQUEST_CONTROL:
+		// Check if we're in emergency cooldown period
+		cm.mu.RLock()
+		inCooldown := time.Since(cm.emergencyReleaseTime) < cm.emergencyCooldown
+		cm.mu.RUnlock()
+
+		if inCooldown {
+			logger.Debugf("Client %s requested control during emergency cooldown - ignoring", sourceID)
+			return
+		}
+
 		logger.Infof("Client %s requested control", sourceID)
 		// Grant control to the requesting client
 		if err := cm.SwitchToClient(sourceID); err != nil {
@@ -682,6 +697,14 @@ func (cm *ClientManager) SetSSHServer(sshServer *network.SSHServer) {
 	cm.mu.Lock()
 	defer cm.mu.Unlock()
 	cm.sshServer = sshServer
+}
+
+// MarkEmergencyRelease marks that an emergency release has occurred
+func (cm *ClientManager) MarkEmergencyRelease() {
+	cm.mu.Lock()
+	defer cm.mu.Unlock()
+	cm.emergencyReleaseTime = time.Now()
+	logger.Infof("[SERVER-MANAGER] Emergency release marked - cooldown period: %v", cm.emergencyCooldown)
 }
 
 // NotifyShutdown sends shutdown notification to all connected clients
