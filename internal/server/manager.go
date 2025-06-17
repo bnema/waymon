@@ -132,6 +132,12 @@ func (cm *ClientManager) SwitchToClient(clientID string) error {
 	cm.mu.Lock()
 	defer cm.mu.Unlock()
 
+	// Check if we're already controlling this client
+	if cm.activeClientID == clientID && !cm.controllingLocal {
+		logger.Debugf("[SERVER-MANAGER] Already controlling client %s, skipping switch", clientID)
+		return nil
+	}
+
 	// Check if client exists
 	client, exists := cm.clients[clientID]
 	if !exists {
@@ -237,6 +243,12 @@ func (cm *ClientManager) SwitchToClient(clientID string) error {
 func (cm *ClientManager) SwitchToLocal() error {
 	cm.mu.Lock()
 	defer cm.mu.Unlock()
+
+	// Check if we're already controlling local
+	if cm.controllingLocal {
+		logger.Debug("[SERVER-MANAGER] Already controlling local system, skipping switch")
+		return nil
+	}
 
 	// Update previous client status and notify them
 	if cm.activeClientID != "" {

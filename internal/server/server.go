@@ -22,6 +22,7 @@ type Server struct {
 	inputBackend  input.InputBackend
 	sshServer     *network.SSHServer
 	clientManager *ClientManager
+	emergency     *EmergencyRelease
 
 	// Synchronization
 	wg sync.WaitGroup
@@ -63,6 +64,11 @@ func (s *Server) Start(ctx context.Context) error {
 	if err := s.inputBackend.Start(ctx); err != nil {
 		return fmt.Errorf("failed to start input backend: %w", err)
 	}
+
+	// Initialize emergency release mechanisms
+	s.emergency = NewEmergencyRelease(s.clientManager)
+	s.emergency.Start()
+	logger.Info("Server: Emergency release mechanisms activated")
 
 	return nil
 }
@@ -162,6 +168,11 @@ func (s *Server) runNetworkServer(ctx context.Context) {
 
 // Stop stops the server
 func (s *Server) Stop() {
+	// Stop emergency release monitoring
+	if s.emergency != nil {
+		s.emergency.Stop()
+	}
+
 	// Notify clients about shutdown before stopping services
 	if s.clientManager != nil {
 		s.clientManager.NotifyShutdown()
