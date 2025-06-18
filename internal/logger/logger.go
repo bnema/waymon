@@ -65,7 +65,9 @@ func Info(msg interface{}, keyvals ...interface{}) {
 
 func Debug(msg interface{}, keyvals ...interface{}) {
 	Logger.Debug(msg, keyvals...)
-	notifyUI("DEBUG", fmt.Sprintf("%v", msg))
+	if Logger.GetLevel() <= log.DebugLevel {
+		notifyUI("DEBUG", fmt.Sprintf("%v", msg))
+	}
 }
 
 func Warn(msg interface{}, keyvals ...interface{}) {
@@ -90,7 +92,9 @@ func Infof(format string, args ...interface{}) {
 
 func Debugf(format string, args ...interface{}) {
 	Logger.Debugf(format, args...)
-	notifyUI("DEBUG", fmt.Sprintf(format, args...))
+	if Logger.GetLevel() <= log.DebugLevel {
+		notifyUI("DEBUG", fmt.Sprintf(format, args...))
+	}
 }
 
 func Warnf(format string, args ...interface{}) {

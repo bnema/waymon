@@ -47,16 +47,6 @@ var configShowCmd = &cobra.Command{
 		logger.Infof("  Edge Threshold: %d pixels", cfg.Client.EdgeThreshold)
 		logger.Infof("  Hotkey: %s+%s", cfg.Client.HotkeyModifier, cfg.Client.HotkeyKey)
 
-		logger.Info("\n[Display]")
-		logger.Infof("  Refresh Interval: %d seconds", cfg.Display.RefreshInterval)
-		logger.Infof("  Backend: %s", cfg.Display.Backend)
-		logger.Infof("  Cursor Tracking: %v", cfg.Display.CursorTracking)
-
-		logger.Info("\n[Input]")
-		logger.Infof("  Mouse Sensitivity: %.2f", cfg.Input.MouseSensitivity)
-		logger.Infof("  Scroll Speed: %.2f", cfg.Input.ScrollSpeed)
-		logger.Infof("  Keyboard Enabled: %v", cfg.Input.EnableKeyboard)
-		logger.Infof("  Keyboard Layout: %s", cfg.Input.KeyboardLayout)
 
 		if len(cfg.Hosts) > 0 {
 			logger.Info("\n[Hosts]")
