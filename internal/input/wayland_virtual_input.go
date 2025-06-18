@@ -333,7 +333,7 @@ func (w *WaylandVirtualInput) InjectMouseMove(dx, dy float64) error {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 
-	logger.Debugf("[WAYLAND-INPUT] InjectMouseMove called: dx=%.2f, dy=%.2f, capturing=%v, virtualPtr=%v", dx, dy, w.capturing, w.virtualPtr != nil)
+	logger.Debugf("[WAYLAND-INPUT] InjectMouseMove called: capturing=%v, virtualPtr=%v", w.capturing, w.virtualPtr != nil)
 
 	if !w.capturing || w.virtualPtr == nil {
 		return fmt.Errorf("virtual pointer not available (capturing=%v, virtualPtr=%v)", w.capturing, w.virtualPtr != nil)
@@ -358,7 +358,7 @@ func (w *WaylandVirtualInput) InjectMousePosition(x, y uint32) error {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 
-	logger.Debugf("[WAYLAND-INPUT] InjectMousePosition called: x=%d, y=%d, capturing=%v, virtualPtr=%v", x, y, w.capturing, w.virtualPtr != nil)
+	logger.Debugf("[WAYLAND-INPUT] InjectMousePosition called: capturing=%v, virtualPtr=%v", w.capturing, w.virtualPtr != nil)
 
 	if !w.capturing || w.virtualPtr == nil {
 		return fmt.Errorf("virtual pointer not available (capturing=%v, virtualPtr=%v)", w.capturing, w.virtualPtr != nil)
@@ -383,7 +383,7 @@ func (w *WaylandVirtualInput) InjectMouseButton(button uint32, pressed bool) err
 	w.mu.Lock()
 	defer w.mu.Unlock()
 
-	logger.Debugf("[WAYLAND-INPUT] InjectMouseButton called: button=%d, pressed=%v, capturing=%v, virtualPtr=%v", button, pressed, w.capturing, w.virtualPtr != nil)
+	logger.Debugf("[WAYLAND-INPUT] InjectMouseButton called: capturing=%v, virtualPtr=%v", w.capturing, w.virtualPtr != nil)
 
 	if !w.capturing || w.virtualPtr == nil {
 		return fmt.Errorf("virtual pointer not available (capturing=%v, virtualPtr=%v)", w.capturing, w.virtualPtr != nil)
@@ -568,7 +568,7 @@ func (w *WaylandVirtualInput) handlePointerAxis(event client.PointerAxisEvent) {
 // handlePointerEnter handles pointer enter events
 func (w *WaylandVirtualInput) handlePointerEnter(event client.PointerEnterEvent) { //nolint:unused // event handler kept for future use
 	// Could be used for edge detection later
-	logger.Debugf("Pointer entered surface at (%.2f, %.2f)", event.SurfaceX, event.SurfaceY)
+	logger.Debug("Pointer entered surface")
 }
 
 // handlePointerLeave handles pointer leave events
@@ -621,6 +621,5 @@ func (w *WaylandVirtualInput) handleKeyboardLeave(event client.KeyboardLeaveEven
 
 // handleKeyboardModifiers handles keyboard modifier events
 func (w *WaylandVirtualInput) handleKeyboardModifiers(event client.KeyboardModifiersEvent) { //nolint:unused // event handler kept for future use
-	logger.Debugf("Keyboard modifiers: depressed=%d, latched=%d, locked=%d",
-		event.ModsDepressed, event.ModsLatched, event.ModsLocked)
+	logger.Debug("Keyboard modifiers changed")
 }
