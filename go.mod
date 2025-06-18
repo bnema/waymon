@@ -3,7 +3,6 @@ module github.com/bnema/waymon
 go 1.24.4
 
 require (
-	github.com/bendahl/uinput v1.7.0
 	github.com/bnema/wayland-virtual-input-go v0.2.0
 	github.com/charmbracelet/bubbles v0.21.0
 	github.com/charmbracelet/bubbletea v1.3.5
