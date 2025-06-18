@@ -47,22 +47,34 @@ func runClient(cmd *cobra.Command, args []string) error {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	// Set up file logging since Bubble Tea will hide terminal output
-	// This MUST be done before any log output to avoid TUI corruption
-	logFile, err := logger.SetupFileLogging("CLIENT")
-	if err != nil {
-		return fmt.Errorf("failed to setup file logging: %w", err)
+	// Get configuration first to check logging settings
+	cfg := config.Get()
+	
+	// Apply log level from config if set
+	if cfg.Logging.LogLevel != "" {
+		logger.SetLevel(cfg.Logging.LogLevel)
 	}
-	defer func() {
-		if err := logFile.Close(); err != nil {
-			logger.Errorf("Failed to close log file: %v", err)
+	
+	// Set up file logging if enabled
+	var logFile *os.File
+	if cfg.Logging.FileLogging {
+		// Set up file logging since Bubble Tea will hide terminal output
+		// This MUST be done before any log output to avoid TUI corruption
+		var err error
+		logFile, err = logger.SetupFileLogging("CLIENT")
+		if err != nil {
+			return fmt.Errorf("failed to setup file logging: %w", err)
 		}
-	}()
+		defer func() {
+			if logFile != nil && logFile.Fd() != 0 {
+				if err := logFile.Close(); err != nil {
+					logger.Errorf("Failed to close log file: %v", err)
+				}
+			}
+		}()
+	}
 
 	// Setup verification is no longer needed - libei handles permissions automatically
-
-	// Get configuration
-	cfg := config.Get()
 
 	// Determine server address
 	if hostName != "" {

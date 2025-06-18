@@ -210,20 +210,33 @@ func runServer(cmd *cobra.Command, args []string) error {
 
 	// Set config path to system-wide location for server mode
 	config.SetConfigPath("/etc/waymon/waymon.toml")
+	
+	// Get configuration first to check logging settings
+	cfg := config.Get()
+	
+	// Apply log level from config if set
+	if cfg.Logging.LogLevel != "" {
+		logger.SetLevel(cfg.Logging.LogLevel)
+	}
 
-	// Set up file logging since Bubble Tea will hide terminal output
-	logFile, err := logger.SetupFileLogging("SERVER")
-	if err != nil {
-		return fmt.Errorf("failed to setup file logging: %w", err)
+	// Set up file logging if enabled
+	var logFile *os.File
+	if cfg.Logging.FileLogging {
+		// Set up file logging since Bubble Tea will hide terminal output
+		var err error
+		logFile, err = logger.SetupFileLogging("SERVER")
+		if err != nil {
+			return fmt.Errorf("failed to setup file logging: %w", err)
+		}
 	}
 	defer func() {
-		if err := logFile.Close(); err != nil {
-			logger.Errorf("Failed to close log file: %v", err)
+		if logFile != nil && logFile.Fd() != 0 {
+			if err := logFile.Close(); err != nil {
+				logger.Errorf("Failed to close log file: %v", err)
+			}
 		}
 	}()
 
-	// Get configuration
-	cfg := config.Get()
 
 	// Input devices will be automatically detected by all-devices capture
 	logger.Info("Using automatic all-devices input capture - no setup required!")
@@ -348,15 +361,17 @@ func runServer(cmd *cobra.Command, args []string) error {
 		if _, err := p.Run(); err != nil {
 			return err
 		}
-	}
-
-	// Wait for shutdown signal or server error
-	select {
-	case <-done:
-		logger.Info("Received shutdown signal")
-	case err := <-serverErrCh:
-		if err != nil {
-			logger.Errorf("Server error: %v", err)
+		// If TUI mode, we need to wait for TUI to exit before proceeding with shutdown
+		// as the signal might have been caught while TUI was running
+	} else {
+		// No TUI mode - wait for shutdown signal or server error
+		select {
+		case <-done:
+			logger.Info("Received shutdown signal")
+		case err := <-serverErrCh:
+			if err != nil {
+				logger.Errorf("Server error: %v", err)
+			}
 		}
 	}
 
