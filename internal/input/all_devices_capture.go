@@ -236,7 +236,13 @@ func (a *AllDevicesCapture) discoverAndStartDevices() error {
 			if err := a.addDevice(path); err != nil {
 				// Add to ignored devices list so we don't try again
 				a.ignoredDevices[path] = true
-				logger.Debugf("Device %s not suitable for capture, adding to ignore list: %v", path, err)
+				if strings.Contains(err.Error(), "no relevant input capabilities") {
+					// This is expected for many devices, use trace level
+					logger.Debugf("Device %s not suitable for capture: %v", path, err)
+				} else {
+					// This might be a real error, log it
+					logger.Warnf("Failed to add device %s: %v", path, err)
+				}
 			} else {
 				deviceCount++
 			}
@@ -268,6 +274,7 @@ func (a *AllDevicesCapture) addDevice(path string) error {
 
 	// Check if device has input capabilities we care about
 	if !a.isValidInputDevice(device) {
+		device.File.Close()
 		return fmt.Errorf("device %s has no relevant input capabilities", path)
 	}
 
@@ -318,6 +325,32 @@ func (a *AllDevicesCapture) stopDeviceHandler(handler *deviceHandler) {
 
 // isValidInputDevice checks if a device has input capabilities we care about
 func (a *AllDevicesCapture) isValidInputDevice(device *evdev.InputDevice) bool {
+	// Filter out virtual terminals, console devices, and other system devices
+	deviceName := strings.ToLower(device.Name)
+	
+	// Exclude devices that are likely to cause issues
+	excludePatterns := []string{
+		"virtual console",
+		"system console",
+		"tty",
+		"vt",
+		"console mouse",
+		"speakup",
+		"pc speaker",
+		"hdmi",
+		"video bus",
+		"power button",
+		"sleep button",
+		"lid switch",
+	}
+	
+	for _, pattern := range excludePatterns {
+		if strings.Contains(deviceName, pattern) {
+			logger.Debugf("Excluding device %s (matches pattern: %s)", device.Name, pattern)
+			return false
+		}
+	}
+	
 	capabilities := device.Capabilities
 
 	// Look for capability types we care about
