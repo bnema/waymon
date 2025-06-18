@@ -35,6 +35,11 @@ type ClientModel struct {
 	windowWidth  int
 }
 
+// ControlStatusMsg is sent when control status changes
+type ControlStatusMsg struct {
+	Status client.ControlStatus
+}
+
 // NewClientModel creates a new client UI model
 func NewClientModel(serverAddr string, inputReceiver *client.InputReceiver, version string) *ClientModel {
 	s := spinner.New()
@@ -53,14 +58,17 @@ func NewClientModel(serverAddr string, inputReceiver *client.InputReceiver, vers
 		version:       version,
 	}
 
-	// Set up status change callback
-	if inputReceiver != nil {
-		inputReceiver.OnStatusChange(func(status client.ControlStatus) {
-			model.controlStatus = status
+	return model
+}
+
+// SetProgram sets the tea.Program for sending updates
+func (m *ClientModel) SetProgram(p *tea.Program) {
+	if m.inputReceiver != nil {
+		m.inputReceiver.OnStatusChange(func(status client.ControlStatus) {
+			// Send status update to UI
+			p.Send(ControlStatusMsg{Status: status})
 		})
 	}
-
-	return model
 }
 
 // Init initializes the client model
@@ -79,12 +87,23 @@ func (m *ClientModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.KeyMsg:
 		switch msg.String() {
 		case "r":
-			// Request reconnection
-			m.SetMessage("info", "Reconnecting...")
-			// TODO: Implement reconnection logic
+			if m.controlStatus.BeingControlled {
+				// When being controlled, 'r' requests release
+				if m.inputReceiver != nil {
+					if err := m.inputReceiver.RequestControlRelease(); err != nil {
+						m.SetMessage("error", fmt.Sprintf("Failed to request release: %v", err))
+					} else {
+						m.SetMessage("info", "Requested control release")
+					}
+				}
+			} else {
+				// When not being controlled, 'r' reconnects
+				m.SetMessage("info", "Reconnecting...")
+				// TODO: Implement reconnection logic
+			}
 
 		case "p":
-			// Request pause/release control
+			// Alternative key for pause/release control (backwards compatibility)
 			if m.inputReceiver != nil && m.controlStatus.BeingControlled {
 				if err := m.inputReceiver.RequestControlRelease(); err != nil {
 					m.SetMessage("error", fmt.Sprintf("Failed to request release: %v", err))
@@ -134,6 +153,15 @@ func (m *ClientModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case LogMsg:
 		m.AddLogEntry(msg.Entry)
+		
+	case ControlStatusMsg:
+		m.controlStatus = msg.Status
+		// Log the status change
+		if msg.Status.BeingControlled {
+			m.SetMessage("info", fmt.Sprintf("Now being controlled by %s", msg.Status.ControllerName))
+		} else {
+			m.SetMessage("success", "Control released")
+		}
 	}
 
 	// Clear expired messages
@@ -218,7 +246,7 @@ func (m *ClientModel) renderControlStatus() string {
 
 		// Show controls for when being controlled
 		controlsStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("240"))
-		controls := "  Controls: [p] Request pause • [r] Reconnect • [q] Quit"
+		controls := "  Controls: [r] Release control • [p] Pause (alt) • [q] Quit"
 		output.WriteString(controlsStyle.Render(controls))
 	case m.connected:
 		// Connected but idle
