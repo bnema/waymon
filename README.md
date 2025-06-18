@@ -1,325 +1,202 @@
 # Waymon
 
-**Wayland Mouse Over Network** - A client/server mouse sharing application for Wayland compositors. It allows seamless mouse movement between two computers on a local network, using native Wayland virtual input protocols for input injection.
+**Wayland Mouse Over Network** - A seamless input sharing solution for Wayland that allows you to control multiple computers with a single mouse and keyboard, similar to Synergy/Barrier but built specifically for modern Wayland compositors.
+
+> ⚠️ **Early Development Stage**: This project is in active development. While the core functionality is working, expect breaking changes and rough edges. Contributions and feedback are welcome!
 
 ## Features
 
-- **Wayland-native**: Works **ONLY** with Wayland compositors
-- **Secure by design**: Uses SSH for encrypted, authenticated connections
-- **Whitelist authentication**: Interactive approval for new SSH keys
-- **Edge detection**: Move mouse to screen edge to switch between computers
-- **Multi-monitor support**: Automatic detection of monitor configuration
-- **Simple TUI**: Clean terminal interface for monitoring connections
+### Working
+- ✅ **Seamless mouse movement** between computers by moving to screen edges
+- ✅ **Mouse button events** (left, right, middle click)
+- ✅ **Keyboard input** forwarding
+- ✅ **Secure SSH transport** with key-based authentication
+- ✅ **Real-time TUI** for monitoring connections and status
+- ✅ **Automatic input release** on client disconnect
+- ✅ **Emergency release** mechanisms (Ctrl+ESC, timeout, manual)
 
-## Prerequisites
+### In Progress
+- 🚧 Absolute mouse positioning
+- 🚧 Cursor constraints
+- 🚧 Improved display boundary detection
+- 🚧 Edges detection and switching
+- 🚧 Multiple monitor support on client
+- 🚧 Multiple simultaneous client support
+- 🚧 Clipboard synchronization (TBD)
 
-### System Requirements
+## How It Works
 
-- Linux system with Wayland compositor (wlroots-based compositors like Sway, Hyprland, etc.)
-- Wayland virtual input protocol support (zwp_virtual_pointer_v1 and zwp_virtual_keyboard_v1)
-- Sudo privileges on server machine (required for evdev device access)
+Waymon captures input events on the server (the one with the physical keyboard and mouse) using Linux's evdev interface, forwards them over an encrypted SSH connection to the client, and injects them using Wayland's virtual input protocols. When you move your mouse to the edge of your screen, control seamlessly switches between computers.
 
-### Dependencies
+## Requirements
 
-The following system packages may be required:
-- Wayland development headers
-- libevdev (for server-side input capture)
-- Development headers if building from source
+### Server (Computer being controlled)
+- Linux with Wayland compositor
+- Root/sudo access (for evdev input capture)
+- SSH server
+- Port 52525 available (configurable)
+
+### Client (Computer you're controlling from)
+- Linux with Wayland compositor supporting:
+  - `zwp_virtual_pointer_v1` protocol
+  - `zwp_virtual_keyboard_v1` protocol
+- SSH client with key-based authentication
+
+### Tested Compositors
+- ✅ Hyprland
+- ⚠️ GNOME Wayland (needs testing)
+- ⚠️ KDE Wayland (needs testing)
 
 ## Installation
 
-### Binary Releases
-
-Download the latest release from [GitHub Releases](https://github.com/bnema/waymon/releases).
-
-#### Arch Linux
-
-```bash
-# Download the package
-wget https://github.com/bnema/waymon/releases/download/v0.1.1/waymon_0.1.1_linux_amd64.pkg.tar.zst
-
-# Install with pacman
-sudo pacman -U waymon_0.1.1_linux_amd64.pkg.tar.zst
-```
-
-#### Debian/Ubuntu
-
-```bash
-# Download the package
-wget https://github.com/bnema/waymon/releases/download/v0.1.1/waymon_0.1.1_linux_amd64.deb
-
-# Install with dpkg
-sudo dpkg -i waymon_0.1.1_linux_amd64.deb
-```
-
-#### Fedora/RHEL/CentOS
-
-```bash
-# Download the package
-wget https://github.com/bnema/waymon/releases/download/v0.1.1/waymon_0.1.1_linux_amd64.rpm
-
-# Install with rpm
-sudo rpm -i waymon_0.1.1_linux_amd64.rpm
-```
-
-
-#### Generic Linux (Tarball)
-
-```bash
-# Download the tarball
-wget https://github.com/bnema/waymon/releases/download/v0.1.1/waymon_Linux_x86_64.tar.gz
-
-# Extract
-tar -xzf waymon_Linux_x86_64.tar.gz
-
-# Move to PATH
-sudo mv waymon /usr/local/bin/
-```
-
-### From Source
+### From Source (Recommended during alpha)
 
 ```bash
 git clone https://github.com/bnema/waymon.git
 cd waymon
 go build -o waymon .
+sudo mv waymon /usr/local/bin/
 ```
 
-### Using Go Install
-
+### The Go Install way
 ```bash
 go install github.com/bnema/waymon@latest
 ```
 
 ## Quick Start
 
-1. Install Waymon on both computers using one of the methods above
-2. On the server (computer to be controlled):
+1. **On the server** (computer to be controlled):
    ```bash
-   sudo waymon server        # Start server
+   sudo waymon server
    ```
-3. On the client (computer you're controlling from):
+
+2. **On the client** (computer you're controlling from):
    ```bash
    waymon client --host SERVER_IP:52525
    ```
-4. Move your mouse to the edge of the screen to switch between computers!
+
+3. **First connection**: You'll be prompted on the server to approve the client's SSH key
+
+4. **Start using**: Move your mouse to the edge of the screen to switch control!
+
+## Server Controls
+
+When running the server, you can use these keyboard shortcuts in the TUI:
+
+- **0** or **ESC**: Return control to local (server) system
+- **1-5**: Switch control to connected client by number
+- **R**: Manual emergency release (when controlling a client)
+- **Tab**: Cycle through connected clients
+- **G/g**: Navigate logs (bottom/top)
+- **Q**: Quit server
+
+## Emergency Release
+
+If input gets stuck while controlling a client, Waymon provides multiple release mechanisms:
+
+1. **Ctrl+ESC**: Emergency key combination (when grabbed)
+2. **R key**: Manual release in server TUI
+3. **30-second timeout**: Automatic release after inactivity
+4. **Client disconnect**: Automatic release when client disconnects
+5. **SIGUSR1**: Send signal to server process: `sudo pkill -USR1 waymon`
+6. **Touch file**: Create `/tmp/waymon-release` to trigger release
 
 ## Configuration
 
-Copy the example configuration file:
-
-```bash
-cp waymon.toml.example ~/.config/waymon/waymon.toml
-```
-
-Edit the configuration file to match your network setup:
+Waymon uses TOML configuration files. Create `~/.config/waymon/waymon.toml`:
 
 ```toml
 [server]
 port = 52525
 bind_address = "0.0.0.0"
 name = "my-desktop"
+max_clients = 1
+ssh_whitelist_only = true
+log_level = "INFO"          # Set to "DEBUG" for troubleshooting
 
 [client]
 server_address = "192.168.1.100:52525"
+auto_connect = false
+reconnect_delay = 5
 edge_threshold = 5
+# Hotkey switching disabled by default during alpha
+# hotkey_key = "s"
+# hotkey_modifier = "ctrl+alt"
 
-[[hosts]]
-name = "laptop"
-address = "192.168.1.100:52525"
-position = "left"
-```
-
-## Usage
-
-### Server Mode
-
-Run the server on the computer you want to control:
-
-```bash
-sudo waymon server
-```
-
-Options:
-- `--port, -p`: Port to listen on (default: 52525)
-- `--bind, -b`: Bind address (default: 0.0.0.0)
-
-Example:
-```bash
-sudo waymon server --port 52525 --bind 192.168.1.100
-```
-
-**Note**: Server mode requires root privileges for evdev device access to capture mouse and keyboard input.
-
-### Client Mode
-
-Run the client on the computer you want to control from:
-
-```bash
-waymon client --host 192.168.1.100:52525
-```
-
-Options:
-- `--host, -H`: Server address (host:port)
-- `--edge, -e`: Edge detection size in pixels (default: 5)
-- `--name, -n`: Use named host from configuration
-
-Examples:
-```bash
-# Connect to specific server
-waymon client --host 192.168.1.100:52525
-
-# Use configured host
-waymon client --name laptop
-
-# Adjust edge sensitivity
-waymon client --host 192.168.1.100:52525 --edge 10
-```
-
-### Using Named Hosts
-
-Configure hosts in your `waymon.toml` file:
-
-```toml
-[[hosts]]
-name = "laptop"
-address = "192.168.1.100:52525"
-position = "left"
-
-[[hosts]]
-name = "workstation"
-address = "192.168.1.101:52525"
-position = "right"
-```
-
-Then connect using the name:
-```bash
-waymon client --name laptop
-```
-
-## Testing
-
-### Check Monitor Configuration
-
-View your current monitor setup:
-
-```bash
-# Human-readable format
-waymon monitors
-
-# JSON format (for scripts)
-waymon monitors --json
-```
-
-### Test Input Functionality
-
-Test uinput functionality (requires root):
-
-```bash
-sudo waymon test input
-```
-
-This will draw circles with the mouse to verify input injection works.
-
-## SSH Authentication
-
-Waymon uses SSH key-based authentication with a whitelist system:
-
-1. **First Connection**: When a new client connects, the server will prompt you to approve the SSH key
-2. **Interactive Approval**: You'll see the client's address and SSH key fingerprint
-3. **Whitelist Storage**: Approved keys are saved to the configuration file
-4. **Future Connections**: Whitelisted keys connect automatically without prompts
-
-To disable whitelist-only mode (accept all SSH keys without approval):
-```toml
-[server]
-ssh_whitelist_only = false
-```
-
-## Configuration
-
-Waymon looks for configuration files in the following order:
-1. `./waymon.toml` (current directory)
-2. `~/.config/waymon/waymon.toml` (user config)
-3. `/etc/waymon/waymon.toml` (system config)
-
-### Server Configuration
-
-```toml
-[server]
-port = 52525                        # Port to listen on
-bind_address = "0.0.0.0"            # Bind address
-name = "my-desktop"                 # Server name
-max_clients = 1                     # Maximum simultaneous clients
-ssh_whitelist_only = true           # Only allow whitelisted SSH keys
-ssh_whitelist = []                  # List of allowed SSH key fingerprints
-```
-
-### Client Configuration
-
-```toml
-[client]
-server_address = ""       # Default server address
-auto_connect = false      # Auto-connect on startup
-reconnect_delay = 5       # Reconnection delay in seconds
-edge_threshold = 5        # Edge detection sensitivity
-```
-
-### Display Configuration
-
-```toml
 [display]
-refresh_interval = 5      # Monitor refresh interval
-backend = "auto"          # Display backend
-cursor_tracking = true    # Enable cursor tracking
+backend = "auto"            # auto, wlr, sudo, or randr
 ```
 
 ## Troubleshooting
 
-### Permission Errors
+### Debug Logging
 
-If you get permission errors:
+Enable debug logs by setting the environment variable:
+```bash
+sudo LOG_LEVEL=DEBUG waymon server
+```
 
-1. Make sure you're running the server with `sudo`
-2. Check input device permissions: `ls -la /dev/input/`
-3. Verify your user has access to input devices
-4. Add your user to the input group: `sudo usermod -a -G input $USER`
+### Common Issues
 
-### Connection Issues
+**"Failed to grab device: device or resource busy"**
+- Another application may be using exclusive input access
+- Try closing other input management tools
 
-If client can't connect to server:
+**"Emergency release triggered"**
+- This is a safety feature - input was inactive for 30 seconds
+- Increase timeout in code if needed (will be configurable soon)
 
-1. Check if server is running: `sudo waymon server`
-2. Verify network connectivity: `ping <server-ip>`
-3. Check firewall settings on server
-4. Ensure correct port is configured (default: 52525)
+**Mouse clicks not working**
+- Fixed in latest version - update if you're on an older build
+- Check debug logs for button mapping issues
 
-### Display Detection Problems
-
-If monitors aren't detected properly:
-
-1. Check monitor detection: `waymon monitors`
-2. Try different display backends in configuration
-3. Check if running under Wayland compositor
-4. Verify wlr-randr or similar tools work
-
-### Input Not Working
-
-If mouse input isn't being injected:
-
-1. Test input functionality: `sudo waymon test input`
-2. Check uinput module: `lsmod | grep uinput`
-3. Load uinput module: `sudo modprobe uinput`
-4. Verify /dev/uinput exists and is writable
+**Keyboard input showing wrong characters**
+- Keymap synchronization is not yet implemented
+- Both systems should use the same keyboard layout
 
 ## Architecture
 
-Waymon uses a client/server architecture:
+```mermaid
+graph LR
+  subgraph "Server (where physical mouse/keyboard are)"
+    direction TB
+    evdev["Linux Input Event Devices<br>(/dev/input/event*)"] --> server_app["Waymon Server Process<br>(captures evdev events)"]
+  end
 
-- **Server**: Receives mouse events and injects them via uinput
-- **Client**: Captures mouse at screen edges and sends events to server
-- **Protocol**: TCP connection with Protocol Buffers serialization
-- **UI**: Bubble Tea terminal interface for monitoring
+  subgraph "Client (controlled remotely)"
+    direction TB
+    client_app["Waymon Client Process<br>(receives events)"] --> virtual_input["Wayland Virtual Input<br>(injects events)"]
+  end
+
+  server_app -- "Input Events (Protobuf) over<br>Encrypted SSH Tunnel" --> client_app
+```
+
+## Contributing
+
+Contributions are welcome! Areas where help is needed:
+
+- Testing on different Wayland compositors
+- Security review
+- Documentation improvements
+- Bug reports and fixes
+- Multiple monitor support
+- TUI polish
+
+## Related Projects
+
+- [Synergy](https://symless.com/synergy) - Commercial cross-platform solution
+- [Barrier](https://github.com/debauchee/barrier) - Open-source fork of Synergy
+- [Input-leap](https://github.com/input-leap/input-leap) - Barrier fork with Wayland support
+- [waynergy](https://github.com/r-c-f/waynergy) - Synergy client for Wayland
+- [lan-mouse](https://github.com/feschber/lan-mouse) - Rust-based input sharing
 
 ## License
 
-MIT License - see LICENSE file for details.
+MIT License - see LICENSE file for details
+
+## Acknowledgments
+
+- Built with [Bubble Tea](https://github.com/charmbracelet/bubbletea) for the TUI
+- Uses [Wish](https://github.com/charmbracelet/wish) for SSH server
+- Protocol Buffers for efficient serialization
+- The Wayland community for protocol documentation
