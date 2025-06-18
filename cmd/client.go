@@ -189,9 +189,6 @@ func runClient(cmd *cobra.Command, args []string) error {
 			
 			logger.Infof("Connection attempt %d to %s", attempt, serverAddr)
 			
-			// Create a timeout context for this connection attempt
-			connectCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
-			
 			// Try to connect
 			connectionStart := time.Now()
 			
@@ -201,9 +198,9 @@ func runClient(cmd *cobra.Command, args []string) error {
 				p.Send(ui.WaitingApprovalMsg{})
 			})
 			
-			err := inputReceiver.Connect(connectCtx, privateKeyPath)
+			// Use the parent context for the connection - it needs to stay alive for receiving
+			err := inputReceiver.Connect(ctx, privateKeyPath)
 			approvalTimer.Stop() // Ensure timer is cleaned up
-			cancel()
 			
 			if err == nil {
 				// Connection successful

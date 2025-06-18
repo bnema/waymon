@@ -396,8 +396,7 @@ func (ir *InputReceiver) isControlSwitchHotkey(keyEvent *protocol.KeyboardEvent)
 		// Update last hotkey press time
 		ir.lastHotkeyPress = now
 
-		logger.Debugf("[CLIENT-RECEIVER] Switch hotkey detected: %s+%s (key=%d, modifiers=0x%x)",
-			cfg.Client.HotkeyModifier, cfg.Client.HotkeyKey, keyEvent.Key, keyEvent.Modifiers)
+		logger.Debugf("[CLIENT-RECEIVER] Switch hotkey detected")
 		return true
 	}
 
