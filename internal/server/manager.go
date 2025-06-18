@@ -227,8 +227,7 @@ func (cm *ClientManager) SwitchToClient(clientID string) error {
 				y:      centerY,
 				bounds: bounds,
 			}
-			logger.Debugf("[SERVER-MANAGER] Initialized cursor state for client %s: pos=(%.1f,%.1f), bounds=(%.0f,%.0f,%.0f,%.0f)",
-				client.Name, centerX, centerY, bounds.minX, bounds.minY, bounds.maxX, bounds.maxY)
+			logger.Debugf("[SERVER-MANAGER] Initialized cursor state for client %s", client.Name)
 		}
 	} else {
 		logger.Error("[SERVER-MANAGER] No SSH server available to send control request")
@@ -420,8 +419,7 @@ func (cm *ClientManager) HandleInputEvent(event *protocol.InputEvent) {
 			hitBoundary := false
 			if newX != constrainedX || newY != constrainedY {
 				hitBoundary = true
-				logger.Debugf("[SERVER-MANAGER] Cursor hit boundary: attempted=(%.1f,%.1f), constrained=(%.1f,%.1f), bounds=(%.0f,%.0f,%.0f,%.0f)",
-					newX, newY, constrainedX, constrainedY, cursor.bounds.minX, cursor.bounds.minY, cursor.bounds.maxX, cursor.bounds.maxY)
+				logger.Debug("[SERVER-MANAGER] Cursor hit boundary")
 			}
 
 			// Calculate the actual movement after constraints
@@ -453,7 +451,7 @@ func (cm *ClientManager) HandleInputEvent(event *protocol.InputEvent) {
 			// Update tracked position to match absolute position
 			cursor.x = float64(mousePosEvent.X)
 			cursor.y = float64(mousePosEvent.Y)
-			logger.Debugf("[SERVER-MANAGER] Updated cursor position from absolute event: (%.1f,%.1f)", cursor.x, cursor.y)
+			logger.Debug("[SERVER-MANAGER] Updated cursor position from absolute event")
 		}
 	}
 
@@ -609,8 +607,7 @@ func (cm *ClientManager) updateClientConfiguration(config *protocol.ClientConfig
 				cursor.bounds = bounds
 				// Constrain current position to new bounds
 				cursor.x, cursor.y = cm.constrainCursorPosition(cursor.x, cursor.y, bounds)
-				logger.Debugf("[SERVER-MANAGER] Updated cursor bounds for active client %s: bounds=(%.0f,%.0f,%.0f,%.0f)",
-					targetClient.Name, bounds.minX, bounds.minY, bounds.maxX, bounds.maxY)
+				logger.Debugf("[SERVER-MANAGER] Updated cursor bounds for active client %s", targetClient.Name)
 			}
 		}
 	} else {

@@ -309,19 +309,8 @@ func (ir *InputReceiver) SendStatusUpdate() error {
 	return nil
 }
 
-// RequestControlRelease requests the server to stop controlling this client
+// RequestControlRelease sends a control release request to the server
 func (ir *InputReceiver) RequestControlRelease() error {
-	if !ir.connected || ir.sshConnection == nil {
-		return fmt.Errorf("not connected")
-	}
-
-	// TODO: Implement control release request via SSH
-	logger.Debug("TODO: Request control release from server")
-	return nil
-}
-
-// requestControlRelease sends a control release request to the server
-func (ir *InputReceiver) requestControlRelease() error {
 	ir.mu.RLock()
 	sshConnection := ir.sshConnection
 	clientID := ir.clientID
@@ -730,24 +719,23 @@ func (ir *InputReceiver) injectEvent(event *protocol.InputEvent) error {
 
 	switch e := event.Event.(type) {
 	case *protocol.InputEvent_MouseMove:
-		logger.Debugf("[CLIENT-RECEIVER] Injecting mouse move: dx=%.2f, dy=%.2f", e.MouseMove.Dx, e.MouseMove.Dy)
+		logger.Debugf("[CLIENT-RECEIVER] Injecting mouse move event")
 		return backend.InjectMouseMove(e.MouseMove.Dx, e.MouseMove.Dy)
 
 	case *protocol.InputEvent_MouseButton:
-		logger.Debugf("[CLIENT-RECEIVER] Injecting mouse button: button=%d, pressed=%v", e.MouseButton.Button, e.MouseButton.Pressed)
+		logger.Debugf("[CLIENT-RECEIVER] Injecting mouse button event")
 		return backend.InjectMouseButton(e.MouseButton.Button, e.MouseButton.Pressed)
 
 	case *protocol.InputEvent_MouseScroll:
-		logger.Debugf("[CLIENT-RECEIVER] Injecting mouse scroll: dx=%.2f, dy=%.2f", e.MouseScroll.Dx, e.MouseScroll.Dy)
+		logger.Debugf("[CLIENT-RECEIVER] Injecting mouse scroll event")
 		return backend.InjectMouseScroll(e.MouseScroll.Dx, e.MouseScroll.Dy)
 
 	case *protocol.InputEvent_Keyboard:
-		logger.Debugf("[CLIENT-RECEIVER] Injecting keyboard event: key=%d, pressed=%v", e.Keyboard.Key, e.Keyboard.Pressed)
+		logger.Debugf("[CLIENT-RECEIVER] Injecting keyboard event")
 		return backend.InjectKeyEvent(e.Keyboard.Key, e.Keyboard.Pressed)
 
 	case *protocol.InputEvent_MousePosition:
-		logger.Debugf("[CLIENT-RECEIVER] Received mouse position event: x=%d, y=%d",
-			e.MousePosition.X, e.MousePosition.Y)
+		logger.Debugf("[CLIENT-RECEIVER] Received mouse position event")
 		// Use absolute positioning if supported by the backend
 		if err := backend.InjectMousePosition(uint32(e.MousePosition.X), uint32(e.MousePosition.Y)); err != nil {
 			logger.Warnf("[CLIENT-RECEIVER] Failed to inject absolute mouse position: %v", err)
