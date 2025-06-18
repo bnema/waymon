@@ -119,7 +119,8 @@ func (s *Server) initInput() error {
 	// so the test event generator can start properly
 	logger.Info("Server: Setting up input event callback (before Start)")
 	s.inputBackend.OnInputEvent(func(event *protocol.InputEvent) {
-		logger.Warnf("Server: Received input event from backend: %T", event.Event)
+		// Only log at trace level to avoid spam
+		logger.Tracef("Server: Received input event from backend: %T", event.Event)
 		
 		// Update emergency release activity tracking
 		if s.emergency != nil {

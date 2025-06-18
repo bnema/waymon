@@ -662,11 +662,24 @@ func (cm *ClientManager) UnregisterClient(id string) {
 		return
 	}
 
-	// If this was the active client, switch to local
+	// If this was the active client, switch to local and release input
 	if cm.activeClientID == id {
+		logger.Infof("[SERVER-MANAGER] Active client %s disconnected, switching to local", client.Name)
+		
+		// Release input capture
+		if cm.inputBackend != nil {
+			if err := cm.inputBackend.SetTarget(""); err != nil {
+				logger.Errorf("[SERVER-MANAGER] Failed to release input on client disconnect: %v", err)
+			}
+		}
+		
 		cm.activeClientID = ""
 		cm.controllingLocal = true
-		// Input will automatically go to local system when not actively routing
+		
+		// Send notification to UI if available
+		if cm.onActivity != nil {
+			cm.onActivity("WARN", fmt.Sprintf("Client %s disconnected - control returned to local", client.Name))
+		}
 	}
 
 	// Remove client
