@@ -272,42 +272,46 @@ func (m *ServerModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 
 		case "1", "2", "3", "4", "5":
-			// Switch to specific client by number
-			clientNum, _ := strconv.Atoi(msg.String())
-			if m.clientManager != nil && clientNum <= len(m.clients) && clientNum > 0 {
-				client := m.clients[clientNum-1]
+			// Only handle number keys for switching when controlling local
+			// This prevents keyboard events forwarded to clients from triggering switches
+			if m.localControl {
+				// Switch to specific client by number
+				clientNum, _ := strconv.Atoi(msg.String())
+				if m.clientManager != nil && clientNum <= len(m.clients) && clientNum > 0 {
+					client := m.clients[clientNum-1]
 
-				// Do the switch in a goroutine to prevent UI blocking
-				go func() {
-					if err := m.clientManager.SwitchToClient(client.ID); err != nil {
-						m.AddLogEntry(LogEntry{
-							Timestamp: time.Now(),
-							Level:     "ERROR",
-							Message:   fmt.Sprintf("Failed to switch to client %s: %v", client.Name, err),
-						})
-					}
-				}()
+					// Do the switch in a goroutine to prevent UI blocking
+					go func() {
+						if err := m.clientManager.SwitchToClient(client.ID); err != nil {
+							m.AddLogEntry(LogEntry{
+								Timestamp: time.Now(),
+								Level:     "ERROR",
+								Message:   fmt.Sprintf("Failed to switch to client %s: %v", client.Name, err),
+							})
+						}
+					}()
 
-				// Immediately update our local state for responsive UI
-				m.localControl = false
-				m.selectedClientIndex = clientNum - 1
-				m.activeClient = client
+					// Immediately update our local state for responsive UI
+					m.localControl = false
+					m.selectedClientIndex = clientNum - 1
+					m.activeClient = client
 
-				// Log the switch attempt
-				m.AddLogEntry(LogEntry{
-					Timestamp: time.Now(),
-					Level:     "INFO",
-					Message:   fmt.Sprintf("Switching to control %s (%s)...", client.Name, client.Address),
-				})
+					// Log the switch attempt
+					m.AddLogEntry(LogEntry{
+						Timestamp: time.Now(),
+						Level:     "INFO",
+						Message:   fmt.Sprintf("Switching to control %s (%s)...", client.Name, client.Address),
+					})
 
-				// Force immediate UI update
-				m.updateViewport()
+					// Force immediate UI update
+					m.updateViewport()
 
-				// Schedule a refresh to ensure state is synced
-				cmd := tea.Tick(200*time.Millisecond, func(t time.Time) tea.Msg {
-					return refreshClientListMsg{}
-				})
-				cmds = append(cmds, cmd)
+					// Schedule a refresh to ensure state is synced
+					cmd := tea.Tick(200*time.Millisecond, func(t time.Time) tea.Msg {
+						return refreshClientListMsg{}
+					})
+					cmds = append(cmds, cmd)
+				}
 			}
 
 		case "g":
