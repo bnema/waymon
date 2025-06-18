@@ -120,6 +120,12 @@ func (s *Server) initInput() error {
 	logger.Info("Server: Setting up input event callback (before Start)")
 	s.inputBackend.OnInputEvent(func(event *protocol.InputEvent) {
 		logger.Warnf("Server: Received input event from backend: %T", event.Event)
+		
+		// Update emergency release activity tracking
+		if s.emergency != nil {
+			s.emergency.UpdateActivity()
+		}
+		
 		if s.clientManager != nil {
 			s.clientManager.HandleInputEvent(event)
 		} else {
