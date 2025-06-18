@@ -534,7 +534,7 @@ func (a *AllDevicesCapture) captureFromDevice(ctx context.Context, handler *devi
 						a.mu.Lock()
 						a.ctrlPressed = (event.Value == 1)
 						a.mu.Unlock()
-						logger.Debugf("Ctrl key state changed: pressed=%v", event.Value == 1)
+						logger.Debug("Ctrl key state changed")
 					}
 
 					// Check for emergency release key combination (Ctrl+ESC)
@@ -547,8 +547,7 @@ func (a *AllDevicesCapture) captureFromDevice(ctx context.Context, handler *devi
 
 					// Debug emergency key detection
 					if event.Code == emergencyKey {
-						logger.Debugf("ESC key detected: value=%d, ctrlPressed=%v, noGrab=%v, target=%s", 
-							event.Value, ctrlPressed, noGrab, currentTarget)
+						logger.Debug("ESC key detected")
 					}
 					
 					// Only check emergency key if we're grabbing devices and Ctrl is pressed
