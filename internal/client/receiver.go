@@ -4,11 +4,9 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"strings"
 	"sync"
 	"time"
 
-	"github.com/bnema/waymon/internal/config"
 	"github.com/bnema/waymon/internal/display"
 	"github.com/bnema/waymon/internal/input"
 	"github.com/bnema/waymon/internal/logger"
@@ -247,7 +245,7 @@ func (ir *InputReceiver) handleControlEvent(control *protocol.ControlEvent) {
 		ir.controlStatus.ControllerName = control.TargetId // Server ID/name
 		ir.controlStatus.ConnectedAt = time.Now().Unix()
 		logger.Infof("[CLIENT-RECEIVER] Control granted to server: %s", control.TargetId)
-		
+
 		// Show notification to user
 		logger.Infof("🖥️  %s is now controlling your system", control.TargetId)
 
@@ -257,7 +255,7 @@ func (ir *InputReceiver) handleControlEvent(control *protocol.ControlEvent) {
 		ir.controlStatus.BeingControlled = false
 		ir.controlStatus.ControllerName = ""
 		logger.Info("[CLIENT-RECEIVER] Control released by server")
-		
+
 		// Show notification to user
 		if previousController != "" {
 			logger.Infof("✅ %s has stopped controlling your system", previousController)
