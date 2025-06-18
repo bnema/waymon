@@ -122,68 +122,15 @@ func runClient(cmd *cobra.Command, args []string) error {
 
 	// Create the program with alt screen mode for proper full-screen UI
 	p := tea.NewProgram(model, tea.WithAltScreen())
+	
+	// Set up the program reference for status updates
+	model.SetProgram(p)
 
 	// Note: We'll set up the logger UI notifier AFTER p.Run() starts
 	// to avoid deadlock issues with p.Send() before the program is running
 
 	// Note: In redesigned architecture, client only receives input from server
 	// No local input capture needed
-
-	// Start server connection after TUI is running
-	// We need to delay this to avoid logger deadlock
-	connectToServer := func() {
-		// Now that TUI is running, set up logger to send to UI
-		logger.SetUINotifier(func(level, message string) {
-			logEntry := ui.LogEntry{
-				Timestamp: time.Now(),
-				Level:     level,
-				Message:   message,
-			}
-			p.Send(ui.LogMsg{Entry: logEntry})
-		})
-
-		logger.Info("Starting connection to server")
-
-		// Small delay to ensure TUI is fully ready
-		time.Sleep(100 * time.Millisecond)
-
-		logger.Infof("Attempting to connect to server at %s", serverAddr)
-
-		// Start connection with smart approval detection
-		// Only show "waiting for approval" if connection takes longer than expected
-		connectionStart := time.Now()
-
-		// Create a timer to show approval message if connection takes too long
-		approvalTimer := time.AfterFunc(3*time.Second, func() {
-			// If connection is still in progress after 3 seconds, likely waiting for approval
-			p.Send(ui.WaitingApprovalMsg{})
-		})
-		defer approvalTimer.Stop() // Ensure timer is cleaned up
-
-		// Use the parent context for the actual connection
-		// The input backend and SSH receive loop need to stay alive after connection
-		if err := inputReceiver.Connect(ctx, privateKeyPath); err != nil {
-			errStr := err.Error()
-			switch {
-			case strings.Contains(errStr, "waiting for server approval"):
-				// Keep showing the waiting message
-				logger.Info("Connection pending server approval")
-			case strings.Contains(errStr, "timed out"):
-				logger.Errorf("Connection timed out: %v", err)
-				p.Send(ui.DisconnectedMsg{})
-			default:
-				logger.Errorf("Failed to connect to server: %v", err)
-				p.Send(ui.DisconnectedMsg{})
-			}
-		} else {
-			connectionDuration := time.Since(connectionStart)
-			logger.Infof("Successfully connected to server at %s in %v", serverAddr, connectionDuration)
-			p.Send(ui.ConnectedMsg{})
-
-			// In redesigned architecture, client is now ready to receive input from server
-			logger.Info("Client ready to receive input from server")
-		}
-	}
 
 	// Set up reconnection status callback now that TUI program is created
 	inputReceiver.SetOnReconnectStatus(func(status string) {
@@ -214,7 +161,96 @@ func runClient(cmd *cobra.Command, args []string) error {
 	go func() {
 		// Wait a bit for TUI to initialize
 		time.Sleep(200 * time.Millisecond)
-		connectToServer()
+		
+		// Initial connection with retry logic
+		backoff := 1 * time.Second
+		maxBackoff := 60 * time.Second
+		attempt := 1
+		
+		// Set up logger to send to UI now that TUI is running
+		logger.SetUINotifier(func(level, message string) {
+			logEntry := ui.LogEntry{
+				Timestamp: time.Now(),
+				Level:     level,
+				Message:   message,
+			}
+			p.Send(ui.LogMsg{Entry: logEntry})
+		})
+		
+		logger.Info("Starting connection to server with automatic retry")
+		
+		for {
+			select {
+			case <-ctx.Done():
+				logger.Info("Connection attempts cancelled")
+				return
+			default:
+			}
+			
+			logger.Infof("Connection attempt %d to %s", attempt, serverAddr)
+			
+			// Create a timeout context for this connection attempt
+			connectCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
+			
+			// Try to connect
+			connectionStart := time.Now()
+			
+			// Create a timer to show approval message if connection takes too long
+			approvalTimer := time.AfterFunc(3*time.Second, func() {
+				// If connection is still in progress after 3 seconds, likely waiting for approval
+				p.Send(ui.WaitingApprovalMsg{})
+			})
+			
+			err := inputReceiver.Connect(connectCtx, privateKeyPath)
+			approvalTimer.Stop() // Ensure timer is cleaned up
+			cancel()
+			
+			if err == nil {
+				// Connection successful
+				connectionDuration := time.Since(connectionStart)
+				logger.Infof("Successfully connected to server at %s in %v", serverAddr, connectionDuration)
+				p.Send(ui.ConnectedMsg{})
+				
+				// In redesigned architecture, client is now ready to receive input from server
+				logger.Info("Client ready to receive input from server")
+				
+				return // Exit the retry loop
+			}
+			
+			// Connection failed, handle error
+			errStr := err.Error()
+			switch {
+			case strings.Contains(errStr, "waiting for server approval"):
+				// Keep showing the waiting message
+				logger.Info("Connection pending server approval")
+			case strings.Contains(errStr, "timed out"):
+				logger.Errorf("Connection attempt %d timed out: %v", attempt, err)
+				p.Send(ui.DisconnectedMsg{})
+				p.Send(ui.ReconnectingMsg{Status: fmt.Sprintf("Connection timed out, retrying in %v...", backoff)})
+			case strings.Contains(errStr, "connection refused"):
+				logger.Warnf("Connection attempt %d refused: %v", attempt, err)
+				p.Send(ui.DisconnectedMsg{})
+				p.Send(ui.ReconnectingMsg{Status: fmt.Sprintf("Server not ready, retrying in %v...", backoff)})
+			default:
+				logger.Errorf("Connection attempt %d failed: %v", attempt, err)
+				p.Send(ui.DisconnectedMsg{})
+				p.Send(ui.ReconnectingMsg{Status: fmt.Sprintf("Connection failed, retrying in %v...", backoff)})
+			}
+			
+			// Wait with exponential backoff
+			select {
+			case <-ctx.Done():
+				return
+			case <-time.After(backoff):
+			}
+			
+			// Increase backoff, but cap it
+			backoff *= 2
+			if backoff > maxBackoff {
+				backoff = maxBackoff
+			}
+			attempt++
+		}
 	}()
 
 	// Ensure cleanup happens on any exit path
