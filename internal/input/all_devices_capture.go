@@ -33,14 +33,16 @@ type AllDevicesCapture struct {
 	emergencyKey uint16        // Key code for emergency release (e.g., ESC)
 	lastActivity time.Time     // Last input activity time
 	noGrab       bool          // Disable exclusive grab (for safer testing)
+	ctrlPressed  bool          // Track if Ctrl key is pressed
 }
 
 // deviceHandler manages a single input device
 type deviceHandler struct {
-	path   string
-	device *evdev.InputDevice
-	cancel context.CancelFunc
-	name   string
+	path    string
+	device  *evdev.InputDevice
+	cancel  context.CancelFunc
+	name    string
+	grabbed bool // Track if device is currently grabbed
 }
 
 // NewAllDevicesCapture creates a new all-devices input capture
@@ -51,7 +53,7 @@ func NewAllDevicesCapture() *AllDevicesCapture {
 		eventChan:      make(chan *protocol.InputEvent, 1000), // Increased buffer to handle bursts
 		capturing:      false,
 		grabTimeout:    30 * time.Second, // Default 30 second safety timeout
-		emergencyKey:   evdev.KEY_ESC,    // ESC key for emergency release
+		emergencyKey:   evdev.KEY_ESC,    // ESC key for emergency release (requires Ctrl)
 	}
 }
 
@@ -138,12 +140,19 @@ func (a *AllDevicesCapture) SetTarget(clientID string) error {
 		}
 
 		// Release all devices when controlling local system
+		var releaseCount int
 		for _, handler := range a.devices {
-			if handler.device != nil {
+			if handler.device != nil && handler.grabbed {
 				if err := handler.device.Release(); err != nil {
 					logger.Errorf("Failed to release device %s: %v", handler.path, err)
+				} else {
+					handler.grabbed = false
+					releaseCount++
 				}
 			}
+		}
+		if releaseCount > 0 {
+			logger.Infof("Released %d devices", releaseCount)
 		}
 		logger.Info("Input capture target cleared - controlling local system")
 	} else {
@@ -153,11 +162,12 @@ func (a *AllDevicesCapture) SetTarget(clientID string) error {
 			var grabErrors []string
 			var successCount int
 			for _, handler := range a.devices {
-				if handler.device != nil {
+				if handler.device != nil && !handler.grabbed {
 					if err := handler.device.Grab(); err != nil {
 						grabErrors = append(grabErrors, fmt.Sprintf("%s: %v", handler.path, err))
 						logger.Warnf("Failed to grab device %s (%s): %v", handler.name, handler.path, err)
 					} else {
+						handler.grabbed = true
 						successCount++
 						logger.Debugf("Successfully grabbed device %s (%s)", handler.name, handler.path)
 					}
@@ -179,8 +189,9 @@ func (a *AllDevicesCapture) SetTarget(clientID string) error {
 				if a.currentTarget != "" {
 					a.currentTarget = ""
 					for _, handler := range a.devices {
-						if handler.device != nil {
+						if handler.device != nil && handler.grabbed {
 							handler.device.Release()
+							handler.grabbed = false
 						}
 					}
 				}
@@ -485,16 +496,24 @@ func (a *AllDevicesCapture) captureFromDevice(ctx context.Context, handler *devi
 						a.sendScrollEvent(float64(event.Value), 0)
 					}
 				case evdev.EV_KEY:
-					// Check for emergency release key
+					// Track Ctrl key state
+					if event.Code == evdev.KEY_LEFTCTRL || event.Code == evdev.KEY_RIGHTCTRL {
+						a.mu.Lock()
+						a.ctrlPressed = (event.Value == 1)
+						a.mu.Unlock()
+					}
+
+					// Check for emergency release key combination (Ctrl+ESC)
 					a.mu.RLock()
 					emergencyKey := a.emergencyKey
 					currentTarget := a.currentTarget
 					noGrab := a.noGrab
+					ctrlPressed := a.ctrlPressed
 					a.mu.RUnlock()
 
-					// Only check emergency key if we're grabbing devices
-					if !noGrab && event.Code == emergencyKey && event.Value == 1 && currentTarget != "" {
-						logger.Warnf("Emergency release triggered - ESC key pressed")
+					// Only check emergency key if we're grabbing devices and Ctrl is pressed
+					if !noGrab && event.Code == emergencyKey && event.Value == 1 && currentTarget != "" && ctrlPressed {
+						logger.Warnf("Emergency release triggered - Ctrl+ESC pressed")
 						// Use goroutine to avoid deadlock
 						go func() {
 							if err := a.SetTarget(""); err != nil {
