@@ -28,12 +28,13 @@ type AllDevicesCapture struct {
 	deviceMonitor  *DeviceMonitor
 
 	// Safety mechanisms
-	grabTimeout  time.Duration // Auto-release timeout
-	grabTimer    *time.Timer   // Timer for auto-release
-	emergencyKey uint16        // Key code for emergency release (e.g., ESC)
-	lastActivity time.Time     // Last input activity time
-	noGrab       bool          // Disable exclusive grab (for safer testing)
-	ctrlPressed  bool          // Track if Ctrl key is pressed
+	grabTimeout      time.Duration // Auto-release timeout
+	grabTimer        *time.Timer   // Timer for auto-release
+	emergencyKey     uint16        // Key code for emergency release (e.g., ESC)
+	lastActivity     time.Time     // Last input activity time
+	noGrab           bool          // Disable exclusive grab (for safer testing)
+	ctrlPressed      bool          // Track if Ctrl key is pressed
+	emergencyHandler func()        // Optional callback for emergency release
 }
 
 // deviceHandler manages a single input device
@@ -534,7 +535,7 @@ func (a *AllDevicesCapture) captureFromDevice(ctx context.Context, handler *devi
 						a.mu.Lock()
 						a.ctrlPressed = (event.Value == 1)
 						a.mu.Unlock()
-						logger.Debug("Ctrl key state changed")
+						logger.Debugf("Ctrl key state changed: pressed=%v", event.Value == 1)
 					}
 
 					// Check for emergency release key combination (Ctrl+ESC)
@@ -547,7 +548,8 @@ func (a *AllDevicesCapture) captureFromDevice(ctx context.Context, handler *devi
 
 					// Debug emergency key detection
 					if event.Code == emergencyKey {
-						logger.Debug("ESC key detected")
+						logger.Debugf("ESC key detected: value=%d, ctrlPressed=%v, currentTarget=%s, noGrab=%v", 
+							event.Value, ctrlPressed, currentTarget, noGrab)
 					}
 					
 					// Only check emergency key if we're grabbing devices and Ctrl is pressed
@@ -555,8 +557,15 @@ func (a *AllDevicesCapture) captureFromDevice(ctx context.Context, handler *devi
 						logger.Warnf("Emergency release triggered - Ctrl+ESC pressed")
 						// Use goroutine to avoid deadlock
 						go func() {
+							// First try to release at our level
 							if err := a.SetTarget(""); err != nil {
 								logger.Errorf("Failed to release on emergency: %v", err)
+							}
+							
+							// Also notify the handler if set (ClientManager)
+							if a.emergencyHandler != nil {
+								logger.Debug("Notifying emergency handler")
+								a.emergencyHandler()
 							}
 						}()
 						continue
@@ -690,6 +699,13 @@ func (a *AllDevicesCapture) SetNoGrab(noGrab bool) {
 	} else {
 		logger.Info("No-grab mode disabled - devices will be grabbed exclusively when controlling clients")
 	}
+}
+
+// SetEmergencyHandler sets a callback for emergency release events
+func (a *AllDevicesCapture) SetEmergencyHandler(handler func()) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	a.emergencyHandler = handler
 }
 
 // processEvents processes events from the event channel
