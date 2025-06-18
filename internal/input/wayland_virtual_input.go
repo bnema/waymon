@@ -353,6 +353,31 @@ func (w *WaylandVirtualInput) InjectMouseMove(dx, dy float64) error {
 	return nil
 }
 
+// InjectMousePosition injects an absolute mouse position event
+func (w *WaylandVirtualInput) InjectMousePosition(x, y uint32) error {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+
+	logger.Debugf("[WAYLAND-INPUT] InjectMousePosition called: x=%d, y=%d, capturing=%v, virtualPtr=%v", x, y, w.capturing, w.virtualPtr != nil)
+
+	if !w.capturing || w.virtualPtr == nil {
+		return fmt.Errorf("virtual pointer not available (capturing=%v, virtualPtr=%v)", w.capturing, w.virtualPtr != nil)
+	}
+
+	// Use absolute motion for positioning
+	if err := w.virtualPtr.MotionAbsolute(time.Now(), x, y, 1920, 1080); err != nil {
+		return fmt.Errorf("failed to inject absolute mouse position: %w", err)
+	}
+
+	// Frame the event
+	if err := w.virtualPtr.Frame(); err != nil {
+		return fmt.Errorf("failed to frame absolute mouse position: %w", err)
+	}
+
+	logger.Debugf("[WAYLAND-INPUT] Successfully injected absolute mouse position")
+	return nil
+}
+
 // InjectMouseButton injects a mouse button event (for server mode)
 func (w *WaylandVirtualInput) InjectMouseButton(button uint32, pressed bool) error {
 	w.mu.Lock()

@@ -314,6 +314,32 @@ func (m *ServerModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 			}
 
+		case "r", "R":
+			// Manual emergency release
+			if m.clientManager != nil && !m.localControl {
+				go func() {
+					if err := m.clientManager.SwitchToLocal(); err != nil {
+						m.AddLogEntry(LogEntry{
+							Timestamp: time.Now(),
+							Level:     "ERROR",
+							Message:   fmt.Sprintf("Failed to release control: %v", err),
+						})
+					} else {
+						m.AddLogEntry(LogEntry{
+							Timestamp: time.Now(),
+							Level:     "INFO",
+							Message:   "Manual emergency release - control returned to local",
+						})
+					}
+				}()
+				
+				// Update UI state immediately
+				m.localControl = true
+				m.selectedClientIndex = -1
+				m.activeClient = nil
+				m.updateViewport()
+			}
+			
 		case "g":
 			m.viewport.GotoTop()
 		case "G":

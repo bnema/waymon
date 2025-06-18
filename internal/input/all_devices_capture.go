@@ -534,6 +534,7 @@ func (a *AllDevicesCapture) captureFromDevice(ctx context.Context, handler *devi
 						a.mu.Lock()
 						a.ctrlPressed = (event.Value == 1)
 						a.mu.Unlock()
+						logger.Debugf("Ctrl key state changed: pressed=%v", event.Value == 1)
 					}
 
 					// Check for emergency release key combination (Ctrl+ESC)
@@ -544,6 +545,12 @@ func (a *AllDevicesCapture) captureFromDevice(ctx context.Context, handler *devi
 					ctrlPressed := a.ctrlPressed
 					a.mu.RUnlock()
 
+					// Debug emergency key detection
+					if event.Code == emergencyKey {
+						logger.Debugf("ESC key detected: value=%d, ctrlPressed=%v, noGrab=%v, target=%s", 
+							event.Value, ctrlPressed, noGrab, currentTarget)
+					}
+					
 					// Only check emergency key if we're grabbing devices and Ctrl is pressed
 					if !noGrab && event.Code == emergencyKey && event.Value == 1 && currentTarget != "" && ctrlPressed {
 						logger.Warnf("Emergency release triggered - Ctrl+ESC pressed")
@@ -593,10 +600,33 @@ func (a *AllDevicesCapture) sendEvent(event *protocol.InputEvent) {
 
 // sendMouseButtonEvent sends a mouse button event
 func (a *AllDevicesCapture) sendMouseButtonEvent(code uint16, value int32) {
+	// Convert evdev button codes to protocol button numbers
+	var button uint32
+	switch code {
+	case evdev.BTN_LEFT:
+		button = 1
+	case evdev.BTN_RIGHT:
+		button = 2
+	case evdev.BTN_MIDDLE:
+		button = 3
+	case evdev.BTN_SIDE:
+		button = 4
+	case evdev.BTN_EXTRA:
+		button = 5
+	default:
+		// For other buttons, try to normalize by subtracting BTN_LEFT base
+		if code >= evdev.BTN_LEFT && code <= evdev.BTN_TASK {
+			button = uint32(code - evdev.BTN_LEFT + 1)
+		} else {
+			logger.Warnf("Unknown button code: %d", code)
+			return
+		}
+	}
+	
 	a.sendEvent(&protocol.InputEvent{
 		Event: &protocol.InputEvent_MouseButton{
 			MouseButton: &protocol.MouseButtonEvent{
-				Button:  uint32(code),
+				Button:  button,
 				Pressed: value == 1,
 			},
 		},
