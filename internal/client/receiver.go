@@ -44,9 +44,9 @@ type InputReceiver struct {
 	onReconnectStatus   func(status string) // Callback for reconnection status updates
 	reconnectInProgress bool                // Prevent multiple concurrent reconnection attempts
 
-	// Hotkey handling state
-	lastHotkeyPress  time.Time
-	hotkeyDebounceMs int64 // Minimum time between hotkey presses in milliseconds
+	// Hotkey handling state - disabled for now
+	// lastHotkeyPress  time.Time
+	// hotkeyDebounceMs int64 // Minimum time between hotkey presses in milliseconds
 }
 
 // ControlStatus represents the current control status of the client
@@ -77,7 +77,7 @@ func NewInputReceiver(serverAddress string) (*InputReceiver, error) {
 		connected:     false,
 		clientID:      hostname,
 		// removed health check timeout
-		hotkeyDebounceMs: 500, // 500ms debounce for hotkey presses
+		// hotkeyDebounceMs: 500, // 500ms debounce for hotkey presses - disabled
 	}, nil
 }
 
@@ -221,20 +221,8 @@ func (ir *InputReceiver) processInputEvent(event *protocol.InputEvent) {
 		return
 	}
 
-	// Check for hotkey combination before injecting keyboard events
-	if keyboardEvent := event.GetKeyboard(); keyboardEvent != nil && beingControlled {
-		if ir.isControlSwitchHotkey(keyboardEvent) {
-			logger.Info("[CLIENT-RECEIVER] Switch hotkey detected - requesting control release")
-			if err := ir.requestControlRelease(); err != nil {
-				logger.Errorf("[CLIENT-RECEIVER] Failed to request control release: %v", err)
-				// If release request fails, still inject the hotkey so user isn't stuck
-				logger.Warn("[CLIENT-RECEIVER] Injecting hotkey despite failure to allow manual recovery")
-			} else {
-				// Don't inject the hotkey combination if request was successful
-				return
-			}
-		}
-	}
+	// Hotkey switching disabled for now
+	// TODO: Re-enable when hotkey handling is improved
 
 	// Inject the input event based on type
 	logger.Debugf("[CLIENT-RECEIVER] Injecting event type: %T", event.Event)
@@ -378,6 +366,8 @@ func (ir *InputReceiver) requestControlRelease() error {
 }
 
 // isControlSwitchHotkey checks if the keyboard event is the switch hotkey based on configuration
+// TODO: Re-enable when hotkey handling is improved
+/*
 func (ir *InputReceiver) isControlSwitchHotkey(keyEvent *protocol.KeyboardEvent) bool {
 	// Only trigger on key press, not release
 	if !keyEvent.Pressed {
@@ -466,6 +456,7 @@ func (ir *InputReceiver) parseHotkeyModifiers(modifierString string) uint32 {
 
 	return modifiers
 }
+*/
 
 // sendClientConfiguration sends the client's monitor and capability information to the server
 func (ir *InputReceiver) sendClientConfiguration() error {

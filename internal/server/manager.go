@@ -139,7 +139,7 @@ func (cm *ClientManager) SwitchToClient(clientID string) error {
 
 	// Check if we're already controlling this client
 	if cm.activeClientID == clientID && !cm.controllingLocal {
-		logger.Debugf("[SERVER-MANAGER] Already controlling client %s, skipping switch", clientID)
+		// Silently skip if already controlling this client
 		return nil
 	}
 
@@ -251,7 +251,7 @@ func (cm *ClientManager) SwitchToLocal() error {
 
 	// Check if we're already controlling local
 	if cm.controllingLocal {
-		logger.Debug("[SERVER-MANAGER] Already controlling local system, skipping switch")
+		// Silently skip if already controlling local
 		return nil
 	}
 
