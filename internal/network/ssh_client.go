@@ -20,10 +20,11 @@ import (
 
 // SSHClient handles SSH connections to the server
 type SSHClient struct {
-	client  *ssh.Client
-	session *ssh.Session
-	writer  io.Writer
-	reader  io.Reader
+	client         *ssh.Client
+	session        *ssh.Session
+	writer         io.Writer
+	reader         io.Reader
+	bufferedWriter *BufferedWriter
 
 	mu        sync.Mutex
 	connected bool
@@ -135,8 +136,23 @@ func (c *SSHClient) Connect(ctx context.Context, serverAddr string) error {
 		return fmt.Errorf("failed to connect to SSH server: %w", err)
 	}
 
-	// Enable TCP keepalive for connection monitoring
+	// Enable TCP keepalive and optimize for low latency
 	if tcpConn, ok := conn.(*net.TCPConn); ok {
+		// Disable Nagle's algorithm for low latency
+		if err := tcpConn.SetNoDelay(true); err != nil {
+			logger.Warnf("Failed to disable Nagle's algorithm: %v", err)
+		} else {
+			logger.Debug("TCP_NODELAY enabled (Nagle's algorithm disabled)")
+		}
+
+		// Increase write buffer for better throughput
+		if err := tcpConn.SetWriteBuffer(65536); err != nil {
+			logger.Warnf("Failed to set TCP write buffer: %v", err)
+		} else {
+			logger.Debug("TCP write buffer set to 64KB")
+		}
+
+		// Enable keepalive for connection monitoring
 		if err := tcpConn.SetKeepAlive(true); err != nil {
 			logger.Warnf("Failed to enable TCP keepalive: %v", err)
 		} else {
@@ -213,6 +229,8 @@ func (c *SSHClient) Connect(ctx context.Context, serverAddr string) error {
 	c.session = session
 	c.writer = writer
 	c.reader = reader
+	// Create buffered writer for low-latency batching (1ms delay, 64KB buffer)
+	c.bufferedWriter = NewBufferedWriter(writer, 1*time.Millisecond, 65536)
 	c.connected = true
 
 	// Start receiving input events from server
@@ -232,6 +250,12 @@ func (c *SSHClient) Disconnect() error {
 	}
 
 	c.connected = false
+
+	// Close buffered writer first
+	if c.bufferedWriter != nil {
+		c.bufferedWriter.Close()
+		c.bufferedWriter = nil
+	}
 
 	if c.session != nil {
 		if err := c.session.Close(); err != nil {
@@ -274,15 +298,15 @@ func (c *SSHClient) Reconnect(ctx context.Context, serverAddr string) error {
 // SendInputEvent sends an input event to the server
 func (c *SSHClient) SendInputEvent(event *protocol.InputEvent) error {
 	c.mu.Lock()
-	writer := c.writer
+	bufferedWriter := c.bufferedWriter
 	connected := c.connected
 	c.mu.Unlock()
 
-	if !connected || writer == nil {
+	if !connected || bufferedWriter == nil {
 		return fmt.Errorf("not connected")
 	}
 
-	return writeInputMessage(writer, event)
+	return writeInputMessage(bufferedWriter, event)
 }
 
 // OnInputEvent sets the callback for receiving input events from server

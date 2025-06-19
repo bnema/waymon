@@ -38,7 +38,7 @@ func TestSSHClientServerIntegration(t *testing.T) {
 
 	// Create server
 	server := NewSSHServer(52526, hostKeyPath, authKeysPath)
-	
+
 	// Track server events
 	var serverReceivedEvent *protocol.InputEvent
 	server.OnInputEvent = func(event *protocol.InputEvent) {
