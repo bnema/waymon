@@ -14,6 +14,15 @@ import (
 	evdev "github.com/gvalkov/golang-evdev"
 )
 
+// Modifier bit constants for keyboard events
+const (
+	ModifierShift = 1 << 0 // Shift modifier bit
+	ModifierCaps  = 1 << 1 // Caps lock modifier bit
+	ModifierCtrl  = 1 << 2 // Control modifier bit
+	ModifierAlt   = 1 << 3 // Alt modifier bit
+	ModifierMeta  = 1 << 6 // Meta/Super modifier bit
+)
+
 // AllDevicesCapture captures input events from all available input devices
 type AllDevicesCapture struct {
 	mu             sync.RWMutex
@@ -35,6 +44,16 @@ type AllDevicesCapture struct {
 	noGrab           bool          // Disable exclusive grab (for safer testing)
 	ctrlPressed      bool          // Track if Ctrl key is pressed
 	emergencyHandler func()        // Optional callback for emergency release
+
+	// Key state tracking for proper release
+	pressedKeys map[uint16]bool // Track currently pressed keys
+	keyStateMu  sync.Mutex      // Mutex for key state access
+
+	// Modifier state tracking
+	modifierState uint32 // Current modifier bitmask
+	shiftPressed  bool   // Track Shift key state
+	altPressed    bool   // Track Alt key state
+	metaPressed   bool   // Track Meta/Super key state
 }
 
 // deviceHandler manages a single input device
@@ -51,10 +70,11 @@ func NewAllDevicesCapture() *AllDevicesCapture {
 	return &AllDevicesCapture{
 		devices:        make(map[string]*deviceHandler),
 		ignoredDevices: make(map[string]bool),
-		eventChan:      make(chan *protocol.InputEvent, 1000), // Increased buffer to handle bursts
+		eventChan:      make(chan *protocol.InputEvent, 4096), // Large buffer for low latency
 		capturing:      false,
-		grabTimeout:    30 * time.Second, // Default 30 second safety timeout
-		emergencyKey:   evdev.KEY_ESC,    // ESC key for emergency release (requires Ctrl)
+		grabTimeout:    30 * time.Second,      // Default 30 second safety timeout
+		emergencyKey:   evdev.KEY_ESC,         // ESC key for emergency release (requires Ctrl)
+		pressedKeys:    make(map[uint16]bool), // Initialize pressed keys tracking
 	}
 }
 
@@ -117,7 +137,7 @@ func (a *AllDevicesCapture) Stop() error {
 
 	// Close event channel
 	close(a.eventChan)
-	a.eventChan = make(chan *protocol.InputEvent, 1000) // Match the initial buffer size
+	a.eventChan = make(chan *protocol.InputEvent, 4096) // Match the initial buffer size
 
 	a.capturing = false
 	logger.Info("All-devices input capture stopped")
@@ -139,6 +159,9 @@ func (a *AllDevicesCapture) SetTarget(clientID string) error {
 			a.grabTimer.Stop()
 			a.grabTimer = nil
 		}
+
+		// Send key release events for all currently pressed keys
+		a.releaseAllPressedKeys()
 
 		// Release all devices when controlling local system
 		var releaseCount int
@@ -191,7 +214,9 @@ func (a *AllDevicesCapture) SetTarget(clientID string) error {
 					a.currentTarget = ""
 					for _, handler := range a.devices {
 						if handler.device != nil && handler.grabbed {
-							handler.device.Release()
+							if err := handler.device.Release(); err != nil {
+								logger.Errorf("Failed to release device in safety timeout: %v", err)
+							}
 							handler.grabbed = false
 						}
 					}
@@ -275,7 +300,9 @@ func (a *AllDevicesCapture) addDevice(path string) error {
 
 	// Check if device has input capabilities we care about
 	if !a.isValidInputDevice(device) {
-		device.File.Close()
+		if err := device.File.Close(); err != nil {
+			logger.Warnf("Failed to close device file %s: %v", path, err)
+		}
 		return fmt.Errorf("device %s has no relevant input capabilities", path)
 	}
 
@@ -328,7 +355,7 @@ func (a *AllDevicesCapture) stopDeviceHandler(handler *deviceHandler) {
 func (a *AllDevicesCapture) isValidInputDevice(device *evdev.InputDevice) bool {
 	// Filter out virtual terminals, console devices, and other system devices
 	deviceName := strings.ToLower(device.Name)
-	
+
 	// Exclude devices that are likely to cause issues
 	excludePatterns := []string{
 		"virtual console",
@@ -344,19 +371,20 @@ func (a *AllDevicesCapture) isValidInputDevice(device *evdev.InputDevice) bool {
 		"sleep button",
 		"lid switch",
 	}
-	
+
 	for _, pattern := range excludePatterns {
 		if strings.Contains(deviceName, pattern) {
 			logger.Debugf("Excluding device %s (matches pattern: %s)", device.Name, pattern)
 			return false
 		}
 	}
-	
+
 	capabilities := device.Capabilities
 
 	// Look for capability types we care about
 	for capType, caps := range capabilities {
-		if capType.Type == 1 { // EV_KEY
+		switch capType.Type {
+		case 1: // EV_KEY
 			for _, cap := range caps {
 				// Mouse buttons
 				if cap.Code >= evdev.BTN_LEFT && cap.Code <= evdev.BTN_TASK {
@@ -371,7 +399,7 @@ func (a *AllDevicesCapture) isValidInputDevice(device *evdev.InputDevice) bool {
 					return true
 				}
 			}
-		} else if capType.Type == 2 { // EV_REL
+		case 2: // EV_REL
 			for _, cap := range caps {
 				if cap.Code == evdev.REL_X || cap.Code == evdev.REL_Y ||
 					cap.Code == evdev.REL_WHEEL || cap.Code == evdev.REL_HWHEEL {
@@ -482,29 +510,14 @@ func (a *AllDevicesCapture) captureFromDevice(ctx context.Context, handler *devi
 
 	// Variables to accumulate relative movements
 	var accX, accY int32
-	ticker := time.NewTicker(16 * time.Millisecond) // ~60 FPS
-	defer ticker.Stop()
+	var lastFlush time.Time
+	flushInterval := time.Millisecond // 1ms for low latency
 
 	for {
 		select {
 		case <-ctx.Done():
 			logger.Debugf("Device capture context cancelled for %s", handler.path)
 			return
-		case <-ticker.C:
-			// Send accumulated movement if any
-			if accX != 0 || accY != 0 {
-				a.sendEvent(&protocol.InputEvent{
-					Event: &protocol.InputEvent_MouseMove{
-						MouseMove: &protocol.MouseMoveEvent{
-							Dx: float64(accX),
-							Dy: float64(accY),
-						},
-					},
-					Timestamp: time.Now().UnixNano(),
-					SourceId:  fmt.Sprintf("all-devices-%s", filepath.Base(handler.path)),
-				})
-				accX, accY = 0, 0
-			}
 		default:
 			// Read events with a small timeout
 			events, err := handler.device.Read()
@@ -524,51 +537,68 @@ func (a *AllDevicesCapture) captureFromDevice(ctx context.Context, handler *devi
 						accX += event.Value
 					case evdev.REL_Y:
 						accY += event.Value
+						// Check if we should flush accumulated movement
+						if time.Since(lastFlush) >= flushInterval && (accX != 0 || accY != 0) {
+							a.sendEvent(&protocol.InputEvent{
+								Event: &protocol.InputEvent_MouseMove{
+									MouseMove: &protocol.MouseMoveEvent{
+										Dx: float64(accX),
+										Dy: float64(accY),
+									},
+								},
+								Timestamp: time.Now().UnixNano(),
+								SourceId:  fmt.Sprintf("all-devices-%s", filepath.Base(handler.path)),
+							})
+							accX, accY = 0, 0
+							lastFlush = time.Now()
+						}
 					case evdev.REL_WHEEL:
 						a.sendScrollEvent(0, float64(event.Value))
 					case evdev.REL_HWHEEL:
 						a.sendScrollEvent(float64(event.Value), 0)
 					}
 				case evdev.EV_KEY:
-					// Track Ctrl key state
-					if event.Code == evdev.KEY_LEFTCTRL || event.Code == evdev.KEY_RIGHTCTRL {
-						a.mu.Lock()
-						a.ctrlPressed = (event.Value == 1)
-						a.mu.Unlock()
-						logger.Debugf("Ctrl key state changed: pressed=%v", event.Value == 1)
-					}
+					// Modifier state will be handled in sendKeyboardEvent
+					// No need to duplicate tracking here
 
-					// Check for emergency release key combination (Ctrl+ESC)
-					a.mu.RLock()
-					emergencyKey := a.emergencyKey
-					currentTarget := a.currentTarget
-					noGrab := a.noGrab
-					ctrlPressed := a.ctrlPressed
-					a.mu.RUnlock()
+					// First update the key state for this event
+					if event.Value == 1 || event.Value == 0 { // Only for press/release, not autorepeat
+						a.keyStateMu.Lock()
+						a.updateModifierState(event.Code, event.Value == 1)
+						ctrlPressed := a.ctrlPressed
+						a.keyStateMu.Unlock()
 
-					// Debug emergency key detection
-					if event.Code == emergencyKey {
-						logger.Debugf("ESC key detected: value=%d, ctrlPressed=%v, currentTarget=%s, noGrab=%v", 
-							event.Value, ctrlPressed, currentTarget, noGrab)
-					}
-					
-					// Only check emergency key if we're grabbing devices and Ctrl is pressed
-					if !noGrab && event.Code == emergencyKey && event.Value == 1 && currentTarget != "" && ctrlPressed {
-						logger.Warnf("Emergency release triggered - Ctrl+ESC pressed")
-						// Use goroutine to avoid deadlock
-						go func() {
-							// First try to release at our level
-							if err := a.SetTarget(""); err != nil {
-								logger.Errorf("Failed to release on emergency: %v", err)
-							}
-							
-							// Also notify the handler if set (ClientManager)
-							if a.emergencyHandler != nil {
-								logger.Debug("Notifying emergency handler")
-								a.emergencyHandler()
-							}
-						}()
-						continue
+						// Check for emergency release key combination (Ctrl+ESC)
+						a.mu.RLock()
+						emergencyKey := a.emergencyKey
+						currentTarget := a.currentTarget
+						noGrab := a.noGrab
+						a.mu.RUnlock()
+
+						// Debug emergency key detection
+						if event.Code == emergencyKey {
+							logger.Debugf("ESC key detected: value=%d, ctrlPressed=%v, currentTarget=%s, noGrab=%v",
+								event.Value, ctrlPressed, currentTarget, noGrab)
+						}
+
+						// Only check emergency key if we're grabbing devices and Ctrl is pressed
+						if !noGrab && event.Code == emergencyKey && event.Value == 1 && currentTarget != "" && ctrlPressed {
+							logger.Warnf("Emergency release triggered - Ctrl+ESC pressed")
+							// Use goroutine to avoid deadlock
+							go func() {
+								// First try to release at our level
+								if err := a.SetTarget(""); err != nil {
+									logger.Errorf("Failed to release on emergency: %v", err)
+								}
+
+								// Also notify the handler if set (ClientManager)
+								if a.emergencyHandler != nil {
+									logger.Debug("Notifying emergency handler")
+									a.emergencyHandler()
+								}
+							}()
+							continue
+						}
 					}
 
 					if event.Code >= evdev.BTN_LEFT && event.Code <= evdev.BTN_TASK {
@@ -630,7 +660,7 @@ func (a *AllDevicesCapture) sendMouseButtonEvent(code uint16, value int32) {
 			return
 		}
 	}
-	
+
 	a.sendEvent(&protocol.InputEvent{
 		Event: &protocol.InputEvent_MouseButton{
 			MouseButton: &protocol.MouseButtonEvent{
@@ -661,16 +691,113 @@ func (a *AllDevicesCapture) sendScrollEvent(dx, dy float64) {
 func (a *AllDevicesCapture) sendKeyboardEvent(code uint16, value int32) {
 	// value can be 0 (release), 1 (press), 2 (autorepeat)
 	// We treat autorepeat as a press
+	pressed := value > 0
+
+	// Track key state and modifier state
+	a.keyStateMu.Lock()
+	if pressed {
+		a.pressedKeys[code] = true
+	} else {
+		delete(a.pressedKeys, code)
+	}
+
+	// Update modifier state based on modifier key events
+	a.updateModifierState(code, pressed)
+
+	// Get current modifier state for this event
+	currentModifierState := a.modifierState
+	a.keyStateMu.Unlock()
+
 	a.sendEvent(&protocol.InputEvent{
 		Event: &protocol.InputEvent_Keyboard{
 			Keyboard: &protocol.KeyboardEvent{
-				Key:     uint32(code),
-				Pressed: value > 0,
+				Key:       uint32(code),
+				Pressed:   pressed,
+				Modifiers: currentModifierState,
 			},
 		},
 		Timestamp: time.Now().UnixNano(),
 		SourceId:  "all-devices-capture",
 	})
+}
+
+// updateModifierState updates the modifier state tracking
+func (a *AllDevicesCapture) updateModifierState(code uint16, pressed bool) {
+	// Check for modifier keys and update state accordingly
+	switch code {
+	case evdev.KEY_LEFTSHIFT, evdev.KEY_RIGHTSHIFT:
+		a.shiftPressed = pressed
+		if pressed {
+			a.modifierState |= ModifierShift
+		} else {
+			a.modifierState &^= ModifierShift
+		}
+	case evdev.KEY_LEFTCTRL, evdev.KEY_RIGHTCTRL:
+		a.ctrlPressed = pressed
+		if pressed {
+			a.modifierState |= ModifierCtrl
+		} else {
+			a.modifierState &^= ModifierCtrl
+		}
+	case evdev.KEY_LEFTALT, evdev.KEY_RIGHTALT:
+		a.altPressed = pressed
+		if pressed {
+			a.modifierState |= ModifierAlt
+		} else {
+			a.modifierState &^= ModifierAlt
+		}
+	case evdev.KEY_LEFTMETA, evdev.KEY_RIGHTMETA:
+		a.metaPressed = pressed
+		if pressed {
+			a.modifierState |= ModifierMeta
+		} else {
+			a.modifierState &^= ModifierMeta
+		}
+	case evdev.KEY_CAPSLOCK:
+		// Handle caps lock as a toggle modifier
+		if pressed {
+			a.modifierState ^= ModifierCaps
+		}
+	}
+}
+
+// releaseAllPressedKeys sends release events for all currently pressed keys
+func (a *AllDevicesCapture) releaseAllPressedKeys() {
+	a.keyStateMu.Lock()
+	pressedKeyCodes := make([]uint16, 0, len(a.pressedKeys))
+	for keyCode := range a.pressedKeys {
+		pressedKeyCodes = append(pressedKeyCodes, keyCode)
+	}
+	a.keyStateMu.Unlock()
+
+	// Send release events for all pressed keys
+	for _, keyCode := range pressedKeyCodes {
+		logger.Debugf("Releasing stuck key: %d", keyCode)
+		a.sendEvent(&protocol.InputEvent{
+			Event: &protocol.InputEvent_Keyboard{
+				Keyboard: &protocol.KeyboardEvent{
+					Key:     uint32(keyCode),
+					Pressed: false,
+				},
+			},
+			Timestamp: time.Now().UnixNano(),
+			SourceId:  "all-devices-capture-release",
+		})
+	}
+
+	// Clear the pressed keys map and reset modifier state
+	a.keyStateMu.Lock()
+	a.pressedKeys = make(map[uint16]bool)
+	a.modifierState = 0
+	a.ctrlPressed = false
+	a.shiftPressed = false
+	a.altPressed = false
+	a.metaPressed = false
+	a.keyStateMu.Unlock()
+
+	if len(pressedKeyCodes) > 0 {
+		logger.Infof("Released %d stuck keys during control handoff", len(pressedKeyCodes))
+	}
 }
 
 // SetGrabTimeout sets the safety timeout for device grabbing
@@ -734,11 +861,10 @@ func (a *AllDevicesCapture) processEvents() {
 			if target != "" && callback != nil {
 				logger.Debugf("Forwarding %T event to callback (target: %s)", event.Event, target)
 				callback(event)
-			} else if target == "" {
-				// Controlling local system, don't forward
-			} else if callback == nil {
+			} else if callback == nil && target != "" {
 				logger.Warnf("No callback set for input events!")
 			}
+			// Note: if target == "", we're controlling local system and don't forward
 		}
 	}
 }

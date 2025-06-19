@@ -46,6 +46,9 @@ type WaylandVirtualInput struct {
 	capturing     bool
 	mu            sync.RWMutex
 	cancel        context.CancelFunc
+
+	// Client-side modifier state tracking
+	currentModifiers uint32 // Current modifier state for injection
 }
 
 // NewWaylandVirtualInput creates a new Wayland virtual input backend
@@ -229,6 +232,9 @@ func (w *WaylandVirtualInput) Stop() error {
 	}
 
 	w.capturing = false
+
+	// Reset modifier state
+	w.currentModifiers = 0
 
 	if w.cancel != nil {
 		w.cancel()
@@ -476,6 +482,99 @@ func (w *WaylandVirtualInput) InjectKeyEvent(key uint32, pressed bool) error {
 
 	// Inject key event
 	return w.virtualKbd.Key(time.Now(), key, state)
+}
+
+// InjectKeyEventWithModifiers injects a keyboard event with modifier state
+func (w *WaylandVirtualInput) InjectKeyEventWithModifiers(key uint32, pressed bool, modifiers uint32) error {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+
+	if !w.capturing || w.virtualKbd == nil {
+		return fmt.Errorf("virtual keyboard not available")
+	}
+
+	// If this is a non-modifier key and we have modifiers, we need to ensure
+	// the modifier keys are in the correct state first
+	if !isModifierKey(key) && modifiers != 0 {
+		if err := w.syncModifierState(modifiers); err != nil {
+			logger.Warnf("Failed to sync modifier state: %v", err)
+			// Continue anyway - better to have the key without modifiers than nothing
+		}
+	}
+
+	// Convert key state
+	var state virtual_keyboard.KeyState
+	if pressed {
+		state = virtual_keyboard.KeyStatePressed
+	} else {
+		state = virtual_keyboard.KeyStateReleased
+	}
+
+	// Inject key event
+	if err := w.virtualKbd.Key(time.Now(), key, state); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+// isModifierKey checks if a key code represents a modifier key
+func isModifierKey(key uint32) bool {
+	// Linux input event codes for modifier keys
+	return key == 29 || key == 97 || // LEFT_CTRL, RIGHT_CTRL
+		key == 42 || key == 54 || // LEFT_SHIFT, RIGHT_SHIFT
+		key == 56 || key == 100 || // LEFT_ALT, RIGHT_ALT
+		key == 125 || key == 126 || // LEFT_META, RIGHT_META
+		key == 58 // CAPS_LOCK
+}
+
+// syncModifierState ensures the virtual keyboard has the correct modifier state
+func (w *WaylandVirtualInput) syncModifierState(targetModifiers uint32) error {
+	// Compare current vs target modifier state
+	changed := w.currentModifiers ^ targetModifiers
+
+	if changed == 0 {
+		return nil // No change needed
+	}
+
+	logger.Debugf("Syncing modifier state: current=%032b target=%032b changed=%032b",
+		w.currentModifiers, targetModifiers, changed)
+
+	// Update modifier keys that have changed
+	modifierKeys := map[uint32]uint32{
+		1 << 0: 42,  // Shift -> LEFT_SHIFT
+		1 << 2: 29,  // Ctrl -> LEFT_CTRL
+		1 << 3: 56,  // Alt -> LEFT_ALT
+		1 << 6: 125, // Meta -> LEFT_META
+	}
+
+	now := time.Now()
+
+	for modifierBit, keyCode := range modifierKeys {
+		if (changed & modifierBit) != 0 {
+			// This modifier changed
+			shouldBePressed := (targetModifiers & modifierBit) != 0
+			currentlyPressed := (w.currentModifiers & modifierBit) != 0
+
+			if shouldBePressed && !currentlyPressed {
+				// Press the modifier key
+				logger.Debugf("Pressing modifier key %d for bit %d", keyCode, modifierBit)
+				if err := w.virtualKbd.Key(now, keyCode, virtual_keyboard.KeyStatePressed); err != nil {
+					return fmt.Errorf("failed to press modifier key %d: %w", keyCode, err)
+				}
+			} else if !shouldBePressed && currentlyPressed {
+				// Release the modifier key
+				logger.Debugf("Releasing modifier key %d for bit %d", keyCode, modifierBit)
+				if err := w.virtualKbd.Key(now, keyCode, virtual_keyboard.KeyStateReleased); err != nil {
+					return fmt.Errorf("failed to release modifier key %d: %w", keyCode, err)
+				}
+			}
+		}
+	}
+
+	// Update our tracked state
+	w.currentModifiers = targetModifiers
+	return nil
 }
 
 // Input event handlers for capture

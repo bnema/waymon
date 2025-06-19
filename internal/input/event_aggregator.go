@@ -43,8 +43,8 @@ type EventFilter interface {
 // NewEventAggregator creates a new event aggregator
 func NewEventAggregator() *EventAggregator {
 	return &EventAggregator{
-		eventChan:        make(chan *protocol.InputEvent, 1000), // Increased buffer
-		filteredChan:     make(chan *protocol.InputEvent, 500),  // Increased buffer
+		eventChan:        make(chan *protocol.InputEvent, 4096), // Large buffer for low latency
+		filteredChan:     make(chan *protocol.InputEvent, 2048), // Large buffer for low latency
 		mouseSensitivity: 1.0,
 		scrollSpeed:      1.0,
 		enableKeyboard:   true,
@@ -186,7 +186,7 @@ func (ea *EventAggregator) processEvent(event *protocol.InputEvent) *protocol.In
 
 // flushMouseMovements periodically flushes accumulated mouse movements
 func (ea *EventAggregator) flushMouseMovements() {
-	ticker := time.NewTicker(16 * time.Millisecond) // ~60 FPS
+	ticker := time.NewTicker(1 * time.Millisecond) // 1ms for low latency
 	defer ticker.Stop()
 
 	for {
