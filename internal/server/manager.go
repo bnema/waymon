@@ -39,6 +39,9 @@ type ClientManager struct {
 	// Emergency release cooldown
 	emergencyReleaseTime time.Time
 	emergencyCooldown    time.Duration
+	
+	// Emergency release handler
+	emergency *EmergencyRelease
 }
 
 // cursorState tracks cursor position for a client
@@ -234,6 +237,11 @@ func (cm *ClientManager) SwitchToClient(clientID string) error {
 	}
 
 	logger.Infof("[SERVER-MANAGER] Switched control to client: %s (%s)", client.Name, client.Address)
+
+	// Reset emergency activity timer when switching to client
+	if cm.emergency != nil {
+		cm.emergency.ResetActivity()
+	}
 
 	// Notify UI if callback is set
 	if cm.onActivity != nil {
@@ -700,6 +708,13 @@ func (cm *ClientManager) SetOnActivity(callback func(level, message string)) {
 	cm.mu.Lock()
 	defer cm.mu.Unlock()
 	cm.onActivity = callback
+}
+
+// SetEmergencyRelease sets the emergency release handler
+func (cm *ClientManager) SetEmergencyRelease(emergency *EmergencyRelease) {
+	cm.mu.Lock()
+	defer cm.mu.Unlock()
+	cm.emergency = emergency
 }
 
 // SetSSHServer sets the SSH server for sending events to clients
