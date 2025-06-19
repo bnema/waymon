@@ -1,3 +1,5 @@
+// Package client provides the client-side implementation for Waymon's mouse sharing functionality.
+// It handles receiving input events from the server and injecting them into the local system.
 package client
 
 import (
@@ -294,8 +296,18 @@ func (ir *InputReceiver) handleControlEvent(control *protocol.ControlEvent) {
 	// Notify status change
 	if ir.onStatusChange != nil {
 		logger.Debug("[CLIENT-RECEIVER] Notifying status change callback")
-		// Use goroutine to prevent potential deadlocks and ensure immediate return
-		go ir.onStatusChange(ir.controlStatus)
+		// Make a copy of the status to avoid any potential race conditions
+		statusCopy := ir.controlStatus
+		logger.Debugf("[CLIENT-RECEIVER] Status to send: BeingControlled=%v, Controller=%s",
+			statusCopy.BeingControlled, statusCopy.ControllerName)
+		
+		// Use goroutine to prevent potential deadlocks with UI thread
+		// The copy ensures we don't have race conditions
+		go func(status ControlStatus) {
+			logger.Debugf("[CLIENT-RECEIVER] Sending status update to UI: BeingControlled=%v, Controller=%s",
+				status.BeingControlled, status.ControllerName)
+			ir.onStatusChange(status)
+		}(statusCopy)
 	}
 }
 
@@ -742,7 +754,13 @@ func (ir *InputReceiver) injectEvent(event *protocol.InputEvent) error {
 	case *protocol.InputEvent_MousePosition:
 		logger.Debugf("[CLIENT-RECEIVER] Received mouse position event")
 		// Use absolute positioning if supported by the backend
-		if err := backend.InjectMousePosition(uint32(e.MousePosition.X), uint32(e.MousePosition.Y)); err != nil {
+		x := e.MousePosition.X
+		y := e.MousePosition.Y
+		if x < 0 || y < 0 {
+			logger.Warnf("[CLIENT-RECEIVER] Negative mouse position: x=%d, y=%d", x, y)
+			return nil
+		}
+		if err := backend.InjectMousePosition(uint32(x), uint32(y)); err != nil {
 			logger.Warnf("[CLIENT-RECEIVER] Failed to inject absolute mouse position: %v", err)
 			// Fall back to relative movement calculation if absolute positioning fails
 			// This is just a placeholder - proper implementation would track current position
