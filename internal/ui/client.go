@@ -160,7 +160,13 @@ func (m *ClientModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if msg.Status.BeingControlled {
 			m.SetMessage("info", fmt.Sprintf("Now being controlled by %s", msg.Status.ControllerName))
 		} else {
-			m.SetMessage("success", "Control released")
+			// Only show "Control released" if we weren't already showing a request message
+			if !strings.Contains(m.message, "Requested control release") {
+				m.SetMessage("success", "Control released")
+			} else {
+				// Update the existing message to show success
+				m.SetMessage("success", "Control release confirmed")
+			}
 		}
 		// Force UI update by returning a batch with a no-op command
 		cmds = append(cmds, func() tea.Msg { return nil })

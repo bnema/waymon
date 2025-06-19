@@ -338,17 +338,11 @@ func (ir *InputReceiver) RequestControlRelease() error {
 		return fmt.Errorf("failed to send control release request: %w", err)
 	}
 
-	// Update local control state immediately
-	ir.mu.Lock()
-	ir.controlStatus.BeingControlled = false
-	ir.controlStatus.ControllerName = ""
-	ir.mu.Unlock()
-
-	// Notify status change
-	if ir.onStatusChange != nil {
-		// Use goroutine to prevent potential deadlocks and ensure immediate return
-		go ir.onStatusChange(ir.controlStatus)
-	}
+	// Don't update local control state immediately - wait for server confirmation
+	// This ensures the UI shows "Requested control release" until the server responds
+	
+	// The server will send back a RELEASE_CONTROL event which will update our status
+	// through handleControlEvent
 
 	logger.Info("[CLIENT-RECEIVER] Control release request sent to server")
 	return nil
