@@ -433,7 +433,17 @@ func (s *SSHServer) SendInputEventToClient(sessionID string, event *protocol.Inp
 		return fmt.Errorf("client not found: %s", sessionID)
 	}
 
-	return s.writeInputEvent(client.bufferedWriter, event)
+	// Write the event
+	if err := s.writeInputEvent(client.bufferedWriter, event); err != nil {
+		return err
+	}
+
+	// For mouse move events, flush immediately for lowest latency
+	if event.GetMouseMove() != nil {
+		return client.bufferedWriter.Flush()
+	}
+
+	return nil
 }
 
 // SendInputEventToAllClients sends an input event to all connected clients

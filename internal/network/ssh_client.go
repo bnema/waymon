@@ -306,7 +306,17 @@ func (c *SSHClient) SendInputEvent(event *protocol.InputEvent) error {
 		return fmt.Errorf("not connected")
 	}
 
-	return writeInputMessage(bufferedWriter, event)
+	// Write the message
+	if err := writeInputMessage(bufferedWriter, event); err != nil {
+		return err
+	}
+
+	// For mouse move events, flush immediately for lowest latency
+	if event.GetMouseMove() != nil {
+		return bufferedWriter.Flush()
+	}
+
+	return nil
 }
 
 // OnInputEvent sets the callback for receiving input events from server
