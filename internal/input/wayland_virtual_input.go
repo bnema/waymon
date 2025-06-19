@@ -489,6 +489,8 @@ func (w *WaylandVirtualInput) InjectKeyEventWithModifiers(key uint32, pressed bo
 	w.mu.Lock()
 	defer w.mu.Unlock()
 
+	logger.Debugf("[WAYLAND-INPUT] InjectKeyEventWithModifiers: key=%d, pressed=%v, modifiers=%032b", key, pressed, modifiers)
+
 	if !w.capturing || w.virtualKbd == nil {
 		return fmt.Errorf("virtual keyboard not available")
 	}
@@ -496,10 +498,15 @@ func (w *WaylandVirtualInput) InjectKeyEventWithModifiers(key uint32, pressed bo
 	// If this is a non-modifier key and we have modifiers, we need to ensure
 	// the modifier keys are in the correct state first
 	if !isModifierKey(key) && modifiers != 0 {
+		logger.Debugf("[WAYLAND-INPUT] Syncing modifier state for non-modifier key %d", key)
 		if err := w.syncModifierState(modifiers); err != nil {
 			logger.Warnf("Failed to sync modifier state: %v", err)
 			// Continue anyway - better to have the key without modifiers than nothing
 		}
+	} else if isModifierKey(key) {
+		// For modifier keys, update our internal state
+		logger.Debugf("[WAYLAND-INPUT] Updating internal modifier state for modifier key %d", key)
+		// We'll let the key event itself update the modifier state
 	}
 
 	// Convert key state
@@ -511,8 +518,53 @@ func (w *WaylandVirtualInput) InjectKeyEventWithModifiers(key uint32, pressed bo
 	}
 
 	// Inject key event
+	logger.Debugf("[WAYLAND-INPUT] Injecting key event: key=%d, state=%v", key, state)
 	if err := w.virtualKbd.Key(time.Now(), key, state); err != nil {
 		return err
+	}
+
+	// If this was a modifier key press/release, update our internal state
+	if isModifierKey(key) {
+		// Update our tracked modifier state based on the key event
+		switch key {
+		case 42, 54: // LEFT_SHIFT, RIGHT_SHIFT
+			if pressed {
+				w.currentModifiers |= (1 << 0)
+			} else {
+				w.currentModifiers &^= (1 << 0)
+			}
+		case 29, 97: // LEFT_CTRL, RIGHT_CTRL
+			if pressed {
+				w.currentModifiers |= (1 << 2)
+			} else {
+				w.currentModifiers &^= (1 << 2)
+			}
+		case 56, 100: // LEFT_ALT, RIGHT_ALT
+			if pressed {
+				w.currentModifiers |= (1 << 3)
+			} else {
+				w.currentModifiers &^= (1 << 3)
+			}
+		case 125, 126: // LEFT_META, RIGHT_META
+			if pressed {
+				w.currentModifiers |= (1 << 6)
+			} else {
+				w.currentModifiers &^= (1 << 6)
+			}
+		case 58: // CAPS_LOCK
+			if pressed {
+				w.currentModifiers ^= (1 << 1) // Toggle caps lock
+			}
+		}
+		logger.Debugf("[WAYLAND-INPUT] Updated internal modifiers after key event: %032b", w.currentModifiers)
+	} else if !pressed && modifiers == 0 {
+		// Non-modifier key released with no modifiers - ensure all modifier keys are released
+		if w.currentModifiers != 0 {
+			logger.Debugf("[WAYLAND-INPUT] Releasing all modifier keys on non-modifier key release")
+			if err := w.syncModifierState(0); err != nil {
+				logger.Warnf("Failed to release modifier keys: %v", err)
+			}
+		}
 	}
 
 	return nil
@@ -541,11 +593,13 @@ func (w *WaylandVirtualInput) syncModifierState(targetModifiers uint32) error {
 		w.currentModifiers, targetModifiers, changed)
 
 	// Update modifier keys that have changed
+	// Using correct evdev key codes from golang-evdev
 	modifierKeys := map[uint32]uint32{
-		1 << 0: 42,  // Shift -> LEFT_SHIFT
-		1 << 2: 29,  // Ctrl -> LEFT_CTRL
-		1 << 3: 56,  // Alt -> LEFT_ALT
-		1 << 6: 125, // Meta -> LEFT_META
+		1 << 0: 42,  // Shift -> KEY_LEFTSHIFT (42)
+		1 << 2: 29,  // Ctrl -> KEY_LEFTCTRL (29)
+		1 << 3: 56,  // Alt -> KEY_LEFTALT (56)
+		1 << 6: 125, // Meta -> KEY_LEFTMETA (125)
+		1 << 1: 58,  // Caps -> KEY_CAPSLOCK (58)
 	}
 
 	now := time.Now()
@@ -574,6 +628,36 @@ func (w *WaylandVirtualInput) syncModifierState(targetModifiers uint32) error {
 
 	// Update our tracked state
 	w.currentModifiers = targetModifiers
+	
+	// IMPORTANT: Send the Modifiers request to update compositor state
+	// Convert our modifier bitmask to XKB modifier indices
+	var modsDepressed uint32 = 0
+	
+	// Map our modifier bits to XKB modifier indices
+	// These are the standard XKB modifier indices:
+	// 0 = Shift, 1 = Caps Lock, 2 = Control, 3 = Alt/Mod1, 4 = Mod2, 5 = Mod3, 6 = Super/Mod4, 7 = Mod5
+	if (targetModifiers & (1 << 0)) != 0 { // Shift
+		modsDepressed |= (1 << 0)
+	}
+	if (targetModifiers & (1 << 1)) != 0 { // Caps Lock
+		modsDepressed |= (1 << 1)
+	}
+	if (targetModifiers & (1 << 2)) != 0 { // Control
+		modsDepressed |= (1 << 2)
+	}
+	if (targetModifiers & (1 << 3)) != 0 { // Alt
+		modsDepressed |= (1 << 3)
+	}
+	if (targetModifiers & (1 << 6)) != 0 { // Meta/Super
+		modsDepressed |= (1 << 6)
+	}
+	
+	logger.Debugf("Sending Modifiers request: modsDepressed=%032b", modsDepressed)
+	if err := w.virtualKbd.Modifiers(modsDepressed, 0, 0, 0); err != nil {
+		logger.Warnf("Failed to send modifiers state: %v", err)
+		// Don't fail completely - the key presses might still work
+	}
+	
 	return nil
 }
 

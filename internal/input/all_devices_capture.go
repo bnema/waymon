@@ -72,7 +72,7 @@ func NewAllDevicesCapture() *AllDevicesCapture {
 		ignoredDevices: make(map[string]bool),
 		eventChan:      make(chan *protocol.InputEvent, 4096), // Large buffer for low latency
 		capturing:      false,
-		grabTimeout:    30 * time.Second,      // Default 30 second safety timeout
+		grabTimeout:    10 * time.Second,      // Reduced to 10 second safety timeout for better UX
 		emergencyKey:   evdev.KEY_ESC,         // ESC key for emergency release (requires Ctrl)
 		pressedKeys:    make(map[uint16]bool), // Initialize pressed keys tracking
 	}
@@ -119,6 +119,28 @@ func (a *AllDevicesCapture) Stop() error {
 		return nil
 	}
 
+	// Cancel any existing grab timer first
+	if a.grabTimer != nil {
+		a.grabTimer.Stop()
+		a.grabTimer = nil
+	}
+
+	// Release all pressed keys before stopping
+	a.releaseAllPressedKeys()
+
+	// Release all grabbed devices
+	for _, handler := range a.devices {
+		if handler.device != nil && handler.grabbed {
+			if err := handler.device.Release(); err != nil {
+				logger.Errorf("Failed to release device %s on stop: %v", handler.path, err)
+			}
+			handler.grabbed = false
+		}
+	}
+
+	// Clear the current target
+	a.currentTarget = ""
+
 	// Cancel context to stop all goroutines
 	if a.cancel != nil {
 		a.cancel()
@@ -140,7 +162,7 @@ func (a *AllDevicesCapture) Stop() error {
 	a.eventChan = make(chan *protocol.InputEvent, 4096) // Match the initial buffer size
 
 	a.capturing = false
-	logger.Info("All-devices input capture stopped")
+	logger.Info("All-devices input capture stopped and all devices released")
 	return nil
 }
 
@@ -211,7 +233,10 @@ func (a *AllDevicesCapture) SetTarget(clientID string) error {
 				logger.Warnf("Safety timeout reached - auto-releasing devices")
 				a.mu.Lock()
 				if a.currentTarget != "" {
+					target := a.currentTarget
 					a.currentTarget = ""
+					// Release all pressed keys first to prevent stuck modifiers
+					a.releaseAllPressedKeys()
 					for _, handler := range a.devices {
 						if handler.device != nil && handler.grabbed {
 							if err := handler.device.Release(); err != nil {
@@ -220,8 +245,15 @@ func (a *AllDevicesCapture) SetTarget(clientID string) error {
 							handler.grabbed = false
 						}
 					}
+					a.mu.Unlock()
+					// Notify emergency handler if set (outside of lock)
+					if a.emergencyHandler != nil {
+						logger.Debugf("Notifying emergency handler from safety timeout (was controlling: %s)", target)
+						go a.emergencyHandler()
+					}
+				} else {
+					a.mu.Unlock()
 				}
-				a.mu.Unlock()
 			})
 
 			logger.Infof("Set input capture target to client: %s (timeout: %v)", clientID, a.grabTimeout)
@@ -511,7 +543,38 @@ func (a *AllDevicesCapture) captureFromDevice(ctx context.Context, handler *devi
 	// Variables to accumulate relative movements
 	var accX, accY int32
 	var lastFlush time.Time
-	flushInterval := time.Millisecond // 1ms for low latency
+	flushInterval := 500 * time.Microsecond // 0.5ms for lower latency
+	var mu sync.Mutex
+
+	// Start a goroutine to periodically flush accumulated movements
+	flushTicker := time.NewTicker(flushInterval)
+	defer flushTicker.Stop()
+	
+	go func() {
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-flushTicker.C:
+				mu.Lock()
+				if (accX != 0 || accY != 0) && time.Since(lastFlush) >= flushInterval {
+					a.sendEvent(&protocol.InputEvent{
+						Event: &protocol.InputEvent_MouseMove{
+							MouseMove: &protocol.MouseMoveEvent{
+								Dx: float64(accX),
+								Dy: float64(accY),
+							},
+						},
+						Timestamp: time.Now().UnixNano(),
+						SourceId:  fmt.Sprintf("all-devices-%s", filepath.Base(handler.path)),
+					})
+					accX, accY = 0, 0
+					lastFlush = time.Now()
+				}
+				mu.Unlock()
+			}
+		}
+	}()
 
 	for {
 		select {
@@ -534,24 +597,13 @@ func (a *AllDevicesCapture) captureFromDevice(ctx context.Context, handler *devi
 				case evdev.EV_REL:
 					switch event.Code {
 					case evdev.REL_X:
+						mu.Lock()
 						accX += event.Value
+						mu.Unlock()
 					case evdev.REL_Y:
+						mu.Lock()
 						accY += event.Value
-						// Check if we should flush accumulated movement
-						if time.Since(lastFlush) >= flushInterval && (accX != 0 || accY != 0) {
-							a.sendEvent(&protocol.InputEvent{
-								Event: &protocol.InputEvent_MouseMove{
-									MouseMove: &protocol.MouseMoveEvent{
-										Dx: float64(accX),
-										Dy: float64(accY),
-									},
-								},
-								Timestamp: time.Now().UnixNano(),
-								SourceId:  fmt.Sprintf("all-devices-%s", filepath.Base(handler.path)),
-							})
-							accX, accY = 0, 0
-							lastFlush = time.Now()
-						}
+						mu.Unlock()
 					case evdev.REL_WHEEL:
 						a.sendScrollEvent(0, float64(event.Value))
 					case evdev.REL_HWHEEL:
@@ -707,6 +759,8 @@ func (a *AllDevicesCapture) sendKeyboardEvent(code uint16, value int32) {
 	// Get current modifier state for this event
 	currentModifierState := a.modifierState
 	a.keyStateMu.Unlock()
+
+	logger.Debugf("[ALL-DEVICES] Sending keyboard event: key=%d, pressed=%v, modifiers=%032b", code, pressed, currentModifierState)
 
 	a.sendEvent(&protocol.InputEvent{
 		Event: &protocol.InputEvent_Keyboard{

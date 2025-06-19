@@ -732,14 +732,17 @@ func (ir *InputReceiver) injectEvent(event *protocol.InputEvent) error {
 		return backend.InjectMouseScroll(e.MouseScroll.Dx, e.MouseScroll.Dy)
 
 	case *protocol.InputEvent_Keyboard:
-		logger.Debugf("[CLIENT-RECEIVER] Injecting keyboard event with modifiers: %d", e.Keyboard.Modifiers)
+		logger.Debugf("[CLIENT-RECEIVER] Injecting keyboard event: key=%d, pressed=%v, modifiers=%032b", 
+			e.Keyboard.Key, e.Keyboard.Pressed, e.Keyboard.Modifiers)
 		// Check if backend supports modifiers
 		if modBackend, ok := ir.inputBackend.(interface {
 			InjectKeyEventWithModifiers(uint32, bool, uint32) error
 		}); ok {
+			logger.Debugf("[CLIENT-RECEIVER] Using InjectKeyEventWithModifiers")
 			return modBackend.InjectKeyEventWithModifiers(e.Keyboard.Key, e.Keyboard.Pressed, e.Keyboard.Modifiers)
 		}
 		// Fallback to standard injection
+		logger.Warnf("[CLIENT-RECEIVER] Backend doesn't support modifiers, falling back to standard injection")
 		return backend.InjectKeyEvent(e.Keyboard.Key, e.Keyboard.Pressed)
 
 	case *protocol.InputEvent_MousePosition:
