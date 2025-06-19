@@ -49,12 +49,12 @@ func runClient(cmd *cobra.Command, args []string) error {
 
 	// Get configuration first to check logging settings
 	cfg := config.Get()
-	
+
 	// Apply log level from config if set
 	if cfg.Logging.LogLevel != "" {
 		logger.SetLevel(cfg.Logging.LogLevel)
 	}
-	
+
 	// Set up file logging if enabled
 	var logFile *os.File
 	if cfg.Logging.FileLogging {
@@ -134,7 +134,7 @@ func runClient(cmd *cobra.Command, args []string) error {
 
 	// Create the program with alt screen mode for proper full-screen UI
 	p := tea.NewProgram(model, tea.WithAltScreen())
-	
+
 	// Set up the program reference for status updates
 	model.SetProgram(p)
 
@@ -173,12 +173,12 @@ func runClient(cmd *cobra.Command, args []string) error {
 	go func() {
 		// Wait a bit for TUI to initialize
 		time.Sleep(200 * time.Millisecond)
-		
+
 		// Initial connection with retry logic
 		backoff := 1 * time.Second
 		maxBackoff := 60 * time.Second
 		attempt := 1
-		
+
 		// Set up logger to send to UI now that TUI is running
 		logger.SetUINotifier(func(level, message string) {
 			logEntry := ui.LogEntry{
@@ -188,9 +188,9 @@ func runClient(cmd *cobra.Command, args []string) error {
 			}
 			p.Send(ui.LogMsg{Entry: logEntry})
 		})
-		
+
 		logger.Info("Starting connection to server with automatic retry")
-		
+
 		for {
 			select {
 			case <-ctx.Done():
@@ -198,34 +198,34 @@ func runClient(cmd *cobra.Command, args []string) error {
 				return
 			default:
 			}
-			
+
 			logger.Infof("Connection attempt %d to %s", attempt, serverAddr)
-			
+
 			// Try to connect
 			connectionStart := time.Now()
-			
+
 			// Create a timer to show approval message if connection takes too long
 			approvalTimer := time.AfterFunc(3*time.Second, func() {
 				// If connection is still in progress after 3 seconds, likely waiting for approval
 				p.Send(ui.WaitingApprovalMsg{})
 			})
-			
+
 			// Use the parent context for the connection - it needs to stay alive for receiving
 			err := inputReceiver.Connect(ctx, privateKeyPath)
 			approvalTimer.Stop() // Ensure timer is cleaned up
-			
+
 			if err == nil {
 				// Connection successful
 				connectionDuration := time.Since(connectionStart)
 				logger.Infof("Successfully connected to server at %s in %v", serverAddr, connectionDuration)
 				p.Send(ui.ConnectedMsg{})
-				
+
 				// In redesigned architecture, client is now ready to receive input from server
 				logger.Info("Client ready to receive input from server")
-				
+
 				return // Exit the retry loop
 			}
-			
+
 			// Connection failed, handle error
 			errStr := err.Error()
 			switch {
@@ -245,14 +245,14 @@ func runClient(cmd *cobra.Command, args []string) error {
 				p.Send(ui.DisconnectedMsg{})
 				p.Send(ui.ReconnectingMsg{Status: fmt.Sprintf("Connection failed, retrying in %v...", backoff)})
 			}
-			
+
 			// Wait with exponential backoff
 			select {
 			case <-ctx.Done():
 				return
 			case <-time.After(backoff):
 			}
-			
+
 			// Increase backoff, but cap it
 			backoff *= 2
 			if backoff > maxBackoff {

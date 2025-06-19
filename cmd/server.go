@@ -210,10 +210,10 @@ func runServer(cmd *cobra.Command, args []string) error {
 
 	// Set config path to system-wide location for server mode
 	config.SetConfigPath("/etc/waymon/waymon.toml")
-	
+
 	// Get configuration first to check logging settings
 	cfg := config.Get()
-	
+
 	// Apply log level from config if set
 	if cfg.Logging.LogLevel != "" {
 		logger.SetLevel(cfg.Logging.LogLevel)
@@ -236,7 +236,6 @@ func runServer(cmd *cobra.Command, args []string) error {
 			}
 		}
 	}()
-
 
 	// Input devices will be automatically detected by all-devices capture
 	logger.Info("Using automatic all-devices input capture - no setup required!")
