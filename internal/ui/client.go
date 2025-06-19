@@ -168,8 +168,10 @@ func (m *ClientModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.SetMessage("success", "Control release confirmed")
 			}
 		}
-		// Force UI update by returning a batch with a no-op command
-		cmds = append(cmds, func() tea.Msg { return nil })
+		// Force UI update by triggering a tick immediately
+		cmds = append(cmds, tea.Tick(time.Millisecond, func(_ time.Time) tea.Msg {
+			return nil // This ensures the UI re-renders
+		}))
 	}
 
 	// Clear expired messages
