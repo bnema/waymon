@@ -73,10 +73,10 @@ func NewClientManager(inputBackend input.InputBackend) (*ClientManager, error) {
 	}
 
 	return &ClientManager{
-		clients:          make(map[string]*ConnectedClient),
-		inputBackend:     inputBackend,
-		controllingLocal: true, // Start by controlling local system
-		clientCursors:    make(map[string]*cursorState),
+		clients:           make(map[string]*ConnectedClient),
+		inputBackend:      inputBackend,
+		controllingLocal:  true, // Start by controlling local system
+		clientCursors:     make(map[string]*cursorState),
 		emergencyCooldown: 5 * time.Second, // 5 second cooldown after emergency release
 	}, nil
 }
@@ -182,7 +182,7 @@ func (cm *ClientManager) SwitchToClient(clientID string) error {
 		if err != nil {
 			serverName = "waymon-server"
 		}
-		
+
 		controlEvent := &protocol.ControlEvent{
 			Type:     protocol.ControlEvent_REQUEST_CONTROL,
 			TargetId: serverName, // Send server name so client knows who's controlling
@@ -662,17 +662,17 @@ func (cm *ClientManager) UnregisterClient(id string) {
 	// If this was the active client, switch to local and release input
 	if cm.activeClientID == id {
 		logger.Infof("[SERVER-MANAGER] Active client %s disconnected, switching to local", client.Name)
-		
+
 		// Release input capture
 		if cm.inputBackend != nil {
 			if err := cm.inputBackend.SetTarget(""); err != nil {
 				logger.Errorf("[SERVER-MANAGER] Failed to release input on client disconnect: %v", err)
 			}
 		}
-		
+
 		cm.activeClientID = ""
 		cm.controllingLocal = true
-		
+
 		// Send notification to UI if available
 		if cm.onActivity != nil {
 			cm.onActivity("WARN", fmt.Sprintf("Client %s disconnected - control returned to local", client.Name))
