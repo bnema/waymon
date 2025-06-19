@@ -294,7 +294,8 @@ func (ir *InputReceiver) handleControlEvent(control *protocol.ControlEvent) {
 	// Notify status change
 	if ir.onStatusChange != nil {
 		logger.Debug("[CLIENT-RECEIVER] Notifying status change callback")
-		ir.onStatusChange(ir.controlStatus)
+		// Use goroutine to prevent potential deadlocks and ensure immediate return
+		go ir.onStatusChange(ir.controlStatus)
 	}
 }
 
@@ -345,7 +346,8 @@ func (ir *InputReceiver) RequestControlRelease() error {
 
 	// Notify status change
 	if ir.onStatusChange != nil {
-		ir.onStatusChange(ir.controlStatus)
+		// Use goroutine to prevent potential deadlocks and ensure immediate return
+		go ir.onStatusChange(ir.controlStatus)
 	}
 
 	logger.Info("[CLIENT-RECEIVER] Control release request sent to server")
@@ -730,7 +732,14 @@ func (ir *InputReceiver) injectEvent(event *protocol.InputEvent) error {
 		return backend.InjectMouseScroll(e.MouseScroll.Dx, e.MouseScroll.Dy)
 
 	case *protocol.InputEvent_Keyboard:
-		logger.Debugf("[CLIENT-RECEIVER] Injecting keyboard event")
+		logger.Debugf("[CLIENT-RECEIVER] Injecting keyboard event with modifiers: %d", e.Keyboard.Modifiers)
+		// Check if backend supports modifiers
+		if modBackend, ok := ir.inputBackend.(interface {
+			InjectKeyEventWithModifiers(uint32, bool, uint32) error
+		}); ok {
+			return modBackend.InjectKeyEventWithModifiers(e.Keyboard.Key, e.Keyboard.Pressed, e.Keyboard.Modifiers)
+		}
+		// Fallback to standard injection
 		return backend.InjectKeyEvent(e.Keyboard.Key, e.Keyboard.Pressed)
 
 	case *protocol.InputEvent_MousePosition:

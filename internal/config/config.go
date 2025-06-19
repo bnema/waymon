@@ -18,7 +18,6 @@ type Config struct {
 	// Client configuration
 	Client ClientConfig `mapstructure:"client"`
 
-
 	// Logging configuration
 	Logging LoggingConfig `mapstructure:"logging"`
 
@@ -54,7 +53,6 @@ type ClientConfig struct {
 	// SSH configuration
 	SSHPrivateKey string `mapstructure:"ssh_private_key"`
 }
-
 
 // LoggingConfig contains logging settings
 type LoggingConfig struct {
@@ -111,8 +109,8 @@ var (
 			SSHPrivateKey:  "",
 		},
 		Logging: LoggingConfig{
-			FileLogging: true,  // Enable file logging by default
-			LogLevel:    "",    // Empty means use LOG_LEVEL env var
+			FileLogging: true, // Enable file logging by default
+			LogLevel:    "",   // Empty means use LOG_LEVEL env var
 		},
 		Hosts: []HostConfig{},
 	}
@@ -173,7 +171,6 @@ func Init() error {
 	viper.SetDefault("client.hotkey_modifier", DefaultConfig.Client.HotkeyModifier)
 	viper.SetDefault("client.hotkey_key", DefaultConfig.Client.HotkeyKey)
 	viper.SetDefault("client.ssh_private_key", DefaultConfig.Client.SSHPrivateKey)
-
 
 	viper.SetDefault("logging.file_logging", DefaultConfig.Logging.FileLogging)
 	viper.SetDefault("logging.log_level", DefaultConfig.Logging.LogLevel)
