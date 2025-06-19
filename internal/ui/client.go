@@ -153,7 +153,7 @@ func (m *ClientModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case LogMsg:
 		m.AddLogEntry(msg.Entry)
-		
+
 	case ControlStatusMsg:
 		m.controlStatus = msg.Status
 		// Log the status change
@@ -162,6 +162,8 @@ func (m *ClientModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		} else {
 			m.SetMessage("success", "Control released")
 		}
+		// Force UI update by returning a batch with a no-op command
+		cmds = append(cmds, func() tea.Msg { return nil })
 	}
 
 	// Clear expired messages

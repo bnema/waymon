@@ -332,14 +332,14 @@ func (m *ServerModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 						})
 					}
 				}()
-				
+
 				// Update UI state immediately
 				m.localControl = true
 				m.selectedClientIndex = -1
 				m.activeClient = nil
 				m.updateViewport()
 			}
-			
+
 		case "g":
 			m.viewport.GotoTop()
 		case "G":
