@@ -540,41 +540,9 @@ func (a *AllDevicesCapture) captureFromDevice(ctx context.Context, handler *devi
 
 	logger.Debugf("Starting capture from device: %s (%s)", handler.name, handler.path)
 
-	// Variables to accumulate relative movements
+	// Variables for mouse movement accumulation
 	var accX, accY int32
-	var lastFlush time.Time
-	flushInterval := 500 * time.Microsecond // 0.5ms for lower latency
 	var mu sync.Mutex
-
-	// Start a goroutine to periodically flush accumulated movements
-	flushTicker := time.NewTicker(flushInterval)
-	defer flushTicker.Stop()
-	
-	go func() {
-		for {
-			select {
-			case <-ctx.Done():
-				return
-			case <-flushTicker.C:
-				mu.Lock()
-				if (accX != 0 || accY != 0) && time.Since(lastFlush) >= flushInterval {
-					a.sendEvent(&protocol.InputEvent{
-						Event: &protocol.InputEvent_MouseMove{
-							MouseMove: &protocol.MouseMoveEvent{
-								Dx: float64(accX),
-								Dy: float64(accY),
-							},
-						},
-						Timestamp: time.Now().UnixNano(),
-						SourceId:  fmt.Sprintf("all-devices-%s", filepath.Base(handler.path)),
-					})
-					accX, accY = 0, 0
-					lastFlush = time.Now()
-				}
-				mu.Unlock()
-			}
-		}
-	}()
 
 	for {
 		select {
@@ -659,7 +627,22 @@ func (a *AllDevicesCapture) captureFromDevice(ctx context.Context, handler *devi
 						a.sendKeyboardEvent(event.Code, event.Value)
 					}
 				case evdev.EV_SYN:
-					// Synchronization event - ignore
+					// Send accumulated mouse movement on sync
+					mu.Lock()
+					if accX != 0 || accY != 0 {
+						a.sendEvent(&protocol.InputEvent{
+							Event: &protocol.InputEvent_MouseMove{
+								MouseMove: &protocol.MouseMoveEvent{
+									Dx: float64(accX),
+									Dy: float64(accY),
+								},
+							},
+							Timestamp: time.Now().UnixNano(),
+							SourceId:  fmt.Sprintf("all-devices-%s", filepath.Base(handler.path)),
+						})
+						accX, accY = 0, 0
+					}
+					mu.Unlock()
 				case evdev.EV_MSC:
 					// Miscellaneous events - ignore
 				}
