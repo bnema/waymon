@@ -1,9 +1,0 @@
-[submodule "third_party/wlr-protocols"]
-	path = third_party/wlr-protocols
-	url = https://gitlab.freedesktop.org/wlroots/wlr-protocols.git
-[submodule "third_party/wayland-virtual-input-go"]
-	path = third_party/wayland-virtual-input-go
-	url = git@github.com:bnema/wayland-virtual-input-go.git
-[submodule "third_party/wlroots"]
-	path = third_party/wlroots
-	url = https://gitlab.freedesktop.org/wlroots/wlroots.git
