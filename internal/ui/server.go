@@ -273,46 +273,30 @@ func (m *ServerModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 			}
 
-		case "1", "2", "3", "4", "5", "alt+1", "alt+2", "alt+3", "alt+4", "alt+5", 
-			"ctrl+1", "ctrl+2", "ctrl+3", "ctrl+4", "ctrl+5",
-			"cmd+1", "cmd+2", "cmd+3", "cmd+4", "cmd+5":
-			// Handle number keys with or without modifiers for switching clients
-			// Extract the number from the key string
-			keyStr := msg.String()
-			var clientNum int
-			if len(keyStr) == 1 {
-				// Plain number key - only when controlling local
-				if !m.localControl {
-					// Let it pass through to the client
-					return m, nil
-				}
-				clientNum, _ = strconv.Atoi(keyStr)
-			} else {
-				// Modified key (alt+1, cmd+1, etc) - works from anywhere
-				parts := strings.Split(keyStr, "+")
-				if len(parts) == 2 {
-					clientNum, _ = strconv.Atoi(parts[1])
-				}
-			}
-			
-			if clientNum > 0 && m.clientManager != nil && clientNum <= len(m.clients) {
-				client := m.clients[clientNum-1]
+		case "1", "2", "3", "4", "5":
+			// Only handle number keys for switching when controlling local
+			// This prevents keyboard events forwarded to clients from triggering switches
+			if m.localControl {
+				// Switch to specific client by number
+				clientNum, _ := strconv.Atoi(msg.String())
+				if m.clientManager != nil && clientNum <= len(m.clients) && clientNum > 0 {
+					client := m.clients[clientNum-1]
 
-				// Do the switch in a goroutine to prevent UI blocking
-				go func() {
-					if err := m.clientManager.SwitchToClient(client.ID); err != nil {
-						m.AddLogEntry(LogEntry{
-							Timestamp: time.Now(),
-							Level:     "ERROR",
-							Message:   fmt.Sprintf("Failed to switch to client %s: %v", client.Name, err),
-						})
-					}
-				}()
+					// Do the switch in a goroutine to prevent UI blocking
+					go func() {
+						if err := m.clientManager.SwitchToClient(client.ID); err != nil {
+							m.AddLogEntry(LogEntry{
+								Timestamp: time.Now(),
+								Level:     "ERROR",
+								Message:   fmt.Sprintf("Failed to switch to client %s: %v", client.Name, err),
+							})
+						}
+					}()
 
-				// Immediately update our local state for responsive UI
-				m.localControl = false
-				m.selectedClientIndex = clientNum - 1
-				m.activeClient = client
+					// Immediately update our local state for responsive UI
+					m.localControl = false
+					m.selectedClientIndex = clientNum - 1
+					m.activeClient = client
 
 					// Log the switch attempt
 					m.AddLogEntry(LogEntry{
@@ -561,10 +545,10 @@ func (m *ServerModel) renderControls() string {
 			"  [1-5] Switch to client • [Tab] Next client\n" +
 			"  [g] Top of logs • [G] Bottom of logs • [q] Quit"
 	} else {
-		// When controlling a client, emphasize escape/release and modifier shortcuts
+		// When controlling a client, emphasize escape/release
 		escapeStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("214")).Bold(true)
 		controlsText = "Controls:\n" +
-			"  [Cmd+1-5] Switch to client • " + escapeStyle.Render("[Esc/0] RELEASE CONTROL") + " • [Tab] Next client\n" +
+			"  " + escapeStyle.Render("[Esc/0] RELEASE CONTROL") + " • [Tab] Next client\n" +
 			"  [g] Top of logs • [G] Bottom of logs • [q] Quit"
 	}
 
