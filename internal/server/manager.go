@@ -165,19 +165,8 @@ func (cm *ClientManager) SwitchToClient(clientID string) error {
 		}
 	}
 
-	// Ensure input backend is running
-	if cm.controllingLocal {
-		logger.Debugf("[SERVER-MANAGER] Starting input backend for client control")
-		// Use stored context or create a new one if needed
-		ctx := cm.inputEventsCtx
-		if ctx == nil {
-			ctx = context.Background()
-		}
-		if err := cm.inputBackend.Start(ctx); err != nil {
-			logger.Errorf("[SERVER-MANAGER] Failed to start input backend: %v", err)
-			return fmt.Errorf("failed to start input backend: %w", err)
-		}
-	}
+	// Note: Input backend should always be running (started by Server at startup)
+	// We no longer stop/start it during transitions for better reliability
 
 	// Update target in input backend
 	logger.Debugf("[SERVER-MANAGER] Setting input backend target to %s", clientID)
@@ -300,21 +289,20 @@ func (cm *ClientManager) SwitchToLocal() error {
 		}
 	}
 
-	// Clear target in input backend
+	// Clear target in input backend - this releases all devices
 	if err := cm.inputBackend.SetTarget(""); err != nil {
 		logger.Errorf("Failed to clear input target: %v", err)
 	}
 
-	// Stop the input backend when switching to local to save resources
-	if err := cm.inputBackend.Stop(); err != nil {
-		logger.Errorf("Failed to stop input backend: %v", err)
-	}
+	// Note: We don't stop the input backend here anymore. SetTarget("") already
+	// releases all grabbed devices and stops forwarding events. Keeping the backend
+	// running allows for smoother transitions when switching between local and clients.
 
 	// Update state
 	cm.activeClientID = ""
 	cm.controllingLocal = true
 
-	logger.Info("Switched control to local system - input capture stopped")
+	logger.Info("Switched control to local system - devices released")
 
 	// Notify UI if callback is set
 	if cm.onActivity != nil {
@@ -719,10 +707,6 @@ func (cm *ClientManager) UnregisterClient(id string) {
 		if cm.inputBackend != nil {
 			if err := cm.inputBackend.SetTarget(""); err != nil {
 				logger.Errorf("[SERVER-MANAGER] Failed to release input on client disconnect: %v", err)
-			}
-			// Stop the input backend to save resources
-			if err := cm.inputBackend.Stop(); err != nil {
-				logger.Errorf("[SERVER-MANAGER] Failed to stop input backend: %v", err)
 			}
 		}
 
