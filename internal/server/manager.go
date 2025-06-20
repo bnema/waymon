@@ -39,6 +39,9 @@ type ClientManager struct {
 	// Emergency release cooldown
 	emergencyReleaseTime time.Time
 	emergencyCooldown    time.Duration
+	
+	// Keyboard layout
+	serverLayout string // Server's keyboard layout
 }
 
 // cursorState tracks cursor position for a client
@@ -62,8 +65,9 @@ type ConnectedClient struct {
 	ConnectedAt time.Time
 
 	// Client configuration received on connect
-	Monitors     []*protocol.Monitor
-	Capabilities *protocol.ClientCapabilities
+	Monitors       []*protocol.Monitor
+	Capabilities   *protocol.ClientCapabilities
+	KeyboardLayout string // Keyboard layout (e.g., "us", "fr", "de")
 }
 
 // NewClientManager creates a new client manager for the server
@@ -78,6 +82,7 @@ func NewClientManager(inputBackend input.InputBackend) (*ClientManager, error) {
 		controllingLocal:  true, // Start by controlling local system
 		clientCursors:     make(map[string]*cursorState),
 		emergencyCooldown: 5 * time.Second, // 5 second cooldown after emergency release
+		serverLayout:      input.GetServerKeyboardLayout(), // Detect server keyboard layout
 	}, nil
 }
 
@@ -455,6 +460,33 @@ func (cm *ClientManager) HandleInputEvent(event *protocol.InputEvent) {
 		}
 	}
 
+	// Translate keyboard events if needed
+	if keyboardEvent := event.GetKeyboard(); keyboardEvent != nil && client.KeyboardLayout != "" && client.KeyboardLayout != cm.serverLayout {
+		// Create a translator for this layout combination
+		translator := input.NewKeyboardLayoutTranslator(cm.serverLayout, client.KeyboardLayout)
+		
+		// Translate the key code
+		originalKey := keyboardEvent.Key
+		translatedKey := translator.TranslateKeyCode(originalKey)
+		
+		if translatedKey != originalKey {
+			// Create a new keyboard event with the translated key
+			translatedEvent := &protocol.InputEvent{
+				Event: &protocol.InputEvent_Keyboard{
+					Keyboard: &protocol.KeyboardEvent{
+						Key:       translatedKey,
+						Pressed:   keyboardEvent.Pressed,
+						Modifiers: keyboardEvent.Modifiers,
+					},
+				},
+				Timestamp: event.Timestamp,
+				SourceId:  event.SourceId,
+			}
+			event = translatedEvent
+			logger.Debugf("[SERVER-MANAGER] Translated key %d to %d for %s layout", originalKey, translatedKey, client.KeyboardLayout)
+		}
+	}
+
 	// Send input event to the client via SSH
 	if cm.sshServer != nil {
 		if err := cm.sshServer.SendEventToClient(client.Address, event); err != nil {
@@ -578,6 +610,7 @@ func (cm *ClientManager) updateClientConfiguration(config *protocol.ClientConfig
 		// Update existing client
 		targetClient.Monitors = config.Monitors
 		targetClient.Capabilities = config.Capabilities
+		targetClient.KeyboardLayout = config.KeyboardLayout
 
 		// Update name to use the client-provided name instead of address
 		if config.ClientName != "" && targetClient.Name != config.ClientName {
@@ -585,8 +618,8 @@ func (cm *ClientManager) updateClientConfiguration(config *protocol.ClientConfig
 			targetClient.Name = config.ClientName
 		}
 
-		logger.Infof("[SERVER-MANAGER] Updated client configuration for %s: %d monitors, compositor: %s",
-			targetClient.Name, len(config.Monitors), config.Capabilities.WaylandCompositor)
+		logger.Infof("[SERVER-MANAGER] Updated client configuration for %s: %d monitors, layout=%s, compositor: %s",
+			targetClient.Name, len(config.Monitors), config.KeyboardLayout, config.Capabilities.WaylandCompositor)
 
 		// Log monitor details
 		for i, monitor := range config.Monitors {

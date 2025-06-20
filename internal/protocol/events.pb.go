@@ -912,13 +912,14 @@ func (x *ServerCapabilities) GetSupportsHotkeys() bool {
 
 // Client configuration sent on connect
 type ClientConfig struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	ClientId      string                 `protobuf:"bytes,1,opt,name=client_id,json=clientId,proto3" json:"client_id,omitempty"`
-	ClientName    string                 `protobuf:"bytes,2,opt,name=client_name,json=clientName,proto3" json:"client_name,omitempty"`
-	Monitors      []*Monitor             `protobuf:"bytes,3,rep,name=monitors,proto3" json:"monitors,omitempty"`
-	Capabilities  *ClientCapabilities    `protobuf:"bytes,4,opt,name=capabilities,proto3" json:"capabilities,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state          protoimpl.MessageState `protogen:"open.v1"`
+	ClientId       string                 `protobuf:"bytes,1,opt,name=client_id,json=clientId,proto3" json:"client_id,omitempty"`
+	ClientName     string                 `protobuf:"bytes,2,opt,name=client_name,json=clientName,proto3" json:"client_name,omitempty"`
+	Monitors       []*Monitor             `protobuf:"bytes,3,rep,name=monitors,proto3" json:"monitors,omitempty"`
+	Capabilities   *ClientCapabilities    `protobuf:"bytes,4,opt,name=capabilities,proto3" json:"capabilities,omitempty"`
+	KeyboardLayout string                 `protobuf:"bytes,5,opt,name=keyboard_layout,json=keyboardLayout,proto3" json:"keyboard_layout,omitempty"` // Keyboard layout (e.g., "us", "fr", "de")
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
 }
 
 func (x *ClientConfig) Reset() {
@@ -977,6 +978,13 @@ func (x *ClientConfig) GetCapabilities() *ClientCapabilities {
 		return x.Capabilities
 	}
 	return nil
+}
+
+func (x *ClientConfig) GetKeyboardLayout() string {
+	if x != nil {
+		return x.KeyboardLayout
+	}
+	return ""
 }
 
 // Monitor/display information
@@ -1222,13 +1230,14 @@ const file_internal_protocol_events_proto_rawDesc = "" +
 	"\x11supports_keyboard\x18\x01 \x01(\bR\x10supportsKeyboard\x12%\n" +
 	"\x0esupports_mouse\x18\x02 \x01(\bR\rsupportsMouse\x12'\n" +
 	"\x0fsupports_scroll\x18\x03 \x01(\bR\x0esupportsScroll\x12)\n" +
-	"\x10supports_hotkeys\x18\x04 \x01(\bR\x0fsupportsHotkeys\"\xcb\x01\n" +
+	"\x10supports_hotkeys\x18\x04 \x01(\bR\x0fsupportsHotkeys\"\xf4\x01\n" +
 	"\fClientConfig\x12\x1b\n" +
 	"\tclient_id\x18\x01 \x01(\tR\bclientId\x12\x1f\n" +
 	"\vclient_name\x18\x02 \x01(\tR\n" +
 	"clientName\x124\n" +
 	"\bmonitors\x18\x03 \x03(\v2\x18.waymon.protocol.MonitorR\bmonitors\x12G\n" +
-	"\fcapabilities\x18\x04 \x01(\v2#.waymon.protocol.ClientCapabilitiesR\fcapabilities\"\xba\x01\n" +
+	"\fcapabilities\x18\x04 \x01(\v2#.waymon.protocol.ClientCapabilitiesR\fcapabilities\x12'\n" +
+	"\x0fkeyboard_layout\x18\x05 \x01(\tR\x0ekeyboardLayout\"\xba\x01\n" +
 	"\aMonitor\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\f\n" +
 	"\x01x\x18\x02 \x01(\x05R\x01x\x12\f\n" +

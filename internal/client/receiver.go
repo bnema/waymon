@@ -6,6 +6,9 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"os/exec"
+	"regexp"
+	"strings"
 	"sync"
 	"time"
 
@@ -494,10 +497,11 @@ func (ir *InputReceiver) sendClientConfiguration() error {
 
 	// Create client configuration
 	clientConfig := &protocol.ClientConfig{
-		ClientId:     ir.clientID,
-		ClientName:   ir.clientID,
-		Monitors:     protocolMonitors,
-		Capabilities: capabilities,
+		ClientId:       ir.clientID,
+		ClientName:     ir.clientID,
+		Monitors:       protocolMonitors,
+		Capabilities:   capabilities,
+		KeyboardLayout: getKeyboardLayout(),
 	}
 
 	// Create control event with client config
@@ -520,11 +524,62 @@ func (ir *InputReceiver) sendClientConfiguration() error {
 		if err := ir.sshConnection.SendInputEvent(inputEvent); err != nil {
 			return fmt.Errorf("failed to send client config: %w", err)
 		}
-		logger.Infof("Sent client configuration: %d monitors, capabilities: keyboard=%v, mouse=%v",
-			len(protocolMonitors), capabilities.CanReceiveKeyboard, capabilities.CanReceiveMouse)
+		logger.Infof("Sent client configuration: %d monitors, layout=%s, capabilities: keyboard=%v, mouse=%v",
+			len(protocolMonitors), clientConfig.KeyboardLayout, capabilities.CanReceiveKeyboard, capabilities.CanReceiveMouse)
 	}
 
 	return nil
+}
+
+// getKeyboardLayout attempts to detect the current keyboard layout
+func getKeyboardLayout() string {
+	// Try to get layout from various sources
+	
+	// 1. Try localectl (systemd)
+	if output, err := exec.Command("localectl", "status").Output(); err == nil {
+		lines := strings.Split(string(output), "\n")
+		for _, line := range lines {
+			if strings.Contains(line, "X11 Layout:") || strings.Contains(line, "VC Keymap:") {
+				parts := strings.Fields(line)
+				if len(parts) >= 3 {
+					return parts[2]
+				}
+			}
+		}
+	}
+	
+	// 2. Try setxkbmap (X11/XWayland)
+	if output, err := exec.Command("setxkbmap", "-query").Output(); err == nil {
+		lines := strings.Split(string(output), "\n")
+		for _, line := range lines {
+			if strings.Contains(line, "layout:") {
+				parts := strings.Fields(line)
+				if len(parts) >= 2 {
+					return parts[1]
+				}
+			}
+		}
+	}
+	
+	// 3. Try gsettings (GNOME)
+	if output, err := exec.Command("gsettings", "get", "org.gnome.desktop.input-sources", "sources").Output(); err == nil {
+		// Parse GNOME format: [('xkb', 'us'), ('xkb', 'fr')]
+		if strings.Contains(string(output), "'xkb'") {
+			re := regexp.MustCompile(`'xkb',\s*'(\w+)'`)
+			if matches := re.FindStringSubmatch(string(output)); len(matches) > 1 {
+				return matches[1]
+			}
+		}
+	}
+	
+	// 4. Check environment variable
+	if layout := os.Getenv("XKB_DEFAULT_LAYOUT"); layout != "" {
+		return layout
+	}
+	
+	// Default to US layout
+	logger.Warn("Could not detect keyboard layout, defaulting to 'us'")
+	return "us"
 }
 
 // getWaylandCompositor attempts to detect the Wayland compositor

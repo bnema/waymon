@@ -111,6 +111,7 @@ message ClientConfig {
   string client_name = 2;
   repeated Monitor monitors = 3;
   ClientCapabilities capabilities = 4;
+  string keyboard_layout = 5;    // Keyboard layout (e.g., "us", "fr", "de")
 }
 
 // Monitor/display information
