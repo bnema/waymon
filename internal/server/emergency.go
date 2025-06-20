@@ -55,12 +55,6 @@ func (er *EmergencyRelease) UpdateActivity() {
 	er.lastActivity = time.Now()
 }
 
-// ResetActivity resets the activity timer (called when switching control)
-func (er *EmergencyRelease) ResetActivity() {
-	er.lastActivity = time.Now()
-	logger.Debug("[EMERGENCY] Activity timer reset")
-}
-
 // handleSignals listens for SIGUSR1 to trigger emergency release
 func (er *EmergencyRelease) handleSignals() {
 	sigChan := make(chan os.Signal, 1)
@@ -86,8 +80,6 @@ func (er *EmergencyRelease) monitorActivity() {
 		select {
 		case <-ticker.C:
 			if er.manager.IsControllingLocal() {
-				// Reset activity timer when controlling local
-				er.lastActivity = time.Now()
 				continue // No timeout when controlling local
 			}
 

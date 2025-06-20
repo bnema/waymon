@@ -69,7 +69,6 @@ func (s *Server) Start(ctx context.Context) error {
 	// Initialize emergency release mechanisms
 	s.emergency = NewEmergencyRelease(s.clientManager)
 	s.emergency.Start()
-	s.clientManager.SetEmergencyRelease(s.emergency)
 	logger.Info("Server: Emergency release mechanisms activated")
 
 	return nil
