@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/signal"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
 
@@ -278,15 +279,30 @@ func runClient(cmd *cobra.Command, args []string) error {
 	sigCh := make(chan os.Signal, 1)
 	signal.Notify(sigCh, os.Interrupt, syscall.SIGTERM)
 
+	// Track if we're already shutting down
+	shuttingDown := false
+	shutdownMutex := &sync.Mutex{}
+
 	go func() {
-		<-sigCh
-		logger.Info("Received shutdown signal, initiating graceful shutdown...")
+		for sig := range sigCh {
+			shutdownMutex.Lock()
+			if !shuttingDown {
+				shuttingDown = true
+				shutdownMutex.Unlock()
+				logger.Info("Received %v signal, initiating graceful shutdown...", sig)
 
-		// Cancel context to signal shutdown to all components
-		cancel()
+				// Cancel context to signal shutdown to all components
+				cancel()
 
-		// Quit TUI immediately - defer cleanup will handle the rest
-		p.Send(tea.Quit())
+				// Send client shutdown message for proper cleanup
+				p.Send(func() tea.Msg { return ui.ClientShutdownMsg{} })
+			} else {
+				shutdownMutex.Unlock()
+				logger.Warn("Received second interrupt signal, forcing exit...")
+				fmt.Println("\nForce quitting...")
+				os.Exit(1)
+			}
+		}
 	}()
 
 	// Run TUI

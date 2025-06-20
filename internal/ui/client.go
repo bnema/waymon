@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/bnema/waymon/internal/client"
+	"github.com/bnema/waymon/internal/logger"
 	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
@@ -39,6 +40,9 @@ type ClientModel struct {
 type ControlStatusMsg struct {
 	Status client.ControlStatus
 }
+
+// ClientShutdownMsg signals that the client should shut down
+type ClientShutdownMsg struct{}
 
 // NewClientModel creates a new client UI model
 func NewClientModel(serverAddr string, inputReceiver *client.InputReceiver, version string) *ClientModel {
@@ -113,7 +117,8 @@ func (m *ClientModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 
 		case "q", "ctrl+c":
-			return m, tea.Quit
+			// Send shutdown message for proper cleanup
+			return m, func() tea.Msg { return ClientShutdownMsg{} }
 		}
 
 	case spinner.TickMsg:
@@ -172,6 +177,26 @@ func (m *ClientModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		cmds = append(cmds, tea.Tick(time.Millisecond, func(_ time.Time) tea.Msg {
 			return nil // This ensures the UI re-renders
 		}))
+
+	case ClientShutdownMsg:
+		// Handle proper client shutdown
+		m.AddLogEntry(LogEntry{
+			Timestamp: time.Now(),
+			Level:     "INFO",
+			Message:   "Client shutting down...",
+		})
+
+		// Disconnect if connected
+		if m.inputReceiver != nil && m.inputReceiver.IsConnected() {
+			go func() {
+				if err := m.inputReceiver.Disconnect(); err != nil {
+					logger.Errorf("Failed to disconnect during shutdown: %v", err)
+				}
+			}()
+		}
+
+		// Return quit immediately to make UI responsive
+		return m, tea.Quit
 	}
 
 	// Clear expired messages

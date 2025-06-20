@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"sync"
 	"syscall"
 	"time"
 
@@ -320,6 +321,10 @@ func runServer(cmd *cobra.Command, args []string) error {
 	done := make(chan os.Signal, 1)
 	signal.Notify(done, os.Interrupt, syscall.SIGTERM, syscall.SIGINT)
 
+	// Track if we're already shutting down
+	shuttingDown := false
+	shutdownMutex := &sync.Mutex{}
+
 	// Start server and TUI in background
 	serverErrCh := make(chan error, 1)
 	go func() {
@@ -330,6 +335,24 @@ func runServer(cmd *cobra.Command, args []string) error {
 	}()
 
 	if p != nil {
+		// Handle signals for TUI mode
+		go func() {
+			for sig := range done {
+				shutdownMutex.Lock()
+				if !shuttingDown {
+					shuttingDown = true
+					shutdownMutex.Unlock()
+					logger.Info("Received %v signal, initiating graceful shutdown...", sig)
+					p.Send(func() tea.Msg { return ui.ServerShutdownMsg{} })
+				} else {
+					shutdownMutex.Unlock()
+					logger.Warn("Received second interrupt signal, forcing exit...")
+					fmt.Println("\nForce quitting...")
+					os.Exit(1)
+				}
+			}
+		}()
+
 		// Start server initialization in background after a delay
 		go func() {
 			// Give TUI time to start

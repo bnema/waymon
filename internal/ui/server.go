@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/bnema/waymon/internal/logger"
 	"github.com/bnema/waymon/internal/server"
 	"github.com/charmbracelet/bubbles/spinner"
 	"github.com/charmbracelet/bubbles/viewport"
@@ -17,7 +18,8 @@ import (
 type refreshClientListMsg struct{}
 
 // serverShutdownMsg is an internal message to trigger proper server shutdown
-type serverShutdownMsg struct{}
+// ServerShutdownMsg signals that the server should shut down
+type ServerShutdownMsg struct{}
 
 // ServerModel represents the redesigned server UI model where server is the controller
 type ServerModel struct {
@@ -173,7 +175,7 @@ func (m *ServerModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		switch msg.String() {
 		case "q", "ctrl+c":
 			// Send shutdown message instead of direct tea.Quit to ensure proper cleanup
-			return m, func() tea.Msg { return serverShutdownMsg{} }
+			return m, func() tea.Msg { return ServerShutdownMsg{} }
 		}
 
 		// Handle auth approval if pending
@@ -401,7 +403,7 @@ func (m *ServerModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// Handle the delayed refresh
 		m.refreshClientList()
 
-	case serverShutdownMsg:
+	case ServerShutdownMsg:
 		// Handle proper server shutdown
 		m.AddLogEntry(LogEntry{
 			Timestamp: time.Now(),
@@ -409,14 +411,28 @@ func (m *ServerModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			Message:   "Server shutting down...",
 		})
 
-		// Perform proper shutdown sequence
+		// Perform proper shutdown sequence with timeout
 		if m.serverInstance != nil {
+			// Use a channel to signal when shutdown is complete
+			done := make(chan struct{})
 			go func() {
 				m.serverInstance.Stop()
+				close(done)
+			}()
+
+			// Wait for shutdown or timeout
+			go func() {
+				select {
+				case <-done:
+					// Shutdown completed
+				case <-time.After(2 * time.Second):
+					// Timeout - force quit
+					logger.Warn("Server shutdown timed out, forcing exit")
+				}
 			}()
 		}
 
-		// Now quit the UI
+		// Return quit immediately to make UI responsive
 		return m, tea.Quit
 	}
 
