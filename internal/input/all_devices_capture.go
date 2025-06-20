@@ -199,6 +199,9 @@ func (a *AllDevicesCapture) SetTarget(clientID string) error {
 		}
 		if releaseCount > 0 {
 			logger.Infof("Released %d devices", releaseCount)
+			// Allow kernel time to fully release device resources
+			logger.Debug("Waiting for device release to complete...")
+			time.Sleep(150 * time.Millisecond)
 		}
 		logger.Info("Input capture target cleared - controlling local system")
 	} else {
@@ -209,9 +212,24 @@ func (a *AllDevicesCapture) SetTarget(clientID string) error {
 			var successCount int
 			for _, handler := range a.devices {
 				if handler.device != nil && !handler.grabbed {
-					if err := handler.device.Grab(); err != nil {
-						grabErrors = append(grabErrors, fmt.Sprintf("%s: %v", handler.path, err))
-						logger.Warnf("Failed to grab device %s (%s): %v", handler.name, handler.path, err)
+					// Retry logic with exponential backoff for device busy errors
+					var grabErr error
+					for retry := 0; retry < 3; retry++ {
+						if grabErr = handler.device.Grab(); grabErr != nil {
+							if strings.Contains(grabErr.Error(), "busy") && retry < 2 {
+								backoffDelay := time.Duration(retry+1) * 50 * time.Millisecond
+								logger.Debugf("Device %s busy, retrying in %v (attempt %d/3)", handler.name, backoffDelay, retry+1)
+								time.Sleep(backoffDelay)
+								continue
+							}
+						} else {
+							break // Success
+						}
+					}
+					
+					if grabErr != nil {
+						grabErrors = append(grabErrors, fmt.Sprintf("%s: %v", handler.path, grabErr))
+						logger.Warnf("Failed to grab device %s (%s): %v", handler.name, handler.path, grabErr)
 					} else {
 						handler.grabbed = true
 						successCount++
