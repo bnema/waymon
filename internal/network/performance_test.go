@@ -78,8 +78,8 @@ func TestSSHClientEventSending(t *testing.T) {
 		assert.Greater(t, eventsPerSecond, 10000.0,
 			"Event sending rate too low")
 
-		// Verify all events were written
-		assert.Equal(t, eventCount, mockWriter.GetWrittenCount())
+		// Verify all events were written (2 writes per event: length + data)
+		assert.Equal(t, eventCount*2, mockWriter.GetWrittenCount())
 	})
 
 	// Test with simulated network latency
@@ -167,8 +167,8 @@ func TestConcurrentEventSending(t *testing.T) {
 	t.Logf("Concurrent: %d events from %d goroutines in %v (%.0f events/sec)",
 		totalEvents, goroutines, duration, eventsPerSecond)
 
-	// Verify all events were written
-	assert.Equal(t, totalEvents, mockWriter.GetWrittenCount())
+	// Verify all events were written (2 writes per event: length + data)
+	assert.Equal(t, totalEvents*2, mockWriter.GetWrittenCount())
 }
 
 // BenchmarkWriteInputMessage benchmarks the protocol buffer serialization

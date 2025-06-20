@@ -165,6 +165,20 @@ func (cm *ClientManager) SwitchToClient(clientID string) error {
 		}
 	}
 
+	// Ensure input backend is running
+	if cm.controllingLocal {
+		logger.Debugf("[SERVER-MANAGER] Starting input backend for client control")
+		// Use stored context or create a new one if needed
+		ctx := cm.inputEventsCtx
+		if ctx == nil {
+			ctx = context.Background()
+		}
+		if err := cm.inputBackend.Start(ctx); err != nil {
+			logger.Errorf("[SERVER-MANAGER] Failed to start input backend: %v", err)
+			return fmt.Errorf("failed to start input backend: %w", err)
+		}
+	}
+
 	// Update target in input backend
 	logger.Debugf("[SERVER-MANAGER] Setting input backend target to %s", clientID)
 	if err := cm.inputBackend.SetTarget(clientID); err != nil {
@@ -291,11 +305,16 @@ func (cm *ClientManager) SwitchToLocal() error {
 		logger.Errorf("Failed to clear input target: %v", err)
 	}
 
+	// Stop the input backend when switching to local to save resources
+	if err := cm.inputBackend.Stop(); err != nil {
+		logger.Errorf("Failed to stop input backend: %v", err)
+	}
+
 	// Update state
 	cm.activeClientID = ""
 	cm.controllingLocal = true
 
-	logger.Info("Switched control to local system")
+	logger.Info("Switched control to local system - input capture stopped")
 
 	// Notify UI if callback is set
 	if cm.onActivity != nil {
@@ -700,6 +719,10 @@ func (cm *ClientManager) UnregisterClient(id string) {
 		if cm.inputBackend != nil {
 			if err := cm.inputBackend.SetTarget(""); err != nil {
 				logger.Errorf("[SERVER-MANAGER] Failed to release input on client disconnect: %v", err)
+			}
+			// Stop the input backend to save resources
+			if err := cm.inputBackend.Stop(); err != nil {
+				logger.Errorf("[SERVER-MANAGER] Failed to stop input backend: %v", err)
 			}
 		}
 

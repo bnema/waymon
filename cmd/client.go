@@ -124,6 +124,7 @@ func runClient(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("failed to create input receiver: %w", err)
 	}
 	defer func() {
+		inputReceiver.StopEmergencyRelease()
 		if err := inputReceiver.Disconnect(); err != nil {
 			logger.Errorf("Failed to disconnect input receiver: %v", err)
 		}
@@ -224,6 +225,14 @@ func runClient(cmd *cobra.Command, args []string) error {
 				// In redesigned architecture, client is now ready to receive input from server
 				logger.Info("Client ready to receive input from server")
 
+				// Start emergency release monitoring
+				inputReceiver.StartEmergencyRelease(ctx, func(reason string) {
+					logger.Warnf("Emergency release triggered: %s", reason)
+					p.Send(ui.DisconnectedMsg{})
+					// Cancel context to initiate shutdown
+					cancel()
+				})
+
 				return // Exit the retry loop
 			}
 
@@ -267,6 +276,7 @@ func runClient(cmd *cobra.Command, args []string) error {
 	defer func() {
 		logger.Info("Cleaning up client resources...")
 		cancel() // Cancel context
+		inputReceiver.StopEmergencyRelease()
 		if inputReceiver.IsConnected() {
 			logger.Info("Disconnecting from server...")
 			if err := inputReceiver.Disconnect(); err != nil {

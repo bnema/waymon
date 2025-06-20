@@ -47,11 +47,10 @@ type SSHServer struct {
 }
 
 type sshClient struct {
-	session     ssh.Session
-	addr        string
-	publicKey   string
-	writer      io.Writer    // For sending input events to client
-	smartWriter *SmartWriter // Smart writer for batching
+	session   ssh.Session
+	addr      string
+	publicKey string
+	writer    io.Writer // For sending input events to client
 }
 
 // NewSSHServer creates a new SSH-based server
@@ -127,7 +126,7 @@ func (s *SSHServer) SendEventToClient(clientAddr string, event *protocol.InputEv
 			logger.Debugf("[SSH-SERVER] Found client for address %s, writing event", clientAddr)
 
 			// Use the same message format as the client expects
-			if err := client.smartWriter.WriteInputEvent(event); err != nil {
+			if err := writeInputMessage(client.writer, event); err != nil {
 				logger.Errorf("[SSH-SERVER] Failed to write event to client %s: %v", clientAddr, err)
 				return fmt.Errorf("failed to send event to client: %w", err)
 			}
@@ -155,9 +154,6 @@ func (s *SSHServer) Stop() {
 		// Close all active sessions
 		s.mu.Lock()
 		for _, client := range s.clients {
-			if client.smartWriter != nil {
-				client.smartWriter.Close()
-			}
 			_ = client.session.Close()
 		}
 		s.clients = make(map[string]*sshClient)
@@ -272,11 +268,10 @@ func (s *SSHServer) sessionHandler() wish.Middleware {
 
 			// Create and register client entry
 			client := &sshClient{
-				session:     sess,
-				addr:        addr,
-				publicKey:   publicKey,
-				writer:      writer,
-				smartWriter: NewSmartWriter(writer),
+				session:   sess,
+				addr:      addr,
+				publicKey: publicKey,
+				writer:    writer,
 			}
 			s.clients[sess.Context().SessionID()] = client
 			s.mu.Unlock()
@@ -289,12 +284,7 @@ func (s *SSHServer) sessionHandler() wish.Middleware {
 			// Handle disconnection
 			defer func() {
 				s.mu.Lock()
-				if c, exists := s.clients[sess.Context().SessionID()]; exists {
-					if c.smartWriter != nil {
-						c.smartWriter.Close()
-					}
-					delete(s.clients, sess.Context().SessionID())
-				}
+				delete(s.clients, sess.Context().SessionID())
 				s.mu.Unlock()
 
 				if s.OnClientDisconnected != nil {
@@ -433,7 +423,7 @@ func (s *SSHServer) SendInputEventToClient(sessionID string, event *protocol.Inp
 		return fmt.Errorf("client not found: %s", sessionID)
 	}
 
-	return client.smartWriter.WriteInputEvent(event)
+	return writeInputMessage(client.writer, event)
 }
 
 // SendInputEventToAllClients sends an input event to all connected clients
@@ -447,7 +437,7 @@ func (s *SSHServer) SendInputEventToAllClients(event *protocol.InputEvent) error
 
 	var lastErr error
 	for _, client := range clients {
-		if err := client.smartWriter.WriteInputEvent(event); err != nil {
+		if err := writeInputMessage(client.writer, event); err != nil {
 			lastErr = err
 			logger.Errorf("Failed to send input event to client %s: %v", client.addr, err)
 		}
@@ -468,47 +458,6 @@ func (s *SSHServer) GetClientSessions() map[string]string {
 	return sessions
 }
 
-// writeInputEvent writes an input event to a client
-func (s *SSHServer) writeInputEvent(w io.Writer, event *protocol.InputEvent) error {
-	logger.Debugf("[SSH-SERVER] writeInputEvent: marshaling event type=%T", event.Event)
+// Removed - now using writeInputMessage from protocol.go
 
-	data, err := proto.Marshal(event)
-	if err != nil {
-		logger.Errorf("[SSH-SERVER] Failed to marshal input event: %v", err)
-		return fmt.Errorf("failed to marshal input event: %w", err)
-	}
-
-	// Write length prefix (4 bytes, big-endian)
-	length := len(data)
-	logger.Debugf("[SSH-SERVER] Writing message: length=%d bytes", length)
-
-	lengthBuf := []byte{
-		byte(length >> 24),
-		byte(length >> 16),
-		byte(length >> 8),
-		byte(length),
-	}
-
-	if _, err := w.Write(lengthBuf); err != nil {
-		logger.Errorf("[SSH-SERVER] Failed to write length prefix: %v", err)
-		return fmt.Errorf("failed to write length: %w", err)
-	}
-
-	if _, err := w.Write(data); err != nil {
-		logger.Errorf("[SSH-SERVER] Failed to write data: %v", err)
-		return fmt.Errorf("failed to write data: %w", err)
-	}
-
-	// Check if the writer supports flushing
-	if flusher, ok := w.(interface{ Flush() error }); ok {
-		if err := flusher.Flush(); err != nil {
-			logger.Errorf("[SSH-SERVER] Failed to flush writer: %v", err)
-			// Don't fail on flush error, data was already written
-		} else {
-			logger.Debugf("[SSH-SERVER] Flushed writer after writing")
-		}
-	}
-
-	logger.Debugf("[SSH-SERVER] Successfully wrote %d bytes to client", length)
-	return nil
-}
+// Remove duplicate - it's already in ssh_client.go

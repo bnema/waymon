@@ -24,7 +24,6 @@ type SSHClient struct {
 	session     *ssh.Session
 	writer      io.Writer
 	reader      io.Reader
-	smartWriter *SmartWriter
 
 	mu        sync.Mutex
 	connected bool
@@ -67,7 +66,7 @@ func (c *SSHClient) Connect(ctx context.Context, serverAddr string) error {
 			} else {
 				logger.Debugf("SSH agent available but no keys loaded")
 			}
-			conn.Close()
+			_ = conn.Close()
 		} else {
 			logger.Debugf("Failed to connect to SSH agent: %v", err)
 		}
@@ -136,40 +135,23 @@ func (c *SSHClient) Connect(ctx context.Context, serverAddr string) error {
 		return fmt.Errorf("failed to connect to SSH server: %w", err)
 	}
 
-	// Enable TCP keepalive and optimize for low latency
+	// Enable TCP keepalive for connection monitoring
 	if tcpConn, ok := conn.(*net.TCPConn); ok {
-		// Disable Nagle's algorithm for low latency
+		// Disable Nagle's algorithm for lowest possible latency
 		if err := tcpConn.SetNoDelay(true); err != nil {
 			logger.Warnf("Failed to disable Nagle's algorithm: %v", err)
-		} else {
-			logger.Debug("TCP_NODELAY enabled (Nagle's algorithm disabled)")
 		}
-
-		// Increase write buffer for better throughput
-		if err := tcpConn.SetWriteBuffer(65536); err != nil {
-			logger.Warnf("Failed to set TCP write buffer: %v", err)
-		} else {
-			logger.Debug("TCP write buffer set to 64KB")
-		}
-
-		// Enable keepalive for connection monitoring
+		
+		// Enable keepalive
 		if err := tcpConn.SetKeepAlive(true); err != nil {
 			logger.Warnf("Failed to enable TCP keepalive: %v", err)
-		} else {
-			logger.Debug("TCP keepalive enabled")
-			// Set keepalive interval to 30 seconds
-			if err := tcpConn.SetKeepAlivePeriod(30 * time.Second); err != nil {
-				logger.Warnf("Failed to set TCP keepalive period: %v", err)
-			} else {
-				logger.Debug("TCP keepalive period set to 30 seconds")
-			}
 		}
 	}
 
 	// Create SSH connection over the TCP connection
 	sshConn, chans, reqs, err := ssh.NewClientConn(conn, serverAddr, config)
 	if err != nil {
-		conn.Close()
+		_ = conn.Close()
 		return fmt.Errorf("failed to create SSH connection: %w", err)
 	}
 
@@ -229,8 +211,9 @@ func (c *SSHClient) Connect(ctx context.Context, serverAddr string) error {
 	c.session = session
 	c.writer = writer
 	c.reader = reader
-	// Create smart writer that uses immediate flushing for mouse events
-	c.smartWriter = NewSmartWriter(writer)
+	// For now, just use the writer directly without any buffering
+	// to ensure mouse events have minimal latency
+	c.writer = writer
 	c.connected = true
 
 	// Start receiving input events from server
@@ -251,11 +234,7 @@ func (c *SSHClient) Disconnect() error {
 
 	c.connected = false
 
-	// Close smart writer first
-	if c.smartWriter != nil {
-		c.smartWriter.Close()
-		c.smartWriter = nil
-	}
+	// Nothing to close for the raw writer
 
 	if c.session != nil {
 		if err := c.session.Close(); err != nil {
@@ -298,15 +277,15 @@ func (c *SSHClient) Reconnect(ctx context.Context, serverAddr string) error {
 // SendInputEvent sends an input event to the server
 func (c *SSHClient) SendInputEvent(event *protocol.InputEvent) error {
 	c.mu.Lock()
-	smartWriter := c.smartWriter
+	writer := c.writer
 	connected := c.connected
 	c.mu.Unlock()
 
-	if !connected || smartWriter == nil {
+	if !connected || writer == nil {
 		return fmt.Errorf("not connected")
 	}
 
-	return smartWriter.WriteInputEvent(event)
+	return writeInputMessage(writer, event)
 }
 
 // OnInputEvent sets the callback for receiving input events from server
@@ -469,32 +448,7 @@ func (c *SSHClient) receiveInputEvents(ctx context.Context) {
 	}
 }
 
-// writeMessage writes a protobuf message with length prefix
-func writeMessage(w io.Writer, msg proto.Message) error {
-	data, err := proto.Marshal(msg)
-	if err != nil {
-		return fmt.Errorf("failed to marshal message: %w", err)
-	}
-
-	// Write length prefix (4 bytes, big-endian)
-	length := len(data)
-	lengthBuf := []byte{
-		byte(length >> 24),
-		byte(length >> 16),
-		byte(length >> 8),
-		byte(length),
-	}
-
-	if _, err := w.Write(lengthBuf); err != nil {
-		return fmt.Errorf("failed to write length: %w", err)
-	}
-
-	if _, err := w.Write(data); err != nil {
-		return fmt.Errorf("failed to write data: %w", err)
-	}
-
-	return nil
-}
+// Removed - now using writeInputMessage from protocol.go
 
 // loadPrivateKey loads and parses a private key from the given path
 func (c *SSHClient) loadPrivateKey(keyPath string) (ssh.Signer, error) {
@@ -533,29 +487,4 @@ func (c *SSHClient) loadPrivateKeyIfExists(keyPath string) (ssh.Signer, error) {
 	return c.loadPrivateKey(keyPath)
 }
 
-// writeInputMessage writes an InputEvent message with length prefix
-func writeInputMessage(w io.Writer, event *protocol.InputEvent) error {
-	data, err := proto.Marshal(event)
-	if err != nil {
-		return fmt.Errorf("failed to marshal input event: %w", err)
-	}
-
-	// Write length prefix (4 bytes, big-endian)
-	length := len(data)
-	lengthBuf := []byte{
-		byte(length >> 24),
-		byte(length >> 16),
-		byte(length >> 8),
-		byte(length),
-	}
-
-	if _, err := w.Write(lengthBuf); err != nil {
-		return fmt.Errorf("failed to write length: %w", err)
-	}
-
-	if _, err := w.Write(data); err != nil {
-		return fmt.Errorf("failed to write data: %w", err)
-	}
-
-	return nil
-}
+// Removed - now in protocol.go

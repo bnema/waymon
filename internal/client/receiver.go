@@ -47,6 +47,9 @@ type InputReceiver struct {
 	onReconnectStatus   func(status string) // Callback for reconnection status updates
 	reconnectInProgress bool                // Prevent multiple concurrent reconnection attempts
 
+	// Emergency release
+	emergency *EmergencyRelease
+
 	// Hotkey handling state - disabled for now
 	// lastHotkeyPress  time.Time
 	// hotkeyDebounceMs int64 // Minimum time between hotkey presses in milliseconds
@@ -202,6 +205,11 @@ func (ir *InputReceiver) OnStatusChange(callback func(ControlStatus)) {
 func (ir *InputReceiver) processInputEvent(event *protocol.InputEvent) {
 	logger.Debugf("[CLIENT-RECEIVER] Processing input event: type=%T, timestamp=%d, sourceId=%s",
 		event.Event, event.Timestamp, event.SourceId)
+
+	// Update emergency release activity tracking
+	if ir.emergency != nil {
+		ir.emergency.UpdateActivity()
+	}
 
 	// Handle control events first
 	if controlEvent := event.GetControl(); controlEvent != nil {
@@ -826,5 +834,29 @@ func (ir *InputReceiver) injectEvent(event *protocol.InputEvent) error {
 	default:
 		logger.Errorf("[CLIENT-RECEIVER] Unsupported input event type: %T", event.Event)
 		return fmt.Errorf("unsupported input event type: %T", event.Event)
+	}
+}
+
+// StartEmergencyRelease starts the emergency release monitoring
+func (ir *InputReceiver) StartEmergencyRelease(ctx context.Context, onEmergency func(reason string)) {
+	ir.mu.Lock()
+	defer ir.mu.Unlock()
+
+	if ir.emergency != nil {
+		return // Already started
+	}
+
+	ir.emergency = NewEmergencyRelease(ir, onEmergency)
+	ir.emergency.Start(ctx)
+}
+
+// StopEmergencyRelease stops the emergency release monitoring
+func (ir *InputReceiver) StopEmergencyRelease() {
+	ir.mu.Lock()
+	defer ir.mu.Unlock()
+
+	if ir.emergency != nil {
+		// Context cancellation will stop the goroutines
+		ir.emergency = nil
 	}
 }
