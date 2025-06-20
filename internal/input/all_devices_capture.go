@@ -72,7 +72,7 @@ func NewAllDevicesCapture() *AllDevicesCapture {
 		ignoredDevices: make(map[string]bool),
 		eventChan:      make(chan *protocol.InputEvent, 4096), // Large buffer for low latency
 		capturing:      false,
-		grabTimeout:    10 * time.Second,      // Reduced to 10 second safety timeout for better UX
+		grabTimeout:    30 * time.Second,      // 30 second safety timeout
 		emergencyKey:   evdev.KEY_ESC,         // ESC key for emergency release (requires Ctrl)
 		pressedKeys:    make(map[uint16]bool), // Initialize pressed keys tracking
 	}
