@@ -201,7 +201,7 @@ func (a *AllDevicesCapture) SetTarget(clientID string) error {
 			logger.Infof("Released %d devices", releaseCount)
 			// Allow kernel time to fully release device resources
 			logger.Debug("Waiting for device release to complete...")
-			time.Sleep(150 * time.Millisecond)
+			time.Sleep(300 * time.Millisecond)
 		}
 		logger.Info("Input capture target cleared - controlling local system")
 	} else {
@@ -240,9 +240,20 @@ func (a *AllDevicesCapture) SetTarget(clientID string) error {
 			logger.Infof("Grabbed %d/%d devices", successCount, len(a.devices))
 
 			if len(grabErrors) > 0 {
-				// Revert target on grab failure
-				a.currentTarget = oldTarget
-				return fmt.Errorf("failed to grab input devices: %s", strings.Join(grabErrors, ", "))
+				// Only fail if we couldn't grab ANY devices or most devices failed
+				if successCount == 0 {
+					// Revert target on total failure
+					a.currentTarget = oldTarget
+					return fmt.Errorf("failed to grab any input devices: %s", strings.Join(grabErrors, ", "))
+				} else if float64(successCount) < float64(len(a.devices))*0.5 {
+					// Warn if less than 50% of devices were grabbed, but continue
+					logger.Warnf("Only grabbed %d/%d devices. Failed devices: %s", 
+						successCount, len(a.devices), strings.Join(grabErrors, ", "))
+				} else {
+					// Log failures but continue if we got most devices
+					logger.Warnf("Some devices failed to grab (%d/%d succeeded): %s", 
+						successCount, len(a.devices), strings.Join(grabErrors, ", "))
+				}
 			}
 
 			// Set up safety timeout
@@ -420,6 +431,8 @@ func (a *AllDevicesCapture) isValidInputDevice(device *evdev.InputDevice) bool {
 		"power button",
 		"sleep button",
 		"lid switch",
+		"wmi hotkeys",  // System WMI hotkeys often can't be grabbed exclusively
+		"wmi",          // General WMI devices
 	}
 
 	for _, pattern := range excludePatterns {
