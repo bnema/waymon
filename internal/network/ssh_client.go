@@ -20,11 +20,11 @@ import (
 
 // SSHClient handles SSH connections to the server
 type SSHClient struct {
-	client         *ssh.Client
-	session        *ssh.Session
-	writer         io.Writer
-	reader         io.Reader
-	bufferedWriter *BufferedWriter
+	client      *ssh.Client
+	session     *ssh.Session
+	writer      io.Writer
+	reader      io.Reader
+	smartWriter *SmartWriter
 
 	mu        sync.Mutex
 	connected bool
@@ -229,8 +229,8 @@ func (c *SSHClient) Connect(ctx context.Context, serverAddr string) error {
 	c.session = session
 	c.writer = writer
 	c.reader = reader
-	// Create buffered writer for low-latency batching (1ms delay, 64KB buffer)
-	c.bufferedWriter = NewBufferedWriter(writer, 1*time.Millisecond, 65536)
+	// Create smart writer that uses immediate flushing for mouse events
+	c.smartWriter = NewSmartWriter(writer)
 	c.connected = true
 
 	// Start receiving input events from server
@@ -251,10 +251,10 @@ func (c *SSHClient) Disconnect() error {
 
 	c.connected = false
 
-	// Close buffered writer first
-	if c.bufferedWriter != nil {
-		c.bufferedWriter.Close()
-		c.bufferedWriter = nil
+	// Close smart writer first
+	if c.smartWriter != nil {
+		c.smartWriter.Close()
+		c.smartWriter = nil
 	}
 
 	if c.session != nil {
@@ -298,25 +298,15 @@ func (c *SSHClient) Reconnect(ctx context.Context, serverAddr string) error {
 // SendInputEvent sends an input event to the server
 func (c *SSHClient) SendInputEvent(event *protocol.InputEvent) error {
 	c.mu.Lock()
-	bufferedWriter := c.bufferedWriter
+	smartWriter := c.smartWriter
 	connected := c.connected
 	c.mu.Unlock()
 
-	if !connected || bufferedWriter == nil {
+	if !connected || smartWriter == nil {
 		return fmt.Errorf("not connected")
 	}
 
-	// Write the message
-	if err := writeInputMessage(bufferedWriter, event); err != nil {
-		return err
-	}
-
-	// For mouse move events, flush immediately for lowest latency
-	if event.GetMouseMove() != nil {
-		return bufferedWriter.Flush()
-	}
-
-	return nil
+	return smartWriter.WriteInputEvent(event)
 }
 
 // OnInputEvent sets the callback for receiving input events from server

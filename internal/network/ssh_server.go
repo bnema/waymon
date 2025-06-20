@@ -47,11 +47,11 @@ type SSHServer struct {
 }
 
 type sshClient struct {
-	session        ssh.Session
-	addr           string
-	publicKey      string
-	writer         io.Writer       // For sending input events to client
-	bufferedWriter *BufferedWriter // Buffered writer for batching
+	session     ssh.Session
+	addr        string
+	publicKey   string
+	writer      io.Writer    // For sending input events to client
+	smartWriter *SmartWriter // Smart writer for batching
 }
 
 // NewSSHServer creates a new SSH-based server
@@ -127,7 +127,7 @@ func (s *SSHServer) SendEventToClient(clientAddr string, event *protocol.InputEv
 			logger.Debugf("[SSH-SERVER] Found client for address %s, writing event", clientAddr)
 
 			// Use the same message format as the client expects
-			if err := s.writeInputEvent(client.bufferedWriter, event); err != nil {
+			if err := client.smartWriter.WriteInputEvent(event); err != nil {
 				logger.Errorf("[SSH-SERVER] Failed to write event to client %s: %v", clientAddr, err)
 				return fmt.Errorf("failed to send event to client: %w", err)
 			}
@@ -155,8 +155,8 @@ func (s *SSHServer) Stop() {
 		// Close all active sessions
 		s.mu.Lock()
 		for _, client := range s.clients {
-			if client.bufferedWriter != nil {
-				client.bufferedWriter.Close()
+			if client.smartWriter != nil {
+				client.smartWriter.Close()
 			}
 			_ = client.session.Close()
 		}
@@ -272,11 +272,11 @@ func (s *SSHServer) sessionHandler() wish.Middleware {
 
 			// Create and register client entry
 			client := &sshClient{
-				session:        sess,
-				addr:           addr,
-				publicKey:      publicKey,
-				writer:         writer,
-				bufferedWriter: NewBufferedWriter(writer, 1*time.Millisecond, 65536),
+				session:     sess,
+				addr:        addr,
+				publicKey:   publicKey,
+				writer:      writer,
+				smartWriter: NewSmartWriter(writer),
 			}
 			s.clients[sess.Context().SessionID()] = client
 			s.mu.Unlock()
@@ -290,8 +290,8 @@ func (s *SSHServer) sessionHandler() wish.Middleware {
 			defer func() {
 				s.mu.Lock()
 				if c, exists := s.clients[sess.Context().SessionID()]; exists {
-					if c.bufferedWriter != nil {
-						c.bufferedWriter.Close()
+					if c.smartWriter != nil {
+						c.smartWriter.Close()
 					}
 					delete(s.clients, sess.Context().SessionID())
 				}
@@ -433,17 +433,7 @@ func (s *SSHServer) SendInputEventToClient(sessionID string, event *protocol.Inp
 		return fmt.Errorf("client not found: %s", sessionID)
 	}
 
-	// Write the event
-	if err := s.writeInputEvent(client.bufferedWriter, event); err != nil {
-		return err
-	}
-
-	// For mouse move events, flush immediately for lowest latency
-	if event.GetMouseMove() != nil {
-		return client.bufferedWriter.Flush()
-	}
-
-	return nil
+	return client.smartWriter.WriteInputEvent(event)
 }
 
 // SendInputEventToAllClients sends an input event to all connected clients
@@ -457,7 +447,7 @@ func (s *SSHServer) SendInputEventToAllClients(event *protocol.InputEvent) error
 
 	var lastErr error
 	for _, client := range clients {
-		if err := s.writeInputEvent(client.bufferedWriter, event); err != nil {
+		if err := client.smartWriter.WriteInputEvent(event); err != nil {
 			lastErr = err
 			logger.Errorf("Failed to send input event to client %s: %v", client.addr, err)
 		}

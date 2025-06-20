@@ -4,6 +4,8 @@ import (
 	"io"
 	"sync"
 	"time"
+
+	"github.com/bnema/waymon/internal/protocol"
 )
 
 // BufferedWriter implements a write buffer with automatic flushing
@@ -15,6 +17,7 @@ type BufferedWriter struct {
 	done      chan struct{}
 	maxDelay  time.Duration
 	maxSize   int
+	immediate bool // Whether to flush immediately (for low-latency events)
 }
 
 // NewBufferedWriter creates a new buffered writer that automatically flushes
@@ -26,16 +29,36 @@ func NewBufferedWriter(w io.Writer, maxDelay time.Duration, maxSize int) *Buffer
 		done:      make(chan struct{}),
 		maxDelay:  maxDelay,
 		maxSize:   maxSize,
+		immediate: false,
 	}
 
 	go bw.flushLoop()
 	return bw
 }
 
+// NewImmediateWriter creates a buffered writer that flushes immediately on every write
+func NewImmediateWriter(w io.Writer) *BufferedWriter {
+	return &BufferedWriter{
+		w:         w,
+		buf:       make([]byte, 0, 1024), // Small buffer for immediate mode
+		flushChan: make(chan struct{}, 1),
+		done:      make(chan struct{}),
+		maxDelay:  0,
+		maxSize:   1024,
+		immediate: true,
+	}
+}
+
 // Write implements io.Writer
 func (bw *BufferedWriter) Write(p []byte) (int, error) {
 	bw.mu.Lock()
 	defer bw.mu.Unlock()
+
+	// If in immediate mode, write directly and flush
+	if bw.immediate {
+		bw.buf = append(bw.buf[:0], p...) // Reset buffer and add new data
+		return len(p), bw.flushLocked()
+	}
 
 	// If adding this data would exceed maxSize, flush first
 	if len(bw.buf)+len(p) > bw.maxSize {
@@ -105,5 +128,52 @@ func (bw *BufferedWriter) flushLoop() {
 func (bw *BufferedWriter) Close() error {
 	close(bw.done)
 	return bw.Flush()
+}
+
+// SmartWriter wraps a writer and selectively uses immediate or buffered mode
+type SmartWriter struct {
+	writer *BufferedWriter
+	mu     sync.Mutex
+}
+
+// NewSmartWriter creates a writer that uses immediate flushing for mouse events
+func NewSmartWriter(w io.Writer) *SmartWriter {
+	return &SmartWriter{
+		writer: NewBufferedWriter(w, 1*time.Millisecond, 65536),
+	}
+}
+
+// WriteInputEvent writes an input event using the appropriate writer
+func (sw *SmartWriter) WriteInputEvent(event *protocol.InputEvent) error {
+	sw.mu.Lock()
+	defer sw.mu.Unlock()
+
+	// Write the event
+	if err := writeInputMessage(sw.writer, event); err != nil {
+		return err
+	}
+	
+	// Check if this is a mouse movement event that needs immediate flushing
+	if event.GetMouseMove() != nil || event.GetMousePosition() != nil {
+		return sw.writer.Flush()
+	}
+	
+	// Let other events use the normal buffering
+	return nil
+}
+
+// Write implements io.Writer (delegates to buffered writer)
+func (sw *SmartWriter) Write(p []byte) (int, error) {
+	return sw.writer.Write(p)
+}
+
+// Flush flushes the writer
+func (sw *SmartWriter) Flush() error {
+	return sw.writer.Flush()
+}
+
+// Close closes the writer
+func (sw *SmartWriter) Close() error {
+	return sw.writer.Close()
 }
 
