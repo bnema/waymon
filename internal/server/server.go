@@ -125,7 +125,7 @@ func (s *Server) initInput() error {
 				// Mark emergency release in client manager
 				s.clientManager.MarkEmergencyRelease()
 				// Force switch to local
-				if err := s.clientManager.SwitchToLocal(); err != nil {
+				if err := s.clientManager.SwitchToLocal(context.Background()); err != nil {
 					logger.Errorf("Failed to switch to local on emergency: %v", err)
 				}
 			}
@@ -144,7 +144,10 @@ func (s *Server) initInput() error {
 		}
 
 		if s.clientManager != nil {
-			s.clientManager.HandleInputEvent(event)
+			// Use context.Background() for async event handling
+			if err := s.clientManager.HandleInputEvent(context.Background(), event); err != nil {
+				logger.Errorf("Server: Failed to handle input event: %v", err)
+			}
 		} else {
 			logger.Warn("Server: Input event received but client manager not initialized")
 		}

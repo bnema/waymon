@@ -1,6 +1,7 @@
 package server
 
 import (
+	"context"
 	"os"
 	"os/signal"
 	"sync"
@@ -122,7 +123,7 @@ func (er *EmergencyRelease) triggerRelease(reason string) {
 	er.manager.MarkEmergencyRelease()
 
 	// Force switch to local control
-	if err := er.manager.SwitchToLocal(); err != nil {
+	if err := er.manager.SwitchToLocal(context.Background()); err != nil {
 		logger.Errorf("[EMERGENCY] Failed to switch to local: %v", err)
 
 		// Force release at input backend level

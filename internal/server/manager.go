@@ -136,7 +136,14 @@ func (cm *ClientManager) Stop() error {
 }
 
 // SwitchToClient switches input control to the specified client
-func (cm *ClientManager) SwitchToClient(clientID string) error {
+func (cm *ClientManager) SwitchToClient(ctx context.Context, clientID string) error {
+	// Check context cancellation
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	default:
+	}
+	
 	logger.Debugf("[SERVER-MANAGER] SwitchToClient called: clientID=%s", clientID)
 
 	cm.mu.Lock()
@@ -252,7 +259,14 @@ func (cm *ClientManager) SwitchToClient(clientID string) error {
 }
 
 // SwitchToLocal switches input control back to the local system
-func (cm *ClientManager) SwitchToLocal() error {
+func (cm *ClientManager) SwitchToLocal(ctx context.Context) error {
+	// Check context cancellation
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	default:
+	}
+	
 	cm.mu.Lock()
 	defer cm.mu.Unlock()
 
@@ -313,7 +327,13 @@ func (cm *ClientManager) SwitchToLocal() error {
 }
 
 // SwitchToNextClient switches to the next available client
-func (cm *ClientManager) SwitchToNextClient() error {
+func (cm *ClientManager) SwitchToNextClient(ctx context.Context) error {
+	// Check context cancellation
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	default:
+	}
 	cm.mu.RLock()
 	clientIDs := make([]string, 0, len(cm.clients))
 	for id := range cm.clients {
@@ -322,7 +342,7 @@ func (cm *ClientManager) SwitchToNextClient() error {
 	cm.mu.RUnlock()
 
 	if len(clientIDs) == 0 {
-		return cm.SwitchToLocal()
+		return cm.SwitchToLocal(ctx)
 	}
 
 	// Find current index
@@ -336,7 +356,7 @@ func (cm *ClientManager) SwitchToNextClient() error {
 
 	// Switch to next client (or first if we're on local)
 	nextIndex := (currentIndex + 1) % len(clientIDs)
-	return cm.SwitchToClient(clientIDs[nextIndex])
+	return cm.SwitchToClient(ctx, clientIDs[nextIndex])
 }
 
 // GetConnectedClients returns a list of connected clients
@@ -370,14 +390,20 @@ func (cm *ClientManager) IsControllingLocal() bool {
 }
 
 // HandleInputEvent processes input events and routes them to the appropriate target
-func (cm *ClientManager) HandleInputEvent(event *protocol.InputEvent) {
+func (cm *ClientManager) HandleInputEvent(ctx context.Context, event *protocol.InputEvent) error {
+	// Check context cancellation
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	default:
+	}
+
 	// Handle control events specially
 	if controlEvent := event.GetControl(); controlEvent != nil {
 		logger.Debugf("[SERVER-MANAGER] handleInputEvent called: type=%T, timestamp=%d, sourceId=%s",
 			event.Event, event.Timestamp, event.SourceId)
 		logger.Debugf("[SERVER-MANAGER] Routing control event: type=%v", controlEvent.Type)
-		cm.handleControlEvent(controlEvent, event.SourceId)
-		return
+		return cm.handleControlEvent(ctx, controlEvent, event.SourceId)
 	}
 
 	logger.Debugf("[SERVER-MANAGER] handleInputEvent called: type=%T, timestamp=%d, sourceId=%s",
@@ -389,13 +415,13 @@ func (cm *ClientManager) HandleInputEvent(event *protocol.InputEvent) {
 	// If controlling local, do nothing (let input go to local system)
 	if cm.controllingLocal {
 		logger.Debug("[SERVER-MANAGER] Controlling local system, ignoring event")
-		return
+		return nil
 	}
 
 	// If no active client, switch back to local
 	if cm.activeClientID == "" {
 		logger.Debug("[SERVER-MANAGER] No active client, ignoring event")
-		return
+		return nil
 	}
 
 	// Get the active client
@@ -403,11 +429,11 @@ func (cm *ClientManager) HandleInputEvent(event *protocol.InputEvent) {
 	if !exists {
 		logger.Warnf("[SERVER-MANAGER] Active client %s not found, switching to local", cm.activeClientID)
 		go func() { // Switch back to local asynchronously
-			if err := cm.SwitchToLocal(); err != nil {
+			if err := cm.SwitchToLocal(context.Background()); err != nil {
 				logger.Errorf("Failed to switch to local: %v", err)
 			}
 		}()
-		return
+		return nil
 	}
 
 	logger.Debugf("[SERVER-MANAGER] Routing event to client: %s (%s)", client.Name, client.Address)
@@ -447,7 +473,7 @@ func (cm *ClientManager) HandleInputEvent(event *protocol.InputEvent) {
 				// Only send event if there's actual movement
 				if actualDx == 0 && actualDy == 0 {
 					logger.Debugf("[SERVER-MANAGER] Mouse movement fully constrained, not sending event")
-					return
+					return nil
 				}
 
 				// Update the event with constrained movement
@@ -535,11 +561,21 @@ func (cm *ClientManager) HandleInputEvent(event *protocol.InputEvent) {
 		}
 	} else {
 		logger.Error("[SERVER-MANAGER] No SSH server available to send events")
+		return fmt.Errorf("no SSH server available")
 	}
+	
+	return nil
 }
 
 // handleControlEvent processes control events from clients
-func (cm *ClientManager) handleControlEvent(controlEvent *protocol.ControlEvent, sourceID string) {
+func (cm *ClientManager) handleControlEvent(ctx context.Context, controlEvent *protocol.ControlEvent, sourceID string) error {
+	// Check context cancellation
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	default:
+	}
+	
 	switch controlEvent.Type {
 	case protocol.ControlEvent_CLIENT_CONFIG:
 		if config := controlEvent.ClientConfig; config != nil {
@@ -553,23 +589,27 @@ func (cm *ClientManager) handleControlEvent(controlEvent *protocol.ControlEvent,
 
 		if inCooldown {
 			logger.Debugf("Client %s requested control during emergency cooldown - ignoring", sourceID)
-			return
+			return nil
 		}
 
 		logger.Infof("Client %s requested control", sourceID)
 		// Grant control to the requesting client
-		if err := cm.SwitchToClient(sourceID); err != nil {
+		if err := cm.SwitchToClient(ctx, sourceID); err != nil {
 			logger.Errorf("Failed to grant control to client %s: %v", sourceID, err)
+			return err
 		}
 	case protocol.ControlEvent_RELEASE_CONTROL:
 		logger.Infof("Client %s released control", sourceID)
 		// Release control and switch back to local
-		if err := cm.SwitchToLocal(); err != nil {
+		if err := cm.SwitchToLocal(ctx); err != nil {
 			logger.Errorf("Failed to release control from client %s: %v", sourceID, err)
+			return err
 		}
 	default:
 		logger.Warnf("Unknown control event type from %s: %v", sourceID, controlEvent.Type)
 	}
+	
+	return nil
 }
 
 // updateClientConfiguration updates a client's configuration
@@ -959,7 +999,7 @@ func (cm *ClientManager) HandleSwitchCommand(cmd *pb.SwitchCommand) (*pb.IPCMess
 		// Legacy: Enable sharing - switch to first available client
 		clients := cm.GetConnectedClients()
 		if len(clients) > 0 {
-			if err := cm.SwitchToClient(clients[0].ID); err != nil {
+			if err := cm.SwitchToClient(context.Background(), clients[0].ID); err != nil {
 				return nil, fmt.Errorf("failed to enable sharing: %w", err)
 			}
 		} else {
@@ -968,7 +1008,7 @@ func (cm *ClientManager) HandleSwitchCommand(cmd *pb.SwitchCommand) (*pb.IPCMess
 
 	case pb.SwitchAction_SWITCH_ACTION_DISABLE:
 		// Legacy: Disable sharing - switch to local
-		if err := cm.SwitchToLocal(); err != nil {
+		if err := cm.SwitchToLocal(context.Background()); err != nil {
 			return nil, fmt.Errorf("failed to disable sharing: %w", err)
 		}
 
@@ -1047,7 +1087,7 @@ func (cm *ClientManager) switchToNextClientOrLocal() error {
 	if cm.controllingLocal {
 		// Currently on local, switch to first client
 		cm.mu.Unlock()
-		err := cm.SwitchToClient(clientIDs[0])
+		err := cm.SwitchToClient(context.Background(), clientIDs[0])
 		cm.mu.Lock()
 		return err
 	}
@@ -1076,7 +1116,7 @@ func (cm *ClientManager) switchToNextClientOrLocal() error {
 
 	// Switch to next client
 	cm.mu.Unlock()
-	err := cm.SwitchToClient(clientIDs[nextIndex])
+	err := cm.SwitchToClient(context.Background(), clientIDs[nextIndex])
 	cm.mu.Lock()
 	return err
 }
@@ -1102,7 +1142,7 @@ func (cm *ClientManager) switchToPreviousClientOrLocal() error {
 	if cm.controllingLocal {
 		// Currently on local, switch to last client
 		cm.mu.Unlock()
-		err := cm.SwitchToClient(clientIDs[len(clientIDs)-1])
+		err := cm.SwitchToClient(context.Background(), clientIDs[len(clientIDs)-1])
 		cm.mu.Lock()
 		return err
 	}
@@ -1130,7 +1170,7 @@ func (cm *ClientManager) switchToPreviousClientOrLocal() error {
 
 	// Switch to previous client
 	cm.mu.Unlock()
-	err := cm.SwitchToClient(clientIDs[previousIndex])
+	err := cm.SwitchToClient(context.Background(), clientIDs[previousIndex])
 	cm.mu.Lock()
 	return err
 }

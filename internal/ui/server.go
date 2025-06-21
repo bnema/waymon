@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"context"
 	"fmt"
 	"strconv"
 	"strings"
@@ -222,7 +223,7 @@ func (m *ServerModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if m.clientManager != nil {
 				// Do the switch in a goroutine to prevent UI blocking
 				go func() {
-					if err := m.clientManager.SwitchToLocal(); err != nil {
+					if err := m.clientManager.SwitchToLocal(context.Background()); err != nil {
 						m.AddLogEntry(LogEntry{
 							Timestamp: time.Now(),
 							Level:     "ERROR",
@@ -255,7 +256,7 @@ func (m *ServerModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "tab":
 			// Switch to next client
 			if m.clientManager != nil {
-				if err := m.clientManager.SwitchToNextClient(); err != nil {
+				if err := m.clientManager.SwitchToNextClient(context.Background()); err != nil {
 					m.AddLogEntry(LogEntry{
 						Timestamp: time.Now(),
 						Level:     "ERROR",
@@ -284,7 +285,7 @@ func (m *ServerModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 					// Do the switch in a goroutine to prevent UI blocking
 					go func() {
-						if err := m.clientManager.SwitchToClient(client.ID); err != nil {
+						if err := m.clientManager.SwitchToClient(context.Background(), client.ID); err != nil {
 							m.AddLogEntry(LogEntry{
 								Timestamp: time.Now(),
 								Level:     "ERROR",
@@ -320,7 +321,7 @@ func (m *ServerModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// Manual emergency release
 			if m.clientManager != nil && !m.localControl {
 				go func() {
-					if err := m.clientManager.SwitchToLocal(); err != nil {
+					if err := m.clientManager.SwitchToLocal(context.Background()); err != nil {
 						m.AddLogEntry(LogEntry{
 							Timestamp: time.Now(),
 							Level:     "ERROR",

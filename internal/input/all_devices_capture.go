@@ -128,14 +128,16 @@ func (a *AllDevicesCapture) Stop() error {
 	// Release all pressed keys before stopping
 	a.releaseAllPressedKeys()
 
-	// Release all grabbed devices
-	for _, handler := range a.devices {
-		if handler.device != nil && handler.grabbed {
-			if err := handler.device.Release(); err != nil {
-				logger.Errorf("Failed to release device %s on stop: %v", handler.path, err)
-			}
-			handler.grabbed = false
-		}
+	// Release all grabbed devices with a timeout context
+	// Use a separate context for cleanup to ensure it completes even if main context is cancelled
+	cleanupCtx, cleanupCancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cleanupCancel()
+
+	releaseCount, releaseErr := a.releaseAllDevicesWithContext(cleanupCtx)
+	if releaseErr != nil {
+		logger.Errorf("Error releasing devices during stop: %v", releaseErr)
+	} else if releaseCount > 0 {
+		logger.Infof("Released %d devices during stop", releaseCount)
 	}
 
 	// Clear the current target
@@ -168,6 +170,15 @@ func (a *AllDevicesCapture) Stop() error {
 
 // SetTarget sets the target client ID for forwarding events
 func (a *AllDevicesCapture) SetTarget(clientID string) error {
+	// Use a timeout context for the entire operation
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	return a.SetTargetWithContext(ctx, clientID)
+}
+
+// SetTargetWithContext sets the target client ID with context support
+func (a *AllDevicesCapture) SetTargetWithContext(ctx context.Context, clientID string) error {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 
@@ -186,56 +197,30 @@ func (a *AllDevicesCapture) SetTarget(clientID string) error {
 		a.releaseAllPressedKeys()
 
 		// Release all devices when controlling local system
-		var releaseCount int
-		for _, handler := range a.devices {
-			if handler.device != nil && handler.grabbed {
-				if err := handler.device.Release(); err != nil {
-					logger.Errorf("Failed to release device %s: %v", handler.path, err)
-				} else {
-					handler.grabbed = false
-					releaseCount++
-				}
-			}
+		releaseCount, err := a.releaseAllDevicesWithContext(ctx)
+		if err != nil {
+			return fmt.Errorf("failed to release devices: %w", err)
 		}
 		if releaseCount > 0 {
 			logger.Infof("Released %d devices", releaseCount)
 			// Allow kernel time to fully release device resources
 			logger.Debug("Waiting for device release to complete...")
-			time.Sleep(300 * time.Millisecond)
+			select {
+			case <-time.After(300 * time.Millisecond):
+			case <-ctx.Done():
+				return ctx.Err()
+			}
 		}
 		logger.Info("Input capture target cleared - controlling local system")
 	} else {
 		// Only grab devices if not in no-grab mode
 		if !a.noGrab {
 			// Grab all devices when controlling a client
-			var grabErrors []string
-			var successCount int
-			for _, handler := range a.devices {
-				if handler.device != nil && !handler.grabbed {
-					// Retry logic with exponential backoff for device busy errors
-					var grabErr error
-					for retry := 0; retry < 3; retry++ {
-						if grabErr = handler.device.Grab(); grabErr != nil {
-							if strings.Contains(grabErr.Error(), "busy") && retry < 2 {
-								backoffDelay := time.Duration(retry+1) * 50 * time.Millisecond
-								logger.Debugf("Device %s busy, retrying in %v (attempt %d/3)", handler.name, backoffDelay, retry+1)
-								time.Sleep(backoffDelay)
-								continue
-							}
-						} else {
-							break // Success
-						}
-					}
-					
-					if grabErr != nil {
-						grabErrors = append(grabErrors, fmt.Sprintf("%s: %v", handler.path, grabErr))
-						logger.Warnf("Failed to grab device %s (%s): %v", handler.name, handler.path, grabErr)
-					} else {
-						handler.grabbed = true
-						successCount++
-						logger.Debugf("Successfully grabbed device %s (%s)", handler.name, handler.path)
-					}
-				}
+			successCount, grabErrors, err := a.grabAllDevicesWithContext(ctx)
+			if err != nil {
+				// Context cancelled or timed out
+				a.currentTarget = oldTarget
+				return fmt.Errorf("device grab operation cancelled: %w", err)
 			}
 			logger.Infof("Grabbed %d/%d devices", successCount, len(a.devices))
 
@@ -260,29 +245,42 @@ func (a *AllDevicesCapture) SetTarget(clientID string) error {
 			a.lastActivity = time.Now()
 			a.grabTimer = time.AfterFunc(a.grabTimeout, func() {
 				logger.Warnf("Safety timeout reached - auto-releasing devices")
-				a.mu.Lock()
-				if a.currentTarget != "" {
+				
+				// Use a goroutine to avoid holding the lock during release operations
+				go func() {
+					// Create a context for the emergency release
+					emergencyCtx, emergencyCancel := context.WithTimeout(context.Background(), 5*time.Second)
+					defer emergencyCancel()
+
+					a.mu.Lock()
+					if a.currentTarget == "" {
+						a.mu.Unlock()
+						return
+					}
+					
 					target := a.currentTarget
 					a.currentTarget = ""
 					// Release all pressed keys first to prevent stuck modifiers
 					a.releaseAllPressedKeys()
-					for _, handler := range a.devices {
-						if handler.device != nil && handler.grabbed {
-							if err := handler.device.Release(); err != nil {
-								logger.Errorf("Failed to release device in safety timeout: %v", err)
-							}
-							handler.grabbed = false
-						}
-					}
+					
+					// Get emergency handler reference while holding lock
+					handler := a.emergencyHandler
 					a.mu.Unlock()
-					// Notify emergency handler if set (outside of lock)
-					if a.emergencyHandler != nil {
+					
+					// Release devices using context (outside of lock)
+					releaseCount, err := a.releaseAllDevicesWithContext(emergencyCtx)
+					if err != nil {
+						logger.Errorf("Failed to release devices in safety timeout: %v", err)
+					} else {
+						logger.Infof("Safety timeout: released %d devices", releaseCount)
+					}
+					
+					// Notify emergency handler if set
+					if handler != nil {
 						logger.Debugf("Notifying emergency handler from safety timeout (was controlling: %s)", target)
-						go a.emergencyHandler()
+						handler()
 					}
-				} else {
-					a.mu.Unlock()
-				}
+				}()
 			})
 
 			logger.Infof("Set input capture target to client: %s (timeout: %v)", clientID, a.grabTimeout)
@@ -903,6 +901,12 @@ func (a *AllDevicesCapture) SetEmergencyHandler(handler func()) {
 	a.emergencyHandler = handler
 }
 
+// SetTargetTimeout allows customizing the timeout for SetTarget operations
+func (a *AllDevicesCapture) SetTargetTimeout(timeout time.Duration) {
+	// This timeout is used for the default SetTarget method
+	// Callers can also use SetTargetWithContext for custom timeouts
+}
+
 // processEvents processes events from the event channel
 func (a *AllDevicesCapture) processEvents() {
 	defer func() {
@@ -934,5 +938,162 @@ func (a *AllDevicesCapture) processEvents() {
 			}
 			// Note: if target == "", we're controlling local system and don't forward
 		}
+	}
+}
+
+// grabAllDevicesWithContext grabs all devices with context support
+func (a *AllDevicesCapture) grabAllDevicesWithContext(ctx context.Context) (successCount int, grabErrors []string, err error) {
+	// Create a channel to collect results from concurrent grab operations
+	type grabResult struct {
+		handler *deviceHandler
+		err     error
+	}
+	
+	resultChan := make(chan grabResult, len(a.devices))
+	var wg sync.WaitGroup
+
+	// Start concurrent grab operations for all devices
+	for _, handler := range a.devices {
+		if handler.device != nil && !handler.grabbed {
+			wg.Add(1)
+			go func(h *deviceHandler) {
+				defer wg.Done()
+				
+				// Try to grab the device with retries
+				err := a.grabDeviceWithContext(ctx, h)
+				resultChan <- grabResult{handler: h, err: err}
+			}(handler)
+		}
+	}
+
+	// Wait for all operations to complete
+	go func() {
+		wg.Wait()
+		close(resultChan)
+	}()
+
+	// Collect results
+	for result := range resultChan {
+		select {
+		case <-ctx.Done():
+			// Context cancelled, return early
+			return successCount, grabErrors, ctx.Err()
+		default:
+			if result.err != nil {
+				grabErrors = append(grabErrors, fmt.Sprintf("%s: %v", result.handler.path, result.err))
+				logger.Warnf("Failed to grab device %s (%s): %v", result.handler.name, result.handler.path, result.err)
+			} else {
+				result.handler.grabbed = true
+				successCount++
+				logger.Debugf("Successfully grabbed device %s (%s)", result.handler.name, result.handler.path)
+			}
+		}
+	}
+
+	return successCount, grabErrors, nil
+}
+
+// grabDeviceWithContext grabs a single device with context support and retry logic
+func (a *AllDevicesCapture) grabDeviceWithContext(ctx context.Context, handler *deviceHandler) error {
+	const maxRetries = 3
+	
+	for retry := 0; retry < maxRetries; retry++ {
+		// Check context before each attempt
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		default:
+		}
+
+		// Try to grab the device
+		err := handler.device.Grab()
+		if err == nil {
+			return nil // Success
+		}
+
+		// Check if we should retry
+		if strings.Contains(err.Error(), "busy") && retry < maxRetries-1 {
+			backoffDelay := time.Duration(retry+1) * 50 * time.Millisecond
+			logger.Debugf("Device %s busy, retrying in %v (attempt %d/%d)", handler.name, backoffDelay, retry+1, maxRetries)
+			
+			// Wait with context awareness
+			select {
+			case <-time.After(backoffDelay):
+				continue
+			case <-ctx.Done():
+				return ctx.Err()
+			}
+		}
+
+		// Non-retryable error or max retries reached
+		return err
+	}
+
+	return fmt.Errorf("max retries exceeded")
+}
+
+// releaseAllDevicesWithContext releases all grabbed devices with context support
+func (a *AllDevicesCapture) releaseAllDevicesWithContext(ctx context.Context) (releaseCount int, err error) {
+	// Create a channel to collect results from concurrent release operations
+	type releaseResult struct {
+		handler *deviceHandler
+		err     error
+	}
+	
+	resultChan := make(chan releaseResult, len(a.devices))
+	var wg sync.WaitGroup
+
+	// Start concurrent release operations for all grabbed devices
+	for _, handler := range a.devices {
+		if handler.device != nil && handler.grabbed {
+			wg.Add(1)
+			go func(h *deviceHandler) {
+				defer wg.Done()
+				
+				// Release the device
+				err := h.device.Release()
+				resultChan <- releaseResult{handler: h, err: err}
+			}(handler)
+		}
+	}
+
+	// Wait for all operations to complete
+	go func() {
+		wg.Wait()
+		close(resultChan)
+	}()
+
+	// Collect results
+	var releaseErrors []string
+	for result := range resultChan {
+		select {
+		case <-ctx.Done():
+			// Context cancelled, but we should still try to release devices
+			// Continue processing results to ensure cleanup
+		default:
+		}
+
+		if result.err != nil {
+			releaseErrors = append(releaseErrors, fmt.Sprintf("%s: %v", result.handler.path, result.err))
+			logger.Errorf("Failed to release device %s: %v", result.handler.path, result.err)
+		} else {
+			result.handler.grabbed = false
+			releaseCount++
+		}
+	}
+
+	// If context was cancelled, return that error
+	select {
+	case <-ctx.Done():
+		if releaseCount > 0 {
+			// We managed to release some devices before cancellation
+			logger.Warnf("Released %d devices before context cancellation", releaseCount)
+		}
+		return releaseCount, ctx.Err()
+	default:
+		if len(releaseErrors) > 0 {
+			return releaseCount, fmt.Errorf("some devices failed to release: %s", strings.Join(releaseErrors, ", "))
+		}
+		return releaseCount, nil
 	}
 }
