@@ -75,8 +75,22 @@ func (m *ClientModel) OnShutdown() error {
 // SetProgram sets the tea.Program for sending updates
 func (m *ClientModel) SetProgram(p *tea.Program) {
 	if m.inputReceiver != nil {
+		// Set up control status callback
 		m.inputReceiver.OnStatusChange(func(status client.ControlStatus) {
 			p.Send(ControlStatusMsg{Status: status})
+		})
+		
+		// Set up connection callbacks
+		m.inputReceiver.SetOnConnected(func() {
+			p.Send(ConnectedMsg{})
+		})
+		
+		m.inputReceiver.SetOnDisconnected(func() {
+			p.Send(DisconnectedMsg{})
+		})
+		
+		m.inputReceiver.SetOnReconnectStatus(func(status string) {
+			p.Send(ReconnectingMsg{Status: status})
 		})
 	}
 }
@@ -379,10 +393,7 @@ func RunClientUI(ctx context.Context, serverAddr string, inputReceiver *client.I
 
 	runner := NewProgramRunner(config)
 
-	// Create a tea program and set it on the model
-	p := tea.NewProgram(model)
-	model.SetProgram(p)
-
 	// Run the UI (blocking)
+	// The runner will call SetProgram on the model automatically
 	return runner.Run(ctx, model)
 }

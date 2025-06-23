@@ -34,6 +34,10 @@ type InputReceiver struct {
 	onStatusChange func(ControlStatus)
 	clientID       string // The client identifier (hostname)
 
+	// Connection callbacks
+	onConnected    func()
+	onDisconnected func()
+
 	// Reconnection state
 	reconnectEnabled    bool
 	reconnectCtx        context.Context
@@ -126,6 +130,12 @@ func (ir *InputReceiver) Connect(ctx context.Context, privateKeyPath string) err
 	// Note: Input events are received automatically by SSH client
 
 	logger.Infof("Connected to server: %s", ir.serverAddress)
+	
+	// Notify connection callback
+	if ir.onConnected != nil {
+		ir.onConnected()
+	}
+	
 	return nil
 }
 
@@ -164,6 +174,11 @@ func (ir *InputReceiver) Disconnect() error {
 	// Notify status change
 	if ir.onStatusChange != nil {
 		ir.onStatusChange(ir.controlStatus)
+	}
+	
+	// Notify disconnection callback
+	if ir.onDisconnected != nil {
+		ir.onDisconnected()
 	}
 
 	logger.Info("Disconnected from server")
@@ -550,6 +565,20 @@ func (ir *InputReceiver) SetOnReconnectStatus(callback func(status string)) {
 	ir.onReconnectStatus = callback
 }
 
+// SetOnConnected sets a callback for when connection is established
+func (ir *InputReceiver) SetOnConnected(callback func()) {
+	ir.mu.Lock()
+	defer ir.mu.Unlock()
+	ir.onConnected = callback
+}
+
+// SetOnDisconnected sets a callback for when connection is lost
+func (ir *InputReceiver) SetOnDisconnected(callback func()) {
+	ir.mu.Lock()
+	defer ir.mu.Unlock()
+	ir.onDisconnected = callback
+}
+
 // monitorConnection monitors the connection and triggers reconnection when needed
 func (ir *InputReceiver) monitorConnection() {
 	ticker := time.NewTicker(10 * time.Second) // Check every 10 seconds
@@ -576,6 +605,12 @@ func (ir *InputReceiver) monitorConnection() {
 					ir.reconnectInProgress = true
 					logger.Info("Connection lost - starting reconnection attempts")
 					ir.notifyReconnectStatus("Connection lost - attempting to reconnect...")
+					
+					// Notify disconnection callback
+					if ir.onDisconnected != nil {
+						ir.onDisconnected()
+					}
+					
 					// Start reconnection in a goroutine so monitoring continues
 					go ir.attemptReconnection()
 				}
@@ -691,6 +726,11 @@ func (ir *InputReceiver) reconnectToServer(ctx context.Context) error {
 	if err := ir.sendClientConfiguration(); err != nil {
 		logger.Warnf("Failed to send client configuration after reconnect: %v", err)
 		// Don't fail the reconnection for this
+	}
+
+	// Notify connection callback
+	if ir.onConnected != nil {
+		ir.onConnected()
 	}
 
 	return nil

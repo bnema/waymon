@@ -139,8 +139,8 @@ func runClient(cmd *cobra.Command, args []string) error {
 
 	// Start connection logic in background
 	go func() {
-		// Wait for UI to initialize
-		time.Sleep(500 * time.Millisecond)
+		// Wait for UI to initialize and set up callbacks
+		time.Sleep(1 * time.Second)
 
 		// Connection retry logic
 		backoff := 1 * time.Second
