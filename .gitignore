@@ -2,5 +2,6 @@
 docs/
 CLAUDE.md
 .claude/
+.serena/
 dist/
 **/waymon
