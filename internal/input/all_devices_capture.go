@@ -659,6 +659,18 @@ func (a *AllDevicesCapture) sendScrollEvent(dx, dy float64) {
 
 // sendKeyboardEvent sends a keyboard event
 func (a *AllDevicesCapture) sendKeyboardEvent(code uint16, value int32) {
+	// Log modifier key state changes for debugging
+	switch code {
+	case evdev.KEY_LEFTSHIFT, evdev.KEY_RIGHTSHIFT:
+		logger.Debugf("SERVER: Shift key state changed: pressed=%v", value > 0)
+	case evdev.KEY_LEFTALT, evdev.KEY_RIGHTALT:
+		logger.Debugf("SERVER: Alt key state changed: pressed=%v", value > 0)
+	case evdev.KEY_LEFTMETA, evdev.KEY_RIGHTMETA:
+		logger.Debugf("SERVER: Super/Cmd key state changed: pressed=%v", value > 0)
+	case evdev.KEY_LEFTCTRL, evdev.KEY_RIGHTCTRL:
+		// Already logged above in the main event handler
+	}
+	
 	// value can be 0 (release), 1 (press), 2 (autorepeat)
 	// We treat autorepeat as a press
 	a.sendEvent(&protocol.InputEvent{

@@ -15,7 +15,7 @@ import (
 )
 
 // Message types for server UI
-type refreshClientListMsg struct{}
+type RefreshClientListMsg struct{}
 
 // ServerModel represents the refactored server UI model
 type ServerModel struct {
@@ -106,6 +106,8 @@ func NewServerModel(port int, serverName, version string) *ServerModel {
 // SetClientManager sets the client manager for real-time updates
 func (m *ServerModel) SetClientManager(cm *server.ClientManager) {
 	m.clientManager = cm
+	// Immediately refresh client list
+	m.refreshClientList()
 }
 
 // SetServer sets the server instance for proper shutdown handling
@@ -245,7 +247,7 @@ func (m *ServerModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 				// Schedule a delayed refresh
 				cmd := tea.Tick(200*time.Millisecond, func(t time.Time) tea.Msg {
-					return refreshClientListMsg{}
+					return RefreshClientListMsg{}
 				})
 				cmds = append(cmds, cmd)
 			}
@@ -264,31 +266,35 @@ func (m *ServerModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		case "1", "2", "3", "4", "5":
 			// Switch to specific client by number
-			if m.localControl {
-				clientNum, _ := strconv.Atoi(msg.String())
-				if m.clientManager != nil && clientNum <= len(m.clients) && clientNum > 0 {
-					client := m.clients[clientNum-1]
+			clientNum, _ := strconv.Atoi(msg.String())
+			if m.clientManager != nil && clientNum <= len(m.clients) && clientNum > 0 {
+				client := m.clients[clientNum-1]
+				
+				m.base.AddLogEntry("debug", fmt.Sprintf("Key %s pressed: localControl=%v, clients=%d, switching to %s", 
+					msg.String(), m.localControl, len(m.clients), client.Name))
 
-					go func() {
-						if err := m.clientManager.SwitchToClient(client.ID); err != nil {
-							m.base.AddLogEntry("error", fmt.Sprintf("Failed to switch to client %s: %v", client.Name, err))
-						}
-					}()
+				go func() {
+					if err := m.clientManager.SwitchToClient(client.ID); err != nil {
+						m.base.AddLogEntry("error", fmt.Sprintf("Failed to switch to client %s: %v", client.Name, err))
+					}
+				}()
 
-					// Update state immediately
-					m.localControl = false
-					m.selectedClientIndex = clientNum - 1
-					m.activeClient = client
+				// Update state immediately
+				m.localControl = false
+				m.selectedClientIndex = clientNum - 1
+				m.activeClient = client
 
-					m.base.AddLogEntry("info", fmt.Sprintf("Switching to control %s (%s)...", client.Name, client.Address))
-					m.updateViewport()
+				m.base.AddLogEntry("info", fmt.Sprintf("Switching to control %s (%s)...", client.Name, client.Address))
+				m.updateViewport()
 
-					// Schedule a refresh
-					cmd := tea.Tick(200*time.Millisecond, func(t time.Time) tea.Msg {
-						return refreshClientListMsg{}
-					})
-					cmds = append(cmds, cmd)
-				}
+				// Schedule a refresh
+				cmd := tea.Tick(200*time.Millisecond, func(t time.Time) tea.Msg {
+					return RefreshClientListMsg{}
+				})
+				cmds = append(cmds, cmd)
+			} else {
+				m.base.AddLogEntry("debug", fmt.Sprintf("Key %s pressed but conditions not met: clientManager=%v, clientNum=%d, len(clients)=%d", 
+					msg.String(), m.clientManager != nil, clientNum, len(m.clients)))
 			}
 
 		case "r", "R":
@@ -349,7 +355,7 @@ func (m *ServerModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		m.updateViewport()
 
-	case refreshClientListMsg:
+	case RefreshClientListMsg:
 		m.refreshClientList()
 
 	case SetClientManagerMsg:
@@ -542,6 +548,11 @@ func (m *ServerModel) AddLogEntry(entry LogEntry) {
 // SetProgram sets the tea.Program reference for sending updates
 func (m *ServerModel) SetProgram(p *tea.Program) {
 	m.program = p
+}
+
+// GetProgram returns the tea.Program reference
+func (m *ServerModel) GetProgram() *tea.Program {
+	return m.program
 }
 
 // RunServerUI runs the server UI with proper lifecycle management

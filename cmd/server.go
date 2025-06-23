@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"strings"
 	"syscall"
 	"time"
 
@@ -153,6 +154,14 @@ func initializeServer(ctx context.Context, srv *server.Server, cfg *config.Confi
 						Level:     level,
 						Message:   message,
 					})
+					
+					// Trigger a client list refresh when clients connect/disconnect
+					if strings.Contains(message, "Client connected:") || strings.Contains(message, "Client disconnected:") {
+						// Send a refresh message to the UI
+						if p := model.GetProgram(); p != nil {
+							p.Send(ui.RefreshClientListMsg{})
+						}
+					}
 				}
 			})
 		}
