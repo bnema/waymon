@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"context"
 	"fmt"
 	"strings"
 	"time"
@@ -11,15 +12,17 @@ import (
 	"github.com/charmbracelet/lipgloss"
 )
 
-// ClientModel represents the UI model for the client
+// Message types for client UI
+type ControlStatusMsg struct {
+	Status client.ControlStatus
+}
+
+// ClientModel represents the refactored UI model for the client
 type ClientModel struct {
+	BaseModel // Embed base model functionality
+
 	serverAddr    string
 	inputReceiver *client.InputReceiver
-	lastUpdate    time.Time
-	spinner       spinner.Model
-	message       string
-	messageType   string
-	messageExpiry time.Time
 	version       string
 
 	// Connection state
@@ -28,60 +31,74 @@ type ClientModel struct {
 	waitingApproval bool
 	controlStatus   client.ControlStatus
 
-	// Log display
-	logBuffer    []LogEntry
-	maxLogLines  int
-	windowHeight int
-	windowWidth  int
+	// Message display
+	message       string
+	messageType   string
+	messageExpiry time.Time
 }
 
-// ControlStatusMsg is sent when control status changes
-type ControlStatusMsg struct {
-	Status client.ControlStatus
-}
-
-// NewClientModel creates a new client UI model
+// NewClientModel creates a new refactored client UI model
 func NewClientModel(serverAddr string, inputReceiver *client.InputReceiver, version string) *ClientModel {
-	s := spinner.New()
-	s.Spinner = spinner.Dot
-	s.Style = lipgloss.NewStyle().Foreground(lipgloss.Color("205"))
-
-	model := &ClientModel{
+	return &ClientModel{
 		serverAddr:    serverAddr,
 		inputReceiver: inputReceiver,
-		spinner:       s,
-		lastUpdate:    time.Now(),
-		logBuffer:     make([]LogEntry, 0),
-		maxLogLines:   50,
-		windowHeight:  24,
-		windowWidth:   80,
 		version:       version,
 	}
+}
 
-	return model
+// Init initializes the client model
+func (m *ClientModel) Init() tea.Cmd {
+	if m.base != nil {
+		return tea.Batch(
+			m.base.TickSpinner(),
+			tea.EnterAltScreen,
+		)
+	}
+	return tea.EnterAltScreen
+}
+
+// OnShutdown implements UIModel interface
+func (m *ClientModel) OnShutdown() error {
+	// Disconnect input receiver
+	if m.inputReceiver != nil {
+		m.base.AddLogEntry("info", "Disconnecting input receiver...")
+		if err := m.inputReceiver.Disconnect(); err != nil {
+			m.base.AddLogEntry("error", fmt.Sprintf("Failed to disconnect input receiver: %v", err))
+			return err
+		}
+	}
+
+	m.base.AddLogEntry("info", "Client shutdown complete")
+	return nil
 }
 
 // SetProgram sets the tea.Program for sending updates
 func (m *ClientModel) SetProgram(p *tea.Program) {
 	if m.inputReceiver != nil {
 		m.inputReceiver.OnStatusChange(func(status client.ControlStatus) {
-			// Send status update to UI
 			p.Send(ControlStatusMsg{Status: status})
 		})
 	}
 }
 
-// Init initializes the client model
-func (m *ClientModel) Init() tea.Cmd {
-	return tea.Batch(
-		m.spinner.Tick,
-		tea.EnterAltScreen,
-	)
-}
-
 // Update handles messages for the client model
 func (m *ClientModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var cmds []tea.Cmd
+
+	// First handle base updates (including shutdown)
+	model, cmd := m.BaseModel.Update(msg)
+	if cmd != nil {
+		// Check if this is a quit command
+		if _, ok := cmd().(tea.QuitMsg); ok {
+			return model, cmd
+		}
+		cmds = append(cmds, cmd)
+	}
+
+	// Don't process other messages if shutting down
+	if m.base != nil && m.base.IsShuttingDown() {
+		return m, tea.Batch(cmds...)
+	}
 
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
@@ -103,7 +120,7 @@ func (m *ClientModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 
 		case "p":
-			// Alternative key for pause/release control (backwards compatibility)
+			// Alternative key for pause/release control
 			if m.inputReceiver != nil && m.controlStatus.BeingControlled {
 				if err := m.inputReceiver.RequestControlRelease(); err != nil {
 					m.SetMessage("error", fmt.Sprintf("Failed to request release: %v", err))
@@ -112,15 +129,16 @@ func (m *ClientModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 			}
 
-		case "q", "ctrl+c":
-			return m, tea.Quit
+		case "q":
+			// Quit triggers shutdown
+			return m, m.base.InitiateShutdown()
 		}
 
 	case spinner.TickMsg:
 		if !m.connected || m.waitingApproval {
-			var cmd tea.Cmd
-			m.spinner, cmd = m.spinner.Update(msg)
-			cmds = append(cmds, cmd)
+			if m.base != nil {
+				cmds = append(cmds, m.base.UpdateSpinner(msg))
+			}
 		}
 
 	case ConnectedMsg:
@@ -147,13 +165,11 @@ func (m *ClientModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.waitingApproval = true
 		m.SetMessage("info", "Waiting for server approval...")
 
-	case tea.WindowSizeMsg:
-		m.windowHeight = msg.Height
-		m.windowWidth = msg.Width
-
 	case LogMsg:
-		m.AddLogEntry(msg.Entry)
-		
+		if m.base != nil {
+			m.base.AddLogEntry(msg.Entry.Level, msg.Entry.Message)
+		}
+
 	case ControlStatusMsg:
 		m.controlStatus = msg.Status
 		// Log the status change
@@ -171,13 +187,17 @@ func (m *ClientModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.messageExpiry = time.Time{}
 	}
 
-	m.lastUpdate = time.Now()
 	return m, tea.Batch(cmds...)
 }
 
 // View renders the client UI
 func (m *ClientModel) View() string {
+	if m.base == nil {
+		return "Initializing..."
+	}
+
 	var output strings.Builder
+	_, height := m.base.GetWindowSize()
 
 	// Calculate available space for logs
 	statusBarHeight := 1
@@ -187,7 +207,7 @@ func (m *ClientModel) View() string {
 	}
 	controlStatusHeight := 3 // Control status section
 
-	availableHeight := m.windowHeight - statusBarHeight - waitingPromptHeight - controlStatusHeight - 1
+	availableHeight := height - statusBarHeight - waitingPromptHeight - controlStatusHeight - 1
 	if availableHeight < 1 {
 		availableHeight = 10
 	}
@@ -212,11 +232,13 @@ func (m *ClientModel) View() string {
 	return output.String()
 }
 
-// renderClientStatusBar renders the status bar for the redesigned client
+// renderClientStatusBar renders the status bar
 func (m *ClientModel) renderClientStatusBar() string {
 	// Connection status
 	var statusText string
 	switch {
+	case m.base.IsShuttingDown():
+		statusText = "Shutting down..."
 	case m.connected:
 		statusText = fmt.Sprintf("Connected to %s", m.serverAddr)
 	case m.reconnecting:
@@ -237,6 +259,16 @@ func (m *ClientModel) renderControlStatus() string {
 	output.WriteString("\n")
 
 	switch {
+	case m.base.IsShuttingDown():
+		// Shutting down
+		shutdownStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("214")).Bold(true)
+		output.WriteString("  ")
+		output.WriteString(shutdownStyle.Render("⏳ SHUTTING DOWN..."))
+		output.WriteString("\n")
+		output.WriteString("  ")
+		output.WriteString(m.base.GetSpinner())
+		output.WriteString(" Cleaning up resources...")
+
 	case m.controlStatus.BeingControlled:
 		// Being controlled
 		controlStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("214")).Bold(true)
@@ -248,6 +280,7 @@ func (m *ClientModel) renderControlStatus() string {
 		controlsStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("240"))
 		controls := "  Controls: [r] Release control • [p] Pause (alt) • [q] Quit"
 		output.WriteString(controlsStyle.Render(controls))
+
 	case m.connected:
 		// Connected but idle
 		idleStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("240"))
@@ -259,6 +292,7 @@ func (m *ClientModel) renderControlStatus() string {
 		controlsStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("240"))
 		controls := "  Controls: [r] Reconnect • [q] Quit"
 		output.WriteString(controlsStyle.Render(controls))
+
 	default:
 		// Disconnected
 		disconnStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("196"))
@@ -292,9 +326,11 @@ func (m *ClientModel) renderWaitingPrompt() string {
 	return prompt.String()
 }
 
-// renderClientLogs renders the recent log entries for client
+// renderClientLogs renders the recent log entries
 func (m *ClientModel) renderClientLogs(maxLines int) string {
-	if len(m.logBuffer) == 0 {
+	logs := m.base.GetLogs()
+
+	if len(logs) == 0 {
 		dimStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("240"))
 		return dimStyle.Render("No logs yet...")
 	}
@@ -303,53 +339,16 @@ func (m *ClientModel) renderClientLogs(maxLines int) string {
 
 	// Show the most recent logs that fit in the available space
 	startIdx := 0
-	if len(m.logBuffer) > maxLines {
-		startIdx = len(m.logBuffer) - maxLines
+	if len(logs) > maxLines {
+		startIdx = len(logs) - maxLines
 	}
 
-	for i := startIdx; i < len(m.logBuffer); i++ {
-		entry := m.logBuffer[i]
-		logLine := m.formatClientLogEntry(entry)
+	for i := startIdx; i < len(logs); i++ {
+		logLine := m.base.FormatLogEntry(logs[i])
 		logLines = append(logLines, logLine)
 	}
 
 	return strings.Join(logLines, "\n")
-}
-
-// formatClientLogEntry formats a single log entry with colors for client
-func (m *ClientModel) formatClientLogEntry(entry LogEntry) string {
-	timeStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("244"))
-
-	var levelStyle lipgloss.Style
-	switch strings.ToUpper(entry.Level) {
-	case "ERROR":
-		levelStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("196")).Bold(true)
-	case "WARN", "WARNING":
-		levelStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("214")).Bold(true)
-	case "INFO":
-		levelStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("42"))
-	case "DEBUG":
-		levelStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("240"))
-	default:
-		levelStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("247"))
-	}
-
-	msgStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("255"))
-
-	return fmt.Sprintf("%s %s %s",
-		timeStyle.Render(entry.Timestamp.Format("15:04:05")),
-		levelStyle.Render(fmt.Sprintf("%-5s", strings.ToUpper(entry.Level))),
-		msgStyle.Render(entry.Message))
-}
-
-// AddLogEntry adds a new log entry to the client buffer
-func (m *ClientModel) AddLogEntry(entry LogEntry) {
-	m.logBuffer = append(m.logBuffer, entry)
-
-	// Keep only the last maxLogLines entries
-	if len(m.logBuffer) > m.maxLogLines {
-		m.logBuffer = m.logBuffer[len(m.logBuffer)-m.maxLogLines:]
-	}
 }
 
 // SetMessage sets a temporary message
@@ -357,4 +356,33 @@ func (m *ClientModel) SetMessage(msgType, message string) {
 	m.message = message
 	m.messageType = msgType
 	m.messageExpiry = time.Now().Add(3 * time.Second)
+
+	// Also add to logs
+	if m.base != nil {
+		m.base.AddLogEntry(msgType, message)
+	}
+}
+
+// RunClientUI runs the client UI with proper lifecycle management
+func RunClientUI(ctx context.Context, serverAddr string, inputReceiver *client.InputReceiver, version string) error {
+	// Create the model
+	model := NewClientModel(serverAddr, inputReceiver, version)
+
+	// Create program runner with configuration
+	config := ProgramConfig{
+		ShutdownConfig: ShutdownConfig{
+			GracePeriod: 5 * time.Second,
+			ForcePeriod: 2 * time.Second,
+		},
+		Debug: false,
+	}
+
+	runner := NewProgramRunner(config)
+
+	// Create a tea program and set it on the model
+	p := tea.NewProgram(model)
+	model.SetProgram(p)
+
+	// Run the UI (blocking)
+	return runner.Run(ctx, model)
 }

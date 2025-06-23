@@ -4,9 +4,6 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"os/signal"
-	"strings"
-	"syscall"
 	"time"
 
 	"github.com/bnema/waymon/internal/client"
@@ -14,7 +11,6 @@ import (
 	"github.com/bnema/waymon/internal/display"
 	"github.com/bnema/waymon/internal/logger"
 	"github.com/bnema/waymon/internal/ui"
-	tea "github.com/charmbracelet/bubbletea"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 )
@@ -49,12 +45,12 @@ func runClient(cmd *cobra.Command, args []string) error {
 
 	// Get configuration first to check logging settings
 	cfg := config.Get()
-	
+
 	// Apply log level from config if set
 	if cfg.Logging.LogLevel != "" {
 		logger.SetLevel(cfg.Logging.LogLevel)
 	}
-	
+
 	// Set up file logging if enabled
 	var logFile *os.File
 	if cfg.Logging.FileLogging {
@@ -128,69 +124,31 @@ func runClient(cmd *cobra.Command, args []string) error {
 		}
 	}()
 
-	// Create redesigned client TUI model
-	model := ui.NewClientModel(serverAddr, inputReceiver, Version)
-	logger.Debug("Created redesigned client UI model")
-
-	// Create the program with alt screen mode for proper full-screen UI
-	p := tea.NewProgram(model, tea.WithAltScreen())
-	
-	// Set up the program reference for status updates
-	model.SetProgram(p)
-
-	// Note: We'll set up the logger UI notifier AFTER p.Run() starts
+	// Note: We'll set up the logger UI notifier AFTER the UI starts
 	// to avoid deadlock issues with p.Send() before the program is running
 
 	// Note: In redesigned architecture, client only receives input from server
 	// No local input capture needed
 
-	// Set up reconnection status callback now that TUI program is created
+	// Set up input receiver callbacks and connection logic
+	// This will be handled by the UI runner
 	inputReceiver.SetOnReconnectStatus(func(status string) {
-		logEntry := ui.LogEntry{
-			Timestamp: time.Now(),
-			Level:     "INFO",
-			Message:   status,
-		}
-		p.Send(ui.LogMsg{Entry: logEntry})
-
-		// Also send appropriate UI messages based on status
-		switch {
-		case strings.Contains(status, "Reconnection attempt") ||
-			strings.Contains(status, "Reconnecting") ||
-			strings.Contains(status, "retrying") ||
-			strings.Contains(status, "attempting to reconnect"):
-			p.Send(ui.ReconnectingMsg{Status: status})
-		case strings.Contains(status, "Reconnected successfully"):
-			p.Send(ui.ConnectedMsg{})
-		case strings.Contains(status, "Server shutdown") ||
-			strings.Contains(status, "Connection lost"):
-			p.Send(ui.DisconnectedMsg{})
-			p.Send(ui.ReconnectingMsg{Status: status})
-		}
+		// This will be properly set up once the UI is running
+		logger.Infof("Connection status: %s", status)
 	})
 
-	// Start connection in background AFTER TUI starts
+	// Start connection logic in background
 	go func() {
-		// Wait a bit for TUI to initialize
-		time.Sleep(200 * time.Millisecond)
-		
-		// Initial connection with retry logic
+		// Wait for UI to initialize
+		time.Sleep(500 * time.Millisecond)
+
+		// Connection retry logic
 		backoff := 1 * time.Second
 		maxBackoff := 60 * time.Second
 		attempt := 1
-		
-		// Set up logger to send to UI now that TUI is running
-		logger.SetUINotifier(func(level, message string) {
-			logEntry := ui.LogEntry{
-				Timestamp: time.Now(),
-				Level:     level,
-				Message:   message,
-			}
-			p.Send(ui.LogMsg{Entry: logEntry})
-		})
-		
+
 		logger.Info("Starting connection to server with automatic retry")
-		
+
 		for {
 			select {
 			case <-ctx.Done():
@@ -198,62 +156,30 @@ func runClient(cmd *cobra.Command, args []string) error {
 				return
 			default:
 			}
-			
+
 			logger.Infof("Connection attempt %d to %s", attempt, serverAddr)
-			
+
 			// Try to connect
-			connectionStart := time.Now()
-			
-			// Create a timer to show approval message if connection takes too long
-			approvalTimer := time.AfterFunc(3*time.Second, func() {
-				// If connection is still in progress after 3 seconds, likely waiting for approval
-				p.Send(ui.WaitingApprovalMsg{})
-			})
-			
-			// Use the parent context for the connection - it needs to stay alive for receiving
 			err := inputReceiver.Connect(ctx, privateKeyPath)
-			approvalTimer.Stop() // Ensure timer is cleaned up
-			
+
 			if err == nil {
 				// Connection successful
-				connectionDuration := time.Since(connectionStart)
-				logger.Infof("Successfully connected to server at %s in %v", serverAddr, connectionDuration)
-				p.Send(ui.ConnectedMsg{})
-				
-				// In redesigned architecture, client is now ready to receive input from server
+				logger.Infof("Successfully connected to server at %s", serverAddr)
 				logger.Info("Client ready to receive input from server")
-				
-				return // Exit the retry loop
+				return
 			}
-			
-			// Connection failed, handle error
-			errStr := err.Error()
-			switch {
-			case strings.Contains(errStr, "waiting for server approval"):
-				// Keep showing the waiting message
-				logger.Info("Connection pending server approval")
-			case strings.Contains(errStr, "timed out"):
-				logger.Errorf("Connection attempt %d timed out: %v", attempt, err)
-				p.Send(ui.DisconnectedMsg{})
-				p.Send(ui.ReconnectingMsg{Status: fmt.Sprintf("Connection timed out, retrying in %v...", backoff)})
-			case strings.Contains(errStr, "connection refused"):
-				logger.Warnf("Connection attempt %d refused: %v", attempt, err)
-				p.Send(ui.DisconnectedMsg{})
-				p.Send(ui.ReconnectingMsg{Status: fmt.Sprintf("Server not ready, retrying in %v...", backoff)})
-			default:
-				logger.Errorf("Connection attempt %d failed: %v", attempt, err)
-				p.Send(ui.DisconnectedMsg{})
-				p.Send(ui.ReconnectingMsg{Status: fmt.Sprintf("Connection failed, retrying in %v...", backoff)})
-			}
-			
+
+			// Connection failed, log error
+			logger.Errorf("Connection attempt %d failed: %v", attempt, err)
+
 			// Wait with exponential backoff
 			select {
 			case <-ctx.Done():
 				return
 			case <-time.After(backoff):
 			}
-			
-			// Increase backoff, but cap it
+
+			// Increase backoff
 			backoff *= 2
 			if backoff > maxBackoff {
 				backoff = maxBackoff
@@ -265,7 +191,6 @@ func runClient(cmd *cobra.Command, args []string) error {
 	// Ensure cleanup happens on any exit path
 	defer func() {
 		logger.Info("Cleaning up client resources...")
-		cancel() // Cancel context
 		if inputReceiver.IsConnected() {
 			logger.Info("Disconnecting from server...")
 			if err := inputReceiver.Disconnect(); err != nil {
@@ -274,23 +199,8 @@ func runClient(cmd *cobra.Command, args []string) error {
 		}
 	}()
 
-	// Handle graceful shutdown with proper cleanup
-	sigCh := make(chan os.Signal, 1)
-	signal.Notify(sigCh, os.Interrupt, syscall.SIGTERM)
-
-	go func() {
-		<-sigCh
-		logger.Info("Received shutdown signal, initiating graceful shutdown...")
-
-		// Cancel context to signal shutdown to all components
-		cancel()
-
-		// Quit TUI immediately - defer cleanup will handle the rest
-		p.Send(tea.Quit())
-	}()
-
-	// Run TUI
-	if _, err := p.Run(); err != nil {
+	// Run the client UI with the new refactored approach
+	if err := ui.RunClientUI(ctx, serverAddr, inputReceiver, Version); err != nil {
 		return err
 	}
 
