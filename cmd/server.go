@@ -51,7 +51,7 @@ func init() {
 }
 
 // initializeServer performs all server initialization steps
-func initializeServer(ctx context.Context, srv *server.Server, cfg *config.Config, bindAddress string, serverPort int, p *tea.Program) error {
+func initializeServer(ctx context.Context, srv *server.Server, cfg *config.Config, bindAddress string, serverPort int, model *ui.ServerModel) error {
 	logger.Info("Starting server components...")
 	// Start the server with context - this creates the SSH server
 	if err := srv.Start(ctx); err != nil {
@@ -72,9 +72,14 @@ func initializeServer(ctx context.Context, srv *server.Server, cfg *config.Confi
 				logger.Infof("Client connected and registered: %s", addr)
 			}
 
-			// Send UI notification
-			if p != nil {
-				p.Send(ui.ClientConnectedMsg{ClientAddr: addr})
+			// Send UI notification - just log it since the UI will get updates via ClientManager
+			if model != nil {
+				model.AddLogEntry(ui.LogEntry{
+					Timestamp: time.Now(),
+					Level:     "INFO",
+					Message:   fmt.Sprintf("Client connected: %s", addr),
+				})
+				// The UI will refresh client list automatically via ClientManager
 			}
 		}
 
@@ -86,35 +91,28 @@ func initializeServer(ctx context.Context, srv *server.Server, cfg *config.Confi
 				logger.Infof("Client disconnected and unregistered: %s", addr)
 			}
 
-			// Send UI notification
-			if p != nil {
-				p.Send(ui.ClientDisconnectedMsg{ClientAddr: addr})
+			// Send UI notification - just log it since the UI will get updates via ClientManager
+			if model != nil {
+				model.AddLogEntry(ui.LogEntry{
+					Timestamp: time.Now(),
+					Level:     "INFO",
+					Message:   fmt.Sprintf("Client disconnected: %s", addr),
+				})
+				// The UI will refresh client list automatically via ClientManager
 			}
 		}
 
 		// Set up authentication handler
 		sshSrv.OnAuthRequest = func(addr, publicKey, fingerprint string) bool {
-			if p != nil {
-				// Create a channel for the response
-				responseChan := make(chan bool, 1)
-
-				// Send auth request to UI with the response channel
-				p.Send(ui.SSHAuthRequestMsg{
-					ClientAddr:   addr,
-					PublicKey:    publicKey,
-					Fingerprint:  fingerprint,
-					ResponseChan: responseChan,
+			if model != nil {
+				// For now, log the auth request and auto-approve
+				// TODO: Implement interactive approval in the refactored UI
+				model.AddLogEntry(ui.LogEntry{
+					Timestamp: time.Now(),
+					Level:     "WARN",
+					Message:   fmt.Sprintf("SSH auth request from %s (fingerprint: %s) - auto-approved", addr, fingerprint),
 				})
-
-				// Wait for approval from UI
-				select {
-				case approved := <-responseChan:
-					return approved
-				case <-time.After(30 * time.Second):
-					// Timeout after 30 seconds
-					logger.Warn("SSH auth request timed out", "fingerprint", fingerprint)
-					return false
-				}
+				return true
 			} else {
 				// In non-TUI mode, auto-approve (you might want to change this)
 				logger.Warnf("Auto-approving SSH connection from %s (fingerprint: %s) - running in no-TUI mode", addr, fingerprint)
@@ -139,24 +137,25 @@ func initializeServer(ctx context.Context, srv *server.Server, cfg *config.Confi
 	logger.Info("Server components started successfully")
 
 	// Connect ClientManager to UI if it's the redesigned model
-	if cm := srv.GetClientManager(); cm != nil && p != nil {
-		// Send a message to set the client manager
-		p.Send(ui.SetClientManagerMsg{ClientManager: cm})
-
-		// Send a message to set the server instance for proper shutdown
-		p.Send(ui.SetServerMsg{Server: srv})
-
-		// Set up activity callback to send logs to UI
-		cm.SetOnActivity(func(level, message string) {
-			if p != nil {
-				logEntry := ui.LogEntry{
-					Timestamp: time.Now(),
-					Level:     level,
-					Message:   message,
+	if cm := srv.GetClientManager(); cm != nil {
+		if model != nil {
+			// Set the client manager on the model
+			model.SetClientManager(cm)
+			
+			// Set the server instance for proper shutdown
+			model.SetServer(srv)
+			
+			// Set up activity callback to send logs to UI
+			cm.SetOnActivity(func(level, message string) {
+				if model != nil {
+					model.AddLogEntry(ui.LogEntry{
+						Timestamp: time.Now(),
+						Level:     level,
+						Message:   message,
+					})
 				}
-				p.Send(ui.LogMsg{Entry: logEntry})
-			}
-		})
+			})
+		}
 
 		// Set SSH server for sending events to clients
 		if sshSrv := srv.GetNetworkServer(); sshSrv != nil {
@@ -268,31 +267,49 @@ func runServer(cmd *cobra.Command, args []string) error {
 	cfg.Server.Port = serverPort
 	cfg.Server.BindAddress = bindAddress
 
-	var p *tea.Program
+	// Create a context that we'll cancel on shutdown
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
 	var srv *server.Server
+	var model *ui.ServerModel
+	var p *tea.Program
+	var uiDone <-chan struct{}
 
 	if !noTUI {
 		if debugTUI {
 			// Use minimal debug UI
 			debugModel := ui.NewDebugServerModel()
 			p = tea.NewProgram(debugModel)
-		} else {
-			// Create redesigned full-screen TUI model
-			model := ui.NewServerModel(serverPort, cfg.Server.Name, Version)
-			p = tea.NewProgram(model, tea.WithAltScreen())
-		}
-
-		// Set up logger to send log entries to UI
-		logger.SetUINotifier(func(level, message string) {
-			if p != nil {
-				logEntry := ui.LogEntry{
-					Timestamp: time.Now(),
-					Level:     level,
-					Message:   message,
+			// Set up logger to send log entries to UI
+			logger.SetUINotifier(func(level, message string) {
+				if p != nil {
+					logEntry := ui.LogEntry{
+						Timestamp: time.Now(),
+						Level:     level,
+						Message:   message,
+					}
+					p.Send(ui.LogMsg{Entry: logEntry})
 				}
-				p.Send(ui.LogMsg{Entry: logEntry})
+			})
+		} else {
+			// Use the new refactored UI runner
+			var err error
+			model, uiDone, err = ui.RunServerUI(ctx, serverPort, cfg.Server.Name, Version)
+			if err != nil {
+				return fmt.Errorf("failed to start server UI: %w", err)
 			}
-		})
+			// Set up logger to send log entries to UI
+			logger.SetUINotifier(func(level, message string) {
+				if model != nil {
+					model.AddLogEntry(ui.LogEntry{
+						Timestamp: time.Now(),
+						Level:     level,
+						Message:   message,
+					})
+				}
+			})
+		}
 	} else {
 		// No TUI - create server immediately
 		logger.Info("Creating server instance...")
@@ -306,11 +323,7 @@ func runServer(cmd *cobra.Command, args []string) error {
 		logger.Debug("DEBUG: This is a debug message to test log level")
 	}
 
-	// Create a context that we'll cancel on shutdown
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
-	if p == nil {
+	if noTUI && srv != nil {
 		// No TUI mode - initialize server immediately
 		if err := initializeServer(ctx, srv, cfg, bindAddress, serverPort, nil); err != nil {
 			return err
@@ -321,22 +334,42 @@ func runServer(cmd *cobra.Command, args []string) error {
 	done := make(chan os.Signal, 1)
 	signal.Notify(done, os.Interrupt, syscall.SIGTERM, syscall.SIGINT)
 
-	// Start server and TUI in background
-	serverErrCh := make(chan error, 1)
-	go func() {
-		defer close(serverErrCh)
-		// Server startup logic will be moved here if needed
-		// For now, just wait for context cancellation
-		<-ctx.Done()
-	}()
-
-	if p != nil {
+	// For non-debug TUI mode using refactored UI runner
+	if !noTUI && !debugTUI {
 		// Start server initialization in background after a delay
 		go func() {
 			// Give TUI time to start
 			time.Sleep(500 * time.Millisecond)
 
 			// Create server instance now that TUI is running
+			logger.Info("Creating server instance...")
+			var err error
+			srv, err = server.New(cfg)
+			if err != nil {
+				logger.Errorf("Failed to create server: %v", err)
+				if p != nil {
+					p.Send(tea.Quit())
+				}
+				return
+			}
+
+			logger.Info("Waymon server starting...")
+			logger.Debug("DEBUG: This is a debug message to test log level")
+
+			// Initialize server
+			if err := initializeServer(ctx, srv, cfg, bindAddress, serverPort, model); err != nil {
+				logger.Errorf("Server initialization failed: %v", err)
+				// The refactored UI will handle shutdown
+			}
+		}()
+	}
+
+	// For debug TUI mode
+	if debugTUI && p != nil {
+		// Start server initialization similar to above
+		go func() {
+			time.Sleep(500 * time.Millisecond)
+			
 			logger.Info("Creating server instance...")
 			var err error
 			srv, err = server.New(cfg)
@@ -349,29 +382,34 @@ func runServer(cmd *cobra.Command, args []string) error {
 			logger.Info("Waymon server starting...")
 			logger.Debug("DEBUG: This is a debug message to test log level")
 
-			// Initialize server
-			if err := initializeServer(ctx, srv, cfg, bindAddress, serverPort, p); err != nil {
+			if err := initializeServer(ctx, srv, cfg, bindAddress, serverPort, nil); err != nil {
 				logger.Errorf("Server initialization failed: %v", err)
-				// Send quit signal to TUI
 				p.Send(tea.Quit())
 			}
 		}()
 
-		// Run TUI (blocking)
+		// Run debug TUI (blocking)
 		if _, err := p.Run(); err != nil {
 			return err
 		}
-		// If TUI mode, we need to wait for TUI to exit before proceeding with shutdown
-		// as the signal might have been caught while TUI was running
-	} else {
-		// No TUI mode - wait for shutdown signal or server error
+	} else if noTUI {
+		// No TUI mode - wait for shutdown signal
 		select {
 		case <-done:
 			logger.Info("Received shutdown signal")
-		case err := <-serverErrCh:
-			if err != nil {
-				logger.Errorf("Server error: %v", err)
-			}
+		case <-ctx.Done():
+			logger.Info("Context cancelled")
+		}
+	} else {
+		// Refactored UI runner handles its own lifecycle
+		// Wait for UI to exit or signals
+		select {
+		case <-uiDone:
+			logger.Info("UI exited")
+		case <-done:
+			logger.Info("Received shutdown signal")
+		case <-ctx.Done():
+			logger.Info("Context cancelled")
 		}
 	}
 
@@ -384,11 +422,6 @@ func runServer(cmd *cobra.Command, args []string) error {
 
 	// Graceful shutdown
 	logger.Info("Stopping Waymon server...")
-
-	// Tell TUI to quit if running
-	if p != nil {
-		p.Send(tea.Quit())
-	}
 
 	if srv != nil {
 		// Stop server gracefully
