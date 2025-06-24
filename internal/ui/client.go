@@ -120,13 +120,8 @@ func (m *ClientModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "r":
 			if m.controlStatus.BeingControlled {
 				// When being controlled, 'r' requests release
-				if m.inputReceiver != nil {
-					if err := m.inputReceiver.RequestControlRelease(); err != nil {
-						m.SetMessage("error", fmt.Sprintf("Failed to request release: %v", err))
-					} else {
-						m.SetMessage("info", "Requested control release")
-					}
-				}
+				// Use a command to avoid blocking the Update method
+				return m, m.requestControlRelease()
 			} else {
 				// When not being controlled, 'r' reconnects
 				m.SetMessage("info", "Reconnecting...")
@@ -135,12 +130,9 @@ func (m *ClientModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		case "p":
 			// Alternative key for pause/release control
-			if m.inputReceiver != nil && m.controlStatus.BeingControlled {
-				if err := m.inputReceiver.RequestControlRelease(); err != nil {
-					m.SetMessage("error", fmt.Sprintf("Failed to request release: %v", err))
-				} else {
-					m.SetMessage("info", "Requested control release")
-				}
+			if m.controlStatus.BeingControlled {
+				// Use a command to avoid blocking the Update method
+				return m, m.requestControlRelease()
 			}
 
 		case "q":
@@ -374,6 +366,26 @@ func (m *ClientModel) SetMessage(msgType, message string) {
 	// Also add to logs
 	if m.base != nil {
 		m.base.AddLogEntry(msgType, message)
+	}
+}
+
+// requestControlRelease returns a command that requests control release
+func (m *ClientModel) requestControlRelease() tea.Cmd {
+	// Show user that action is being processed
+	m.SetMessage("info", "Requesting control release...")
+	
+	// Return a command that performs the async operation
+	return func() tea.Msg {
+		if m.inputReceiver == nil {
+			return LogMsg{Entry: LogEntry{Level: "error", Message: "Input receiver not available"}}
+		}
+		
+		// Request release - this happens asynchronously
+		if err := m.inputReceiver.RequestControlRelease(); err != nil {
+			return LogMsg{Entry: LogEntry{Level: "error", Message: fmt.Sprintf("Failed to request release: %v", err)}}
+		}
+		
+		return LogMsg{Entry: LogEntry{Level: "info", Message: "Control release requested successfully"}}
 	}
 }
 

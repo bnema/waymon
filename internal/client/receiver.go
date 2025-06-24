@@ -131,9 +131,9 @@ func (ir *InputReceiver) Connect(ctx context.Context, privateKeyPath string) err
 
 	logger.Infof("Connected to server: %s", ir.serverAddress)
 	
-	// Notify connection callback
+	// Notify connection callback asynchronously
 	if ir.onConnected != nil {
-		ir.onConnected()
+		go ir.onConnected()
 	}
 	
 	return nil
@@ -171,14 +171,16 @@ func (ir *InputReceiver) Disconnect() error {
 	ir.connected = false
 	ir.controlStatus = ControlStatus{}
 
-	// Notify status change
+	// Notify status change asynchronously to avoid blocking
 	if ir.onStatusChange != nil {
-		ir.onStatusChange(ir.controlStatus)
+		// Make a copy of the status to avoid race conditions
+		statusCopy := ir.controlStatus
+		go ir.onStatusChange(statusCopy)
 	}
 	
-	// Notify disconnection callback
+	// Notify disconnection callback asynchronously
 	if ir.onDisconnected != nil {
-		ir.onDisconnected()
+		go ir.onDisconnected()
 	}
 
 	logger.Info("Disconnected from server")
@@ -306,10 +308,12 @@ func (ir *InputReceiver) handleControlEvent(control *protocol.ControlEvent) {
 		logger.Warnf("[CLIENT-RECEIVER] Unknown control event type: %v", control.Type)
 	}
 
-	// Notify status change
+	// Notify status change asynchronously to avoid blocking
 	if ir.onStatusChange != nil {
 		logger.Debug("[CLIENT-RECEIVER] Notifying status change callback")
-		ir.onStatusChange(ir.controlStatus)
+		// Make a copy of the status to avoid race conditions
+		statusCopy := ir.controlStatus
+		go ir.onStatusChange(statusCopy)
 	}
 }
 
@@ -358,9 +362,11 @@ func (ir *InputReceiver) RequestControlRelease() error {
 	ir.controlStatus.ControllerName = ""
 	ir.mu.Unlock()
 
-	// Notify status change
+	// Notify status change asynchronously to avoid blocking
 	if ir.onStatusChange != nil {
-		ir.onStatusChange(ir.controlStatus)
+		// Make a copy of the status to avoid race conditions
+		statusCopy := ir.controlStatus
+		go ir.onStatusChange(statusCopy)
 	}
 
 	logger.Info("[CLIENT-RECEIVER] Control release request sent to server")
@@ -606,9 +612,9 @@ func (ir *InputReceiver) monitorConnection() {
 					logger.Info("Connection lost - starting reconnection attempts")
 					ir.notifyReconnectStatus("Connection lost - attempting to reconnect...")
 					
-					// Notify disconnection callback
+					// Notify disconnection callback asynchronously
 					if ir.onDisconnected != nil {
-						ir.onDisconnected()
+						go ir.onDisconnected()
 					}
 					
 					// Start reconnection in a goroutine so monitoring continues
@@ -728,9 +734,9 @@ func (ir *InputReceiver) reconnectToServer(ctx context.Context) error {
 		// Don't fail the reconnection for this
 	}
 
-	// Notify connection callback
+	// Notify connection callback asynchronously
 	if ir.onConnected != nil {
-		ir.onConnected()
+		go ir.onConnected()
 	}
 
 	return nil
@@ -743,7 +749,8 @@ func (ir *InputReceiver) notifyReconnectStatus(status string) {
 	ir.mu.RUnlock()
 
 	if callback != nil {
-		callback(status)
+		// Call callback asynchronously to avoid blocking
+		go callback(status)
 	}
 }
 
