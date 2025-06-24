@@ -31,7 +31,7 @@ var (
 			Border(lipgloss.RoundedBorder()).
 			BorderForeground(lipgloss.Color("240")).
 			Padding(0, 1)
-	statsStyle   = lipgloss.NewStyle().
+	statsStyle = lipgloss.NewStyle().
 			Foreground(lipgloss.Color("11")).
 			Bold(true)
 )
@@ -88,7 +88,7 @@ func main() {
 	fmt.Println(titleStyle.Render("=== Waymon Capture Integration Tests ==="))
 
 	test := NewCaptureTest()
-	
+
 	fmt.Print(dimStyle.Render("Setting up test environment..."))
 	if err := test.Setup(); err != nil {
 		fmt.Println(errorStyle.Render(" ✗"))
@@ -187,7 +187,7 @@ func (t *CaptureTest) ClearEvents() {
 	t.eventsMu.Lock()
 	t.events = t.events[:0]
 	t.eventsMu.Unlock()
-	
+
 	for _, counter := range t.eventCounts {
 		counter.Store(0)
 	}
@@ -220,11 +220,11 @@ func (t *CaptureTest) TestBasicCapture() TestResult {
 	t.backend.SetTarget("")
 
 	eventCount := t.GetEventCount()
-	
+
 	return TestResult{
 		Name:    "Basic Capture",
 		Passed:  true,
-		Message: fmt.Sprintf("Backend initialized successfully, ready to capture"),
+		Message: "Backend initialized successfully, ready to capture",
 		Events:  eventCount,
 	}
 }
@@ -232,7 +232,7 @@ func (t *CaptureTest) TestBasicCapture() TestResult {
 // TestDeviceTargeting tests switching between local and remote targets
 func (t *CaptureTest) TestDeviceTargeting() TestResult {
 	fmt.Println("\n" + testStyle.Render("[Test: Device Targeting]"))
-	
+
 	// Test setting different targets with very short durations
 	targets := []struct {
 		name     string
@@ -242,7 +242,7 @@ func (t *CaptureTest) TestDeviceTargeting() TestResult {
 		{"client-1", 200 * time.Millisecond}, // remote (very brief grab)
 		{"", 50 * time.Millisecond},          // back to local
 	}
-	
+
 	for _, target := range targets {
 		if err := t.backend.SetTarget(target.name); err != nil {
 			// If device is busy, it's likely another app has it - not a failure
@@ -276,7 +276,7 @@ func (t *CaptureTest) TestEventTypes() TestResult {
 
 	// This test just verifies the event counting mechanism works
 	// In a real scenario, we'd need to generate synthetic events
-	
+
 	return TestResult{
 		Name:    "Event Types",
 		Passed:  true,
@@ -292,7 +292,7 @@ func (t *CaptureTest) TestPerformance() TestResult {
 	// Measure event callback performance
 	start := time.Now()
 	testEvents := 10000
-	
+
 	// Simulate rapid event processing
 	var wg sync.WaitGroup
 	wg.Add(1)
@@ -304,12 +304,12 @@ func (t *CaptureTest) TestPerformance() TestResult {
 			time.Sleep(time.Microsecond)
 		}
 	}()
-	
+
 	wg.Wait()
 	elapsed := time.Since(start)
-	
+
 	eventsPerSecond := float64(testEvents) / elapsed.Seconds()
-	
+
 	return TestResult{
 		Name:    "Performance",
 		Passed:  eventsPerSecond > 1000, // Should handle >1000 events/sec
@@ -322,25 +322,25 @@ func (t *CaptureTest) TestInteractiveMouseCapture() TestResult {
 	fmt.Println("\n" + testStyle.Render("[Test: Interactive Mouse Capture]"))
 	fmt.Println(infoStyle.Render(fmt.Sprintf("Please move your mouse, click buttons, and scroll for %v", *duration)))
 	fmt.Println(boxStyle.Render("⚠️  Safety: Press ESC or wait 5s for auto-release if you lose control"))
-	
+
 	t.ClearEvents()
 	t.backend.SetTarget("test-client")
-	
+
 	time.Sleep(*duration)
-	
+
 	t.backend.SetTarget("")
-	
+
 	mouseMove := t.eventCounts["mouse_move"].Load()
 	mouseButton := t.eventCounts["mouse_button"].Load()
 	mouseScroll := t.eventCounts["mouse_scroll"].Load()
-	
+
 	passed := mouseMove > 0
 	stats := fmt.Sprintf("Moves: %s | Clicks: %s | Scrolls: %s",
 		statsStyle.Render(fmt.Sprintf("%d", mouseMove)),
 		statsStyle.Render(fmt.Sprintf("%d", mouseButton)),
 		statsStyle.Render(fmt.Sprintf("%d", mouseScroll)))
 	message := fmt.Sprintf("Captured mouse events - %s", stats)
-	
+
 	return TestResult{
 		Name:    "Interactive Mouse",
 		Passed:  passed,
@@ -353,20 +353,20 @@ func (t *CaptureTest) TestInteractiveKeyboardCapture() TestResult {
 	fmt.Println("\n" + testStyle.Render("[Test: Interactive Keyboard Capture]"))
 	fmt.Println(infoStyle.Render(fmt.Sprintf("Please type on your keyboard for %v", *duration)))
 	fmt.Println(boxStyle.Render("⚠️  Safety: Press ESC or wait 5s for auto-release if you lose control"))
-	
+
 	t.ClearEvents()
 	t.backend.SetTarget("test-client")
-	
+
 	time.Sleep(*duration)
-	
+
 	t.backend.SetTarget("")
-	
+
 	keyboardEvents := t.eventCounts["keyboard"].Load()
-	
+
 	passed := keyboardEvents > 0
-	message := fmt.Sprintf("Captured keyboard events - Total: %s", 
+	message := fmt.Sprintf("Captured keyboard events - Total: %s",
 		statsStyle.Render(fmt.Sprintf("%d", keyboardEvents)))
-	
+
 	return TestResult{
 		Name:    "Interactive Keyboard",
 		Passed:  passed,
@@ -380,26 +380,26 @@ func (t *CaptureTest) TestInteractiveCombined() TestResult {
 	fmt.Println(infoStyle.Render(fmt.Sprintf("Please use mouse and keyboard together for %v", *duration)))
 	fmt.Println(dimStyle.Render("Try: Ctrl+Click, Shift+Drag, typing while moving mouse"))
 	fmt.Println(boxStyle.Render("⚠️  Safety: Press ESC or wait 5s for auto-release if you lose control"))
-	
+
 	t.ClearEvents()
 	t.backend.SetTarget("test-client")
-	
+
 	time.Sleep(*duration)
-	
+
 	t.backend.SetTarget("")
-	
+
 	// Check for interleaved events
 	mouseTotal := t.eventCounts["mouse_move"].Load() + t.eventCounts["mouse_button"].Load()
 	keyboardTotal := t.eventCounts["keyboard"].Load()
 	hasMouseEvents := mouseTotal > 0
 	hasKeyboardEvents := keyboardTotal > 0
-	
+
 	passed := hasMouseEvents && hasKeyboardEvents
 	stats := fmt.Sprintf("Mouse: %s | Keyboard: %s",
 		statsStyle.Render(fmt.Sprintf("%d", mouseTotal)),
 		statsStyle.Render(fmt.Sprintf("%d", keyboardTotal)))
 	message := fmt.Sprintf("Captured combined input - %s", stats)
-	
+
 	return TestResult{
 		Name:    "Interactive Combined",
 		Passed:  passed,
@@ -425,17 +425,17 @@ func logEvent(event *protocol.InputEvent) {
 		if ev.Keyboard.Pressed {
 			action = "pressed"
 		}
-		fmt.Println(dimStyle.Render(fmt.Sprintf("[Keyboard] key=%d %s, modifiers=%d", 
+		fmt.Println(dimStyle.Render(fmt.Sprintf("[Keyboard] key=%d %s, modifiers=%d",
 			ev.Keyboard.Key, action, ev.Keyboard.Modifiers)))
 	}
 }
 
 func printSummary(results []TestResult) {
 	fmt.Println("\n" + titleStyle.Render("=== Test Summary ==="))
-	
+
 	passed := 0
 	failed := 0
-	
+
 	for _, result := range results {
 		if result.Passed {
 			passed++
@@ -448,13 +448,13 @@ func printSummary(results []TestResult) {
 			fmt.Println(errorStyle.Render(fmt.Sprintf("✗ %s: %s", result.Name, result.Message)))
 		}
 	}
-	
+
 	status := successStyle
 	if failed > 0 {
 		status = errorStyle
 	}
 	fmt.Println("\n" + status.Render(fmt.Sprintf("Total: %d passed, %d failed", passed, failed)))
-	
+
 	if failed > 0 {
 		os.Exit(1)
 	}

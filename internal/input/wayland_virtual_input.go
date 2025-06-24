@@ -167,8 +167,8 @@ func (w *WaylandVirtualInput) Start(ctx context.Context) error {
 // Input capture is handled by the evdev backend on the server side.
 // The Wayland virtual input protocols are for creating fake input devices, not capturing real input.
 
-// enableExclusiveCapture enables exclusive pointer and keyboard capture
-func (w *WaylandVirtualInput) enableExclusiveCapture() error {
+// EnableExclusiveCapture enables exclusive pointer and keyboard capture
+func (w *WaylandVirtualInput) EnableExclusiveCapture() error {
 	// Lock pointer to current position for exclusive capture
 	if w.constraintsMgr != nil && w.surface != nil && w.pointer != nil {
 		lockedPointer, err := pointer_constraints.LockPointerAtCurrentPosition(w.constraintsMgr, w.surface, w.pointer)
@@ -194,8 +194,8 @@ func (w *WaylandVirtualInput) enableExclusiveCapture() error {
 	return nil
 }
 
-// disableExclusiveCapture disables exclusive pointer and keyboard capture
-func (w *WaylandVirtualInput) disableExclusiveCapture() error {
+// DisableExclusiveCapture disables exclusive pointer and keyboard capture
+func (w *WaylandVirtualInput) DisableExclusiveCapture() error {
 	// Unlock pointer
 	if w.lockedPointer != nil {
 		if err := w.lockedPointer.Destroy(); err != nil {
@@ -251,7 +251,7 @@ func (w *WaylandVirtualInput) Stop() error {
 	}
 
 	// Disable exclusive capture first
-	if err := w.disableExclusiveCapture(); err != nil {
+	if err := w.DisableExclusiveCapture(); err != nil {
 		logger.Errorf("Failed to disable exclusive capture: %v", err)
 	}
 
@@ -299,7 +299,7 @@ func (w *WaylandVirtualInput) SetTarget(clientID string) error {
 	if clientID == "" {
 		// Returning to local control - disable exclusive capture
 		if oldTarget != "" {
-			if err := w.disableExclusiveCapture(); err != nil {
+			if err := w.DisableExclusiveCapture(); err != nil {
 				logger.Warnf("Failed to disable exclusive capture: %v", err)
 			}
 		}
@@ -307,7 +307,7 @@ func (w *WaylandVirtualInput) SetTarget(clientID string) error {
 	} else {
 		// Switching to client control - enable exclusive capture
 		if oldTarget == "" {
-			if err := w.enableExclusiveCapture(); err != nil {
+			if err := w.EnableExclusiveCapture(); err != nil {
 				logger.Warnf("Failed to enable exclusive capture: %v", err)
 			}
 		}
@@ -466,6 +466,10 @@ func (w *WaylandVirtualInput) InjectKeyEvent(key uint32, pressed bool) error {
 		return fmt.Errorf("virtual keyboard not available")
 	}
 
+	// Log key events for debugging
+	keyName := getKeyName(key)
+	logger.Debugf("[CLIENT-WAYLAND] InjectKeyEvent: key=%d (%s), pressed=%v", key, keyName, pressed)
+
 	// Convert key state
 	var state virtual_keyboard.KeyState
 	if pressed {
@@ -475,7 +479,14 @@ func (w *WaylandVirtualInput) InjectKeyEvent(key uint32, pressed bool) error {
 	}
 
 	// Inject key event
-	return w.virtualKbd.Key(time.Now(), key, state)
+	err := w.virtualKbd.Key(time.Now(), key, state)
+	if err != nil {
+		logger.Errorf("[CLIENT-WAYLAND] Failed to inject key event: key=%d (%s), error=%v", key, keyName, err)
+		return err
+	}
+
+	logger.Debugf("[CLIENT-WAYLAND] Successfully injected key event: key=%d (%s)", key, keyName)
+	return nil
 }
 
 // Input event handlers for capture
@@ -622,4 +633,142 @@ func (w *WaylandVirtualInput) handleKeyboardLeave(event client.KeyboardLeaveEven
 // handleKeyboardModifiers handles keyboard modifier events
 func (w *WaylandVirtualInput) handleKeyboardModifiers(event client.KeyboardModifiersEvent) { //nolint:unused // event handler kept for future use
 	logger.Debug("Keyboard modifiers changed")
+}
+
+// getKeyName returns a human-readable name for common key codes
+func getKeyName(key uint32) string {
+	// Import key constants from virtual_keyboard package
+	switch key {
+	// Letters
+	case 30:
+		return "A"
+	case 48:
+		return "B"
+	case 46:
+		return "C"
+	case 32:
+		return "D"
+	case 18:
+		return "E"
+	case 33:
+		return "F"
+	case 34:
+		return "G"
+	case 35:
+		return "H"
+	case 23:
+		return "I"
+	case 36:
+		return "J"
+	case 37:
+		return "K"
+	case 38:
+		return "L"
+	case 50:
+		return "M"
+	case 49:
+		return "N"
+	case 24:
+		return "O"
+	case 25:
+		return "P"
+	case 16:
+		return "Q"
+	case 19:
+		return "R"
+	case 31:
+		return "S"
+	case 20:
+		return "T"
+	case 22:
+		return "U"
+	case 47:
+		return "V"
+	case 17:
+		return "W"
+	case 45:
+		return "X"
+	case 21:
+		return "Y"
+	case 44:
+		return "Z"
+	// Numbers
+	case 2:
+		return "1"
+	case 3:
+		return "2"
+	case 4:
+		return "3"
+	case 5:
+		return "4"
+	case 6:
+		return "5"
+	case 7:
+		return "6"
+	case 8:
+		return "7"
+	case 9:
+		return "8"
+	case 10:
+		return "9"
+	case 11:
+		return "0"
+	// Modifiers
+	case 29:
+		return "LEFTCTRL"
+	case 97:
+		return "RIGHTCTRL"
+	case 42:
+		return "LEFTSHIFT"
+	case 54:
+		return "RIGHTSHIFT"
+	case 56:
+		return "LEFTALT"
+	case 100:
+		return "RIGHTALT"
+	case 125:
+		return "LEFTMETA/SUPER/CMD"
+	case 126:
+		return "RIGHTMETA/SUPER/CMD"
+	// Special keys
+	case 1:
+		return "ESC"
+	case 14:
+		return "BACKSPACE"
+	case 15:
+		return "TAB"
+	case 28:
+		return "ENTER"
+	case 57:
+		return "SPACE"
+	case 58:
+		return "CAPSLOCK"
+	// Function keys
+	case 59:
+		return "F1"
+	case 60:
+		return "F2"
+	case 61:
+		return "F3"
+	case 62:
+		return "F4"
+	case 63:
+		return "F5"
+	case 64:
+		return "F6"
+	case 65:
+		return "F7"
+	case 66:
+		return "F8"
+	case 67:
+		return "F9"
+	case 68:
+		return "F10"
+	case 87:
+		return "F11"
+	case 88:
+		return "F12"
+	default:
+		return fmt.Sprintf("KEY_%d", key)
+	}
 }

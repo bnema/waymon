@@ -263,6 +263,14 @@ func (ir *InputReceiver) handleControlEvent(control *protocol.ControlEvent) {
 		ir.controlStatus.ConnectedAt = time.Now().Unix()
 		logger.Infof("[CLIENT-RECEIVER] Control granted to server: %s", control.TargetId)
 
+		// Enable keyboard shortcuts inhibitor for Wayland
+		if waylandBackend, ok := ir.inputBackend.(*input.WaylandVirtualInput); ok {
+			logger.Debug("[CLIENT-RECEIVER] Enabling keyboard shortcuts inhibitor")
+			if err := waylandBackend.EnableExclusiveCapture(); err != nil {
+				logger.Warnf("[CLIENT-RECEIVER] Failed to enable keyboard shortcuts inhibitor: %v", err)
+			}
+		}
+
 		// Show notification to user
 		logger.Infof("🖥️  %s is now controlling your system", control.TargetId)
 
@@ -272,6 +280,14 @@ func (ir *InputReceiver) handleControlEvent(control *protocol.ControlEvent) {
 		ir.controlStatus.BeingControlled = false
 		ir.controlStatus.ControllerName = ""
 		logger.Info("[CLIENT-RECEIVER] Control released by server")
+
+		// Disable keyboard shortcuts inhibitor for Wayland
+		if waylandBackend, ok := ir.inputBackend.(*input.WaylandVirtualInput); ok {
+			logger.Debug("[CLIENT-RECEIVER] Disabling keyboard shortcuts inhibitor")
+			if err := waylandBackend.DisableExclusiveCapture(); err != nil {
+				logger.Warnf("[CLIENT-RECEIVER] Failed to disable keyboard shortcuts inhibitor: %v", err)
+			}
+		}
 
 		// Show notification to user
 		if previousController != "" {
@@ -285,6 +301,14 @@ func (ir *InputReceiver) handleControlEvent(control *protocol.ControlEvent) {
 		ir.controlStatus.BeingControlled = false
 		ir.controlStatus.ControllerName = ""
 		logger.Info("[CLIENT-RECEIVER] Server switched to local control")
+
+		// Disable keyboard shortcuts inhibitor for Wayland
+		if waylandBackend, ok := ir.inputBackend.(*input.WaylandVirtualInput); ok {
+			logger.Debug("[CLIENT-RECEIVER] Disabling keyboard shortcuts inhibitor")
+			if err := waylandBackend.DisableExclusiveCapture(); err != nil {
+				logger.Warnf("[CLIENT-RECEIVER] Failed to disable keyboard shortcuts inhibitor: %v", err)
+			}
+		}
 
 	case protocol.ControlEvent_SERVER_SHUTDOWN:
 		// Server is shutting down gracefully

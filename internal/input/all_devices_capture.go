@@ -328,7 +328,7 @@ func (a *AllDevicesCapture) stopDeviceHandler(handler *deviceHandler) {
 func (a *AllDevicesCapture) isValidInputDevice(device *evdev.InputDevice) bool {
 	// Filter out virtual terminals, console devices, and other system devices
 	deviceName := strings.ToLower(device.Name)
-	
+
 	// Exclude devices that are likely to cause issues
 	excludePatterns := []string{
 		"virtual console",
@@ -344,19 +344,20 @@ func (a *AllDevicesCapture) isValidInputDevice(device *evdev.InputDevice) bool {
 		"sleep button",
 		"lid switch",
 	}
-	
+
 	for _, pattern := range excludePatterns {
 		if strings.Contains(deviceName, pattern) {
 			logger.Debugf("Excluding device %s (matches pattern: %s)", device.Name, pattern)
 			return false
 		}
 	}
-	
+
 	capabilities := device.Capabilities
 
 	// Look for capability types we care about
 	for capType, caps := range capabilities {
-		if capType.Type == 1 { // EV_KEY
+		switch capType.Type {
+		case 1: // EV_KEY
 			for _, cap := range caps {
 				// Mouse buttons
 				if cap.Code >= evdev.BTN_LEFT && cap.Code <= evdev.BTN_TASK {
@@ -371,7 +372,7 @@ func (a *AllDevicesCapture) isValidInputDevice(device *evdev.InputDevice) bool {
 					return true
 				}
 			}
-		} else if capType.Type == 2 { // EV_REL
+		case 2: // EV_REL
 			for _, cap := range caps {
 				if cap.Code == evdev.REL_X || cap.Code == evdev.REL_Y ||
 					cap.Code == evdev.REL_WHEEL || cap.Code == evdev.REL_HWHEEL {
@@ -548,10 +549,10 @@ func (a *AllDevicesCapture) captureFromDevice(ctx context.Context, handler *devi
 
 					// Debug emergency key detection
 					if event.Code == emergencyKey {
-						logger.Debugf("ESC key detected: value=%d, ctrlPressed=%v, currentTarget=%s, noGrab=%v", 
+						logger.Debugf("ESC key detected: value=%d, ctrlPressed=%v, currentTarget=%s, noGrab=%v",
 							event.Value, ctrlPressed, currentTarget, noGrab)
 					}
-					
+
 					// Only check emergency key if we're grabbing devices and Ctrl is pressed
 					if !noGrab && event.Code == emergencyKey && event.Value == 1 && currentTarget != "" && ctrlPressed {
 						logger.Warnf("Emergency release triggered - Ctrl+ESC pressed")
@@ -561,7 +562,7 @@ func (a *AllDevicesCapture) captureFromDevice(ctx context.Context, handler *devi
 							if err := a.SetTarget(""); err != nil {
 								logger.Errorf("Failed to release on emergency: %v", err)
 							}
-							
+
 							// Also notify the handler if set (ClientManager)
 							if a.emergencyHandler != nil {
 								logger.Debug("Notifying emergency handler")
@@ -630,7 +631,7 @@ func (a *AllDevicesCapture) sendMouseButtonEvent(code uint16, value int32) {
 			return
 		}
 	}
-	
+
 	a.sendEvent(&protocol.InputEvent{
 		Event: &protocol.InputEvent_MouseButton{
 			MouseButton: &protocol.MouseButtonEvent{
@@ -669,8 +670,10 @@ func (a *AllDevicesCapture) sendKeyboardEvent(code uint16, value int32) {
 		logger.Debugf("SERVER: Super/Cmd key state changed: pressed=%v", value > 0)
 	case evdev.KEY_LEFTCTRL, evdev.KEY_RIGHTCTRL:
 		// Already logged above in the main event handler
+	case evdev.KEY_1, evdev.KEY_2, evdev.KEY_3:
+		logger.Debugf("SERVER: Number key %d state changed: pressed=%v", code-evdev.KEY_1+1, value > 0)
 	}
-	
+
 	// value can be 0 (release), 1 (press), 2 (autorepeat)
 	// We treat autorepeat as a press
 	a.sendEvent(&protocol.InputEvent{
