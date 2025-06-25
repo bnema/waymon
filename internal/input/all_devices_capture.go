@@ -275,6 +275,9 @@ func (a *AllDevicesCapture) discoverAndStartDevices() error {
 				if strings.Contains(err.Error(), "no relevant input capabilities") {
 					// This is expected for many devices, use trace level
 					logger.Debugf("Device %s not suitable for capture: %v", path, err)
+				} else if strings.Contains(err.Error(), "permission denied") {
+					// Permission errors need special handling
+					logger.Warnf("Permission denied accessing device %s. Make sure you are running as root: sudo waymon server", path)
 				} else {
 					// This might be a real error, log it
 					logger.Warnf("Failed to add device %s: %v", path, err)
@@ -286,6 +289,18 @@ func (a *AllDevicesCapture) discoverAndStartDevices() error {
 	}
 
 	ignoredCount := len(a.ignoredDevices)
+	
+	// Check if we have any working devices
+	if deviceCount == 0 {
+		if ignoredCount > 0 {
+			return fmt.Errorf("no usable input devices found (%d devices ignored due to permissions or capabilities). "+
+				"Make sure you are running as root: sudo waymon server", ignoredCount)
+		} else {
+			return fmt.Errorf("no input devices found in /dev/input/. "+
+				"Make sure input devices are connected and the evdev module is loaded")
+		}
+	}
+	
 	if ignoredCount > 0 {
 		logger.Infof("Started capturing from %d input devices (%d devices ignored)", deviceCount, ignoredCount)
 	} else {

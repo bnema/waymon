@@ -49,13 +49,14 @@ func CreateBackend() (InputBackend, error) {
 // Always tries evdev first since servers need actual input capture
 func CreateServerBackend() (InputBackend, error) {
 	// For servers, we MUST have evdev for actual input capture
-	if IsEvdevAvailable() {
+	available, diagnostic := IsEvdevAvailableWithDiagnostic()
+	if available {
 		logger.Info("Using all-devices capture backend for server input capture")
 		return NewAllDevicesCapture(), nil
 	}
 
-	return nil, fmt.Errorf("evdev not available - server requires evdev for input capture. " +
-		"Make sure you have access to /dev/input/event* devices")
+	// Provide detailed error message with diagnostic information
+	return nil, fmt.Errorf("evdev not available - server requires evdev for input capture.\n%s", diagnostic)
 }
 
 // CreateClientBackend creates an input backend specifically for client mode
@@ -72,16 +73,39 @@ func CreateClientBackend() (InputBackend, error) {
 
 // IsEvdevAvailable checks if evdev is available on this system
 func IsEvdevAvailable() bool {
+	available, _ := IsEvdevAvailableWithDiagnostic()
+	return available
+}
+
+// IsEvdevAvailableWithDiagnostic checks if evdev is available and provides diagnostic information
+func IsEvdevAvailableWithDiagnostic() (bool, string) {
 	// Check if /dev/input directory exists
 	if _, err := os.Stat("/dev/input"); os.IsNotExist(err) {
-		return false
+		return false, "Diagnostic: /dev/input directory does not exist.\n" +
+			"Solution: Make sure the evdev kernel module is loaded and input devices are available.\n" +
+			"Try: sudo modprobe evdev"
 	}
 
 	// Try to list input devices
 	devices, err := evdev.ListInputDevices("/dev/input/event*")
 	if err != nil {
-		return false
+		return false, fmt.Sprintf("Diagnostic: Failed to list input devices: %v\n", err) +
+			"Solution: Cannot access /dev/input/event* devices.\n" +
+			"Make sure you are running as root: sudo waymon server"
 	}
 
-	return len(devices) > 0
+	if len(devices) == 0 {
+		return false, "Diagnostic: No input devices found in /dev/input/\n" +
+			"Solution: Make sure input devices are connected and working.\n" +
+			"Try: ls -la /dev/input/ to see available devices"
+	}
+
+	// Additional check: verify we can open at least one device
+	for _, device := range devices {
+		// We already have opened devices from ListInputDevices, just close them
+		device.File.Close()
+	}
+	
+	// If we got here, we have working devices
+	return true, ""
 }
