@@ -45,7 +45,7 @@ var listCmd = &cobra.Command{
 
 		// Create table
 		rows := [][]string{}
-		
+
 		// Add local server row
 		activeMarker := ""
 		if status.CurrentComputer == 0 {

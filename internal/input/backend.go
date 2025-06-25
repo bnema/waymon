@@ -105,7 +105,7 @@ func IsEvdevAvailableWithDiagnostic() (bool, string) {
 		// We already have opened devices from ListInputDevices, just close them
 		device.File.Close()
 	}
-	
+
 	// If we got here, we have working devices
 	return true, ""
 }

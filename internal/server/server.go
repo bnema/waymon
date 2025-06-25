@@ -193,7 +193,7 @@ func (s *Server) runNetworkServer(ctx context.Context) {
 func (s *Server) Stop() {
 	s.stopOnce.Do(func() {
 		logger.Info("Server.Stop: Beginning server shutdown")
-		
+
 		// Stop emergency release monitoring
 		if s.emergency != nil {
 			logger.Debug("Server.Stop: Stopping emergency release")

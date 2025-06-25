@@ -58,7 +58,7 @@ func main() {
 	defer os.RemoveAll(tempDir)
 
 	result := testEndToEndFlow(tempDir)
-	
+
 	// Print summary
 	fmt.Println("\n" + titleStyle.Render("=== Test Summary ==="))
 	if result.Passed {
@@ -83,7 +83,7 @@ func testEndToEndFlow(tempDir string) TestResult {
 	hostKeyPath := tempDir + "/host_key"
 	clientKeyPath := tempDir + "/client_key"
 	authKeysPath := tempDir + "/authorized_keys"
-	
+
 	if err := generateTestKeys(hostKeyPath, clientKeyPath, authKeysPath); err != nil {
 		return TestResult{
 			Name:    "End-to-End Flow",
@@ -131,14 +131,14 @@ func testEndToEndFlow(tempDir string) TestResult {
 		if *verbose {
 			fmt.Printf("[CAPTURE] Event: %T\n", event.Event)
 		}
-		
+
 		// Server manager would normally handle this
 		// For testing, we'll forward directly to connected clients
 		if serverManager.IsControllingLocal() {
 			// Not forwarding when controlling local
 			return
 		}
-		
+
 		// Get active client
 		if activeClient := serverManager.GetActiveClient(); activeClient != nil {
 			// In real implementation, this would send via SSH to the client
@@ -162,7 +162,7 @@ func testEndToEndFlow(tempDir string) TestResult {
 
 	// Step 3: Create client-side components
 	fmt.Println(dimStyle.Render("3. Creating client injection backend..."))
-	
+
 	// Create input receiver (client)
 	inputReceiver, err := client.NewInputReceiver(fmt.Sprintf("localhost:%d", *port))
 	if err != nil {
@@ -220,7 +220,7 @@ func testEndToEndFlow(tempDir string) TestResult {
 	// Step 6: Generate test events
 	fmt.Println(dimStyle.Render("7. Generating test events..."))
 	fmt.Println(infoStyle.Render("   Move your mouse and press some keys..."))
-	
+
 	// Wait for events to flow through the system
 	testDuration := 5 * time.Second
 	fmt.Printf("   Capturing events for %v...\n", testDuration)
@@ -264,11 +264,11 @@ func testEndToEndFlow(tempDir string) TestResult {
 	// Success!
 	successRate := float64(injected) / float64(captured) * 100
 	return TestResult{
-		Name:    "End-to-End Flow",
-		Passed:  true,
-		Message: fmt.Sprintf("%.1f%% of captured events successfully injected (%d/%d)", 
+		Name:   "End-to-End Flow",
+		Passed: true,
+		Message: fmt.Sprintf("%.1f%% of captured events successfully injected (%d/%d)",
 			successRate, injected, captured),
-		Events:  int(captured),
+		Events: int(captured),
 	}
 }
 

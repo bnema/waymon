@@ -79,16 +79,16 @@ func (m *ClientModel) SetProgram(p *tea.Program) {
 		m.inputReceiver.OnStatusChange(func(status client.ControlStatus) {
 			p.Send(ControlStatusMsg{Status: status})
 		})
-		
+
 		// Set up connection callbacks
 		m.inputReceiver.SetOnConnected(func() {
 			p.Send(ConnectedMsg{})
 		})
-		
+
 		m.inputReceiver.SetOnDisconnected(func() {
 			p.Send(DisconnectedMsg{})
 		})
-		
+
 		m.inputReceiver.SetOnReconnectStatus(func(status string) {
 			p.Send(ReconnectingMsg{Status: status})
 		})
@@ -373,18 +373,18 @@ func (m *ClientModel) SetMessage(msgType, message string) {
 func (m *ClientModel) requestControlRelease() tea.Cmd {
 	// Show user that action is being processed
 	m.SetMessage("info", "Requesting control release...")
-	
+
 	// Return a command that performs the async operation
 	return func() tea.Msg {
 		if m.inputReceiver == nil {
 			return LogMsg{Entry: LogEntry{Level: "error", Message: "Input receiver not available"}}
 		}
-		
+
 		// Request release - this happens asynchronously
 		if err := m.inputReceiver.RequestControlRelease(); err != nil {
 			return LogMsg{Entry: LogEntry{Level: "error", Message: fmt.Sprintf("Failed to request release: %v", err)}}
 		}
-		
+
 		return LogMsg{Entry: LogEntry{Level: "info", Message: "Control release requested successfully"}}
 	}
 }

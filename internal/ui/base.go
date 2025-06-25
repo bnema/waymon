@@ -43,9 +43,9 @@ type BaseUI struct {
 	windowHeight int
 
 	// Logging
-	logBuffer    []LogEntry
-	maxLogLines  int
-	logMu        sync.RWMutex
+	logBuffer   []LogEntry
+	maxLogLines int
+	logMu       sync.RWMutex
 
 	// Common UI elements
 	spinner      spinner.Model
@@ -211,7 +211,7 @@ func (b *BaseUI) BaseUpdate(msg tea.Msg) tea.Cmd {
 func (b *BaseUI) FormatLogEntry(entry LogEntry) string {
 	levelStyle := lipgloss.NewStyle().Bold(true)
 	levelText := ""
-	
+
 	switch entry.Level {
 	case "ERROR", "error":
 		levelStyle = levelStyle.Foreground(lipgloss.Color("196")) // Bright red
@@ -220,7 +220,7 @@ func (b *BaseUI) FormatLogEntry(entry LogEntry) string {
 		levelStyle = levelStyle.Foreground(lipgloss.Color("214")) // Orange
 		levelText = "WARN "
 	case "INFO", "info":
-		levelStyle = levelStyle.Foreground(lipgloss.Color("42"))  // Bright green
+		levelStyle = levelStyle.Foreground(lipgloss.Color("42")) // Bright green
 		levelText = "INFO "
 	case "DEBUG", "debug":
 		levelStyle = levelStyle.Foreground(lipgloss.Color("245")) // Gray (more visible than 241)
@@ -233,7 +233,7 @@ func (b *BaseUI) FormatLogEntry(entry LogEntry) string {
 	// Format timestamp with subtle color
 	timestampStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("240"))
 	timestamp := timestampStyle.Render(entry.Timestamp.Format("15:04:05"))
-	
+
 	// Format the level with color and fixed width
 	level := levelStyle.Render(levelText)
 

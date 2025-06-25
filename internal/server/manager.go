@@ -73,10 +73,10 @@ func NewClientManager(inputBackend input.InputBackend) (*ClientManager, error) {
 	}
 
 	return &ClientManager{
-		clients:          make(map[string]*ConnectedClient),
-		inputBackend:     inputBackend,
-		controllingLocal: true, // Start by controlling local system
-		clientCursors:    make(map[string]*cursorState),
+		clients:           make(map[string]*ConnectedClient),
+		inputBackend:      inputBackend,
+		controllingLocal:  true, // Start by controlling local system
+		clientCursors:     make(map[string]*cursorState),
 		emergencyCooldown: 5 * time.Second, // 5 second cooldown after emergency release
 	}, nil
 }
@@ -182,7 +182,7 @@ func (cm *ClientManager) SwitchToClient(clientID string) error {
 		if err != nil {
 			serverName = "waymon-server"
 		}
-		
+
 		controlEvent := &protocol.ControlEvent{
 			Type:     protocol.ControlEvent_REQUEST_CONTROL,
 			TargetId: serverName, // Send server name so client knows who's controlling
@@ -662,17 +662,17 @@ func (cm *ClientManager) UnregisterClient(id string) {
 	// If this was the active client, switch to local and release input
 	if cm.activeClientID == id {
 		logger.Infof("[SERVER-MANAGER] Active client %s disconnected, switching to local", client.Name)
-		
+
 		// Release input capture
 		if cm.inputBackend != nil {
 			if err := cm.inputBackend.SetTarget(""); err != nil {
 				logger.Errorf("[SERVER-MANAGER] Failed to release input on client disconnect: %v", err)
 			}
 		}
-		
+
 		cm.activeClientID = ""
 		cm.controllingLocal = true
-		
+
 		// Send notification to UI if available
 		if cm.onActivity != nil {
 			cm.onActivity("WARN", fmt.Sprintf("Client %s disconnected - control returned to local", client.Name))
@@ -989,12 +989,12 @@ func (cm *ClientManager) HandleStatusQuery(query *pb.StatusQuery) (*pb.IPCMessag
 // HandleReleaseCommand implements ipc.MessageHandler
 func (cm *ClientManager) HandleReleaseCommand() (*pb.IPCMessage, error) {
 	logger.Debug("[SERVER-MANAGER] HandleReleaseCommand: releasing control to local")
-	
+
 	// Switch to local
 	if err := cm.SwitchToLocal(); err != nil {
 		return nil, fmt.Errorf("failed to release control: %w", err)
 	}
-	
+
 	// Return status response with current state
 	return cm.HandleStatusQuery(&pb.StatusQuery{})
 }
@@ -1002,16 +1002,16 @@ func (cm *ClientManager) HandleReleaseCommand() (*pb.IPCMessage, error) {
 // HandleConnectCommand implements ipc.MessageHandler
 func (cm *ClientManager) HandleConnectCommand(slot int32) (*pb.IPCMessage, error) {
 	logger.Debugf("[SERVER-MANAGER] HandleConnectCommand: connecting to slot %d", slot)
-	
+
 	cm.mu.RLock()
-	
+
 	// Get sorted list of client IDs
 	clientIDs := make([]string, 0, len(cm.clients))
 	for id := range cm.clients {
 		clientIDs = append(clientIDs, id)
 	}
 	sort.Strings(clientIDs)
-	
+
 	// Slot 0 is server (local), slots 1-5 are clients
 	if slot == 0 {
 		cm.mu.RUnlock()
@@ -1024,10 +1024,10 @@ func (cm *ClientManager) HandleConnectCommand(slot int32) (*pb.IPCMessage, error
 			cm.mu.RUnlock()
 			return nil, fmt.Errorf("no client in slot %d", slot)
 		}
-		
+
 		clientID := clientIDs[clientIndex]
 		cm.mu.RUnlock()
-		
+
 		if err := cm.SwitchToClient(clientID); err != nil {
 			return nil, fmt.Errorf("failed to switch to client in slot %d: %w", slot, err)
 		}
@@ -1035,7 +1035,7 @@ func (cm *ClientManager) HandleConnectCommand(slot int32) (*pb.IPCMessage, error
 		cm.mu.RUnlock()
 		return nil, fmt.Errorf("invalid slot number: %d (must be 0-5)", slot)
 	}
-	
+
 	// Return status response with current state
 	return cm.HandleStatusQuery(&pb.StatusQuery{})
 }

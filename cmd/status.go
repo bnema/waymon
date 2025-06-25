@@ -44,7 +44,7 @@ var statusCmd = &cobra.Command{
 
 		// Connection status box
 		statusContent := strings.Builder{}
-		
+
 		// Active status
 		if status.Active {
 			statusContent.WriteString(ui.SuccessStyle.Render("● Active"))

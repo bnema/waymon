@@ -58,6 +58,6 @@ func GenerateTestKeys(hostKeyPath, clientKeyPath, authKeysPath string) error {
 		return err
 	}
 	pubKeyBytes := ssh.MarshalAuthorizedKey(sshPubKey)
-	
+
 	return os.WriteFile(authKeysPath, pubKeyBytes, 0600)
 }

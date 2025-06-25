@@ -47,7 +47,6 @@ var configShowCmd = &cobra.Command{
 		logger.Infof("  Edge Threshold: %d pixels", cfg.Client.EdgeThreshold)
 		logger.Infof("  Hotkey: %s+%s", cfg.Client.HotkeyModifier, cfg.Client.HotkeyKey)
 
-
 		if len(cfg.Hosts) > 0 {
 			logger.Info("\n[Hosts]")
 			w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)

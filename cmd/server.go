@@ -154,10 +154,10 @@ func initializeServer(ctx context.Context, srv *server.Server, cfg *config.Confi
 		if model != nil {
 			// Set the client manager on the model
 			model.SetClientManager(cm)
-			
+
 			// Set the server instance for proper shutdown
 			model.SetServer(srv)
-			
+
 			// Set up activity callback to send logs to UI
 			cm.SetOnActivity(func(level, message string) {
 				if model != nil {
@@ -166,7 +166,7 @@ func initializeServer(ctx context.Context, srv *server.Server, cfg *config.Confi
 						Level:     level,
 						Message:   message,
 					})
-					
+
 					// Trigger a client list refresh when clients connect/disconnect
 					if strings.Contains(message, "Client connected:") || strings.Contains(message, "Client disconnected:") {
 						// Send a refresh message to the UI
@@ -230,10 +230,10 @@ func runServer(cmd *cobra.Command, args []string) error {
 
 	// Set config path to system-wide location for server mode
 	config.SetConfigPath("/etc/waymon/waymon.toml")
-	
+
 	// Get configuration first to check logging settings
 	cfg := config.Get()
-	
+
 	// Apply log level from config if set
 	if cfg.Logging.LogLevel != "" {
 		logger.SetLevel(cfg.Logging.LogLevel)
@@ -256,7 +256,6 @@ func runServer(cmd *cobra.Command, args []string) error {
 			}
 		}
 	}()
-
 
 	// Input devices will be automatically detected by all-devices capture
 	logger.Info("Using automatic all-devices input capture - no setup required!")
@@ -403,7 +402,7 @@ func runServer(cmd *cobra.Command, args []string) error {
 		// Start server initialization similar to above
 		go func() {
 			time.Sleep(500 * time.Millisecond)
-			
+
 			logger.Info("Creating server instance...")
 			var err error
 			srv, err = server.New(cfg)

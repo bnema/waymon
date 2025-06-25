@@ -13,11 +13,11 @@ import (
 
 // EmergencyRelease provides multiple mechanisms for emergency control release
 type EmergencyRelease struct {
-	manager          *ClientManager
-	activityTimeout  time.Duration
-	lastActivity     time.Time
-	stopChan         chan struct{}
-	stopOnce         sync.Once
+	manager         *ClientManager
+	activityTimeout time.Duration
+	lastActivity    time.Time
+	stopChan        chan struct{}
+	stopOnce        sync.Once
 }
 
 // NewEmergencyRelease creates a new emergency release handler
@@ -34,13 +34,13 @@ func NewEmergencyRelease(manager *ClientManager) *EmergencyRelease {
 func (er *EmergencyRelease) Start() {
 	// 1. Signal handler for SIGUSR1
 	go er.handleSignals()
-	
+
 	// 2. Activity timeout monitor
 	go er.monitorActivity()
-	
+
 	// 3. File-based trigger (check for /tmp/waymon-release)
 	go er.monitorFileTriger()
-	
+
 	logger.Info("[EMERGENCY] Emergency release mechanisms activated")
 }
 
@@ -60,7 +60,7 @@ func (er *EmergencyRelease) UpdateActivity() {
 func (er *EmergencyRelease) handleSignals() {
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, syscall.SIGUSR1)
-	
+
 	for {
 		select {
 		case <-sigChan:
@@ -76,14 +76,14 @@ func (er *EmergencyRelease) handleSignals() {
 func (er *EmergencyRelease) monitorActivity() {
 	ticker := time.NewTicker(5 * time.Second)
 	defer ticker.Stop()
-	
+
 	for {
 		select {
 		case <-ticker.C:
 			if er.manager.IsControllingLocal() {
 				continue // No timeout when controlling local
 			}
-			
+
 			if time.Since(er.lastActivity) > er.activityTimeout {
 				logger.Warnf("[EMERGENCY] No activity for %v - triggering emergency release", er.activityTimeout)
 				er.triggerRelease("timeout")
@@ -98,9 +98,9 @@ func (er *EmergencyRelease) monitorActivity() {
 func (er *EmergencyRelease) monitorFileTriger() {
 	ticker := time.NewTicker(1 * time.Second)
 	defer ticker.Stop()
-	
+
 	triggerFile := "/tmp/waymon-release"
-	
+
 	for {
 		select {
 		case <-ticker.C:
@@ -118,19 +118,19 @@ func (er *EmergencyRelease) monitorFileTriger() {
 // triggerRelease performs the emergency release
 func (er *EmergencyRelease) triggerRelease(reason string) {
 	logger.Warnf("[EMERGENCY] Emergency release triggered (reason: %s)", reason)
-	
+
 	// Mark emergency release to start cooldown period
 	er.manager.MarkEmergencyRelease()
-	
+
 	// Force switch to local control
 	if err := er.manager.SwitchToLocal(); err != nil {
 		logger.Errorf("[EMERGENCY] Failed to switch to local: %v", err)
-		
+
 		// Force release at input backend level
 		if backend := er.manager.inputBackend; backend != nil {
 			if err := backend.SetTarget(""); err != nil {
 				logger.Errorf("[EMERGENCY] Failed to release input backend: %v", err)
-				
+
 				// Last resort: force release through backend if available
 				if allDevices, ok := backend.(*input.AllDevicesCapture); ok {
 					allDevices.ForceReleaseDevices()
@@ -138,7 +138,7 @@ func (er *EmergencyRelease) triggerRelease(reason string) {
 			}
 		}
 	}
-	
+
 	// Reset activity timer
 	er.lastActivity = time.Now()
 }

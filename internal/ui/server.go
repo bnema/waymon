@@ -48,8 +48,8 @@ type ServerModel struct {
 	selectedClientIndex int
 
 	// Debouncing for key commands
-	lastKeyPress      time.Time
-	keyDebounceDelay  time.Duration
+	lastKeyPress     time.Time
+	keyDebounceDelay time.Duration
 
 	// Program reference for sending messages
 	program *tea.Program
@@ -70,8 +70,8 @@ func NewServerModel(port int, serverName, version string) *ServerModel {
 		port:                port,
 		serverName:          serverName,
 		version:             version,
-		localControl:        true, // Start controlling local
-		selectedClientIndex: -1,   // No client selected initially
+		localControl:        true,                   // Start controlling local
+		selectedClientIndex: -1,                     // No client selected initially
 		keyDebounceDelay:    300 * time.Millisecond, // Prevent rapid key presses
 
 		// Define styles
@@ -295,7 +295,7 @@ func (m *ServerModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case ClientDisconnectedMsg:
 		m.base.AddLogEntry("info", fmt.Sprintf("Client disconnected: %s", msg.ClientAddr))
-		
+
 		// If the disconnected client was active, switch to local
 		// We need to match by address since that's all we have
 		if m.activeClient != nil && m.activeClient.Address == msg.ClientAddr {
@@ -304,7 +304,7 @@ func (m *ServerModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.selectedClientIndex = -1
 			m.base.AddLogEntry("info", "Active client disconnected - switched to local control")
 		}
-		
+
 		m.refreshClientList()
 
 	case SSHAuthRequestMsg:
@@ -463,7 +463,7 @@ func (m *ServerModel) renderControls() string {
 func (m *ServerModel) refreshClientList() {
 	if m.clientManager != nil {
 		m.clients = m.clientManager.GetConnectedClients()
-		
+
 		// Update active client reference based on client manager state
 		// The ClientManager tracks the active client internally
 		// We'll need to check which client is active by other means
@@ -473,12 +473,12 @@ func (m *ServerModel) refreshClientList() {
 		} else {
 			m.localControl = true
 		}
-		
+
 		// If no client is active, we must be in local control
 		if m.activeClient == nil {
 			m.localControl = true
 		}
-		
+
 		m.updateViewport()
 	}
 }
@@ -603,7 +603,7 @@ func (m *ServerModel) sendConnectCommand(slot int32) tea.Cmd {
 	}
 
 	client := m.clients[slot-1]
-	
+
 	return func() tea.Msg {
 		// Create IPC client
 		ipcClient, err := ipc.NewClient()

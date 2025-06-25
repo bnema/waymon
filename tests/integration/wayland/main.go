@@ -175,14 +175,14 @@ func testMouseInjection() TestResult {
 		dx, dy float64
 		delay  time.Duration
 	}{
-		{50.0, 0, 200 * time.Millisecond},   // Right
-		{0, 50.0, 200 * time.Millisecond},   // Down
-		{-50.0, 0, 200 * time.Millisecond},  // Left
-		{0, -50.0, 200 * time.Millisecond},  // Up
+		{50.0, 0, 200 * time.Millisecond},  // Right
+		{0, 50.0, 200 * time.Millisecond},  // Down
+		{-50.0, 0, 200 * time.Millisecond}, // Left
+		{0, -50.0, 200 * time.Millisecond}, // Up
 	}
 
 	fmt.Print(dimStyle.Render("Injecting mouse movements: "))
-	
+
 	// Get the Wayland backend to inject directly
 	if waylandBackend, ok := backend.(*input.WaylandVirtualInput); ok {
 		for i, move := range movements {
@@ -194,18 +194,18 @@ func testMouseInjection() TestResult {
 					Message: fmt.Sprintf("Failed to inject mouse movement: %v", err),
 				}
 			}
-			
+
 			fmt.Print(dimStyle.Render("→"))
-			
+
 			if i < len(movements)-1 {
 				time.Sleep(move.delay)
 			}
 		}
 		fmt.Println(successStyle.Render(" ✓"))
-		
+
 		// Test mouse button click
 		fmt.Print(dimStyle.Render("Injecting mouse click: "))
-		
+
 		// Press
 		if err := waylandBackend.InjectMouseButton(1, true); err != nil {
 			fmt.Println(errorStyle.Render(fmt.Sprintf("✗ Error: %v", err)))
@@ -216,7 +216,7 @@ func testMouseInjection() TestResult {
 			}
 		}
 		time.Sleep(50 * time.Millisecond)
-		
+
 		// Release
 		if err := waylandBackend.InjectMouseButton(1, false); err != nil {
 			fmt.Println(errorStyle.Render(fmt.Sprintf("✗ Error: %v", err)))
@@ -227,7 +227,7 @@ func testMouseInjection() TestResult {
 			}
 		}
 		fmt.Println(successStyle.Render("✓"))
-		
+
 		return TestResult{
 			Name:    "Mouse Injection",
 			Passed:  true,
@@ -246,7 +246,7 @@ func testKeyboardInjection() TestResult {
 	fmt.Println("\n" + testStyle.Render("[Test: Keyboard Injection]"))
 	fmt.Println(infoStyle.Render("Focus a text editor - the test will type 'Hello Waymon!'"))
 	fmt.Print(dimStyle.Render("Waiting 3 seconds for you to focus a text field..."))
-	
+
 	time.Sleep(3 * time.Second)
 	fmt.Println(dimStyle.Render(" ready!"))
 
@@ -274,9 +274,9 @@ func testKeyboardInjection() TestResult {
 	// Linux key codes for "Hello Waymon!"
 	// These are approximations - real mapping depends on layout
 	keySequence := []struct {
-		key     uint32
-		shift   bool
-		char    string
+		key   uint32
+		shift bool
+		char  string
 	}{
 		{35, true, "H"},  // H (shift+h)
 		{18, false, "e"}, // e
@@ -295,7 +295,7 @@ func testKeyboardInjection() TestResult {
 
 	if waylandBackend, ok := backend.(*input.WaylandVirtualInput); ok {
 		fmt.Print(dimStyle.Render("Typing: "))
-		
+
 		for _, key := range keySequence {
 			// Press shift if needed
 			if key.shift {
@@ -309,7 +309,7 @@ func testKeyboardInjection() TestResult {
 				}
 				time.Sleep(10 * time.Millisecond)
 			}
-			
+
 			// Key press
 			if err := waylandBackend.InjectKeyEvent(key.key, true); err != nil {
 				fmt.Println(errorStyle.Render(fmt.Sprintf("✗ Error: %v", err)))
@@ -320,7 +320,7 @@ func testKeyboardInjection() TestResult {
 				}
 			}
 			time.Sleep(50 * time.Millisecond) // Increased delay to avoid duplicate key events
-			
+
 			// Key release
 			if err := waylandBackend.InjectKeyEvent(key.key, false); err != nil {
 				fmt.Println(errorStyle.Render(fmt.Sprintf("✗ Error: %v", err)))
@@ -330,7 +330,7 @@ func testKeyboardInjection() TestResult {
 					Message: fmt.Sprintf("Failed to inject key release: %v", err),
 				}
 			}
-			
+
 			// Release shift if needed
 			if key.shift {
 				if err := waylandBackend.InjectKeyEvent(42, false); err != nil {
@@ -342,14 +342,14 @@ func testKeyboardInjection() TestResult {
 					}
 				}
 			}
-			
+
 			time.Sleep(20 * time.Millisecond) // Small delay after key release
 			fmt.Print(successStyle.Render(key.char))
 			time.Sleep(50 * time.Millisecond)
 		}
-		
+
 		fmt.Println()
-		
+
 		return TestResult{
 			Name:    "Keyboard Injection",
 			Passed:  true,
@@ -392,7 +392,7 @@ func testCombinedInjection() TestResult {
 	if waylandBackend, ok := backend.(*input.WaylandVirtualInput); ok {
 		// Inject Ctrl+Click (common UI pattern)
 		fmt.Print(dimStyle.Render("Injecting Ctrl+Click: "))
-		
+
 		// Press Ctrl
 		if err := waylandBackend.InjectKeyEvent(29, true); err != nil {
 			fmt.Println(errorStyle.Render(fmt.Sprintf("✗ Error: %v", err)))
@@ -403,7 +403,7 @@ func testCombinedInjection() TestResult {
 			}
 		}
 		time.Sleep(50 * time.Millisecond)
-		
+
 		// Move mouse
 		if err := waylandBackend.InjectMouseMove(20.0, 20.0); err != nil {
 			fmt.Println(errorStyle.Render(fmt.Sprintf("✗ Error: %v", err)))
@@ -414,7 +414,7 @@ func testCombinedInjection() TestResult {
 			}
 		}
 		time.Sleep(50 * time.Millisecond)
-		
+
 		// Click mouse
 		if err := waylandBackend.InjectMouseButton(1, true); err != nil {
 			fmt.Println(errorStyle.Render(fmt.Sprintf("✗ Error: %v", err)))
@@ -425,7 +425,7 @@ func testCombinedInjection() TestResult {
 			}
 		}
 		time.Sleep(50 * time.Millisecond)
-		
+
 		// Release mouse
 		if err := waylandBackend.InjectMouseButton(1, false); err != nil {
 			fmt.Println(errorStyle.Render(fmt.Sprintf("✗ Error: %v", err)))
@@ -436,7 +436,7 @@ func testCombinedInjection() TestResult {
 			}
 		}
 		time.Sleep(50 * time.Millisecond)
-		
+
 		// Release Ctrl
 		if err := waylandBackend.InjectKeyEvent(29, false); err != nil {
 			fmt.Println(errorStyle.Render(fmt.Sprintf("✗ Error: %v", err)))
@@ -446,9 +446,9 @@ func testCombinedInjection() TestResult {
 				Message: fmt.Sprintf("Failed to inject Ctrl release: %v", err),
 			}
 		}
-		
+
 		fmt.Println(successStyle.Render("✓"))
-		
+
 		return TestResult{
 			Name:    "Combined Injection",
 			Passed:  true,
@@ -465,10 +465,10 @@ func testCombinedInjection() TestResult {
 
 func printSummary(results []TestResult) {
 	fmt.Println("\n" + titleStyle.Render("=== Test Summary ==="))
-	
+
 	passed := 0
 	failed := 0
-	
+
 	for _, result := range results {
 		if result.Passed {
 			passed++
@@ -478,14 +478,14 @@ func printSummary(results []TestResult) {
 			fmt.Println(errorStyle.Render(fmt.Sprintf("✗ %s: %s", result.Name, result.Message)))
 		}
 	}
-	
+
 	status := successStyle
 	if failed > 0 {
 		status = errorStyle
 	}
-	
+
 	fmt.Println("\n" + status.Render(fmt.Sprintf("Total: %d passed, %d failed", passed, failed)))
-	
+
 	if failed > 0 {
 		os.Exit(1)
 	}

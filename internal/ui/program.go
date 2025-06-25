@@ -6,9 +6,9 @@ import (
 	"os"
 	"time"
 
+	"github.com/bnema/waymon/internal/logger"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/log"
-	"github.com/bnema/waymon/internal/logger"
 )
 
 // ProgramConfig holds configuration for running a UI program
@@ -71,10 +71,10 @@ func NewProgramRunner(config ProgramConfig) *ProgramRunner {
 func (r *ProgramRunner) Run(ctx context.Context, model UIModel) error {
 	// Ensure done channel is closed when we exit
 	defer close(r.done)
-	
+
 	// Clean up logger notifier on exit
 	defer logger.SetUINotifier(nil)
-	
+
 	// Create base UI with context
 	r.base = NewBaseUI(ctx, r.config.ShutdownConfig)
 

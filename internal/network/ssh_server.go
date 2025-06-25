@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"net"
 	"os"
 	"path/filepath"
 	"sync"
@@ -80,7 +81,7 @@ func (s *SSHServer) SetAuthHandlers(onAuthRequest func(addr, publicKey, fingerpr
 // Start begins listening for SSH connections
 func (s *SSHServer) Start(ctx context.Context) error {
 	logger.Debugf("[SSH-SERVER] Starting SSH server on port %d", s.port)
-	
+
 	// Create SSH server
 	server, err := wish.NewServer(
 		wish.WithAddress(fmt.Sprintf(":%d", s.port)),
@@ -182,7 +183,7 @@ func (s *SSHServer) Stop() {
 // publicKeyAuth handles SSH public key authentication
 func (s *SSHServer) publicKeyAuth(ctx ssh.Context, key ssh.PublicKey) bool {
 	logger.Debugf("[SSH-AUTH] publicKeyAuth called from %s", ctx.RemoteAddr())
-	
+
 	// Convert Wish SSH public key to golang.org/x/crypto/ssh public key
 	var goKey gossh.PublicKey
 	if wishKey, ok := key.(gossh.PublicKey); ok {
@@ -264,7 +265,7 @@ func (s *SSHServer) sessionHandler() wish.Middleware {
 	return func(h ssh.Handler) ssh.Handler {
 		return func(sess ssh.Session) {
 			logger.Infof("[SSH-SERVER] Session handler called for %s", sess.RemoteAddr())
-			
+
 			// Check if we already have max clients BEFORE accepting the session
 			s.mu.Lock()
 			if s.maxClients > 0 && len(s.clients) >= s.maxClients {
@@ -323,7 +324,7 @@ func (s *SSHServer) sessionHandler() wish.Middleware {
 
 			// Log connection info instead of sending to client
 			logger.Infof("Waymon SSH connection established - Public key: %s", publicKey)
-			
+
 			// Debug: Check session state
 			logger.Debugf("[SSH-SESSION] Session established, checking state...")
 			logger.Debugf("[SSH-SESSION] Session ID: %s", sess.Context().SessionID())
@@ -343,7 +344,7 @@ func (s *SSHServer) sessionHandler() wish.Middleware {
 // handleMouseEvents reads and processes mouse events from the SSH session
 func (s *SSHServer) handleMouseEvents(ctx context.Context, sess ssh.Session) {
 	logger.Debugf("[SSH-HANDLER] handleMouseEvents started for %s", sess.RemoteAddr())
-	
+
 	// Create channels for coordinating shutdown
 	done := make(chan struct{})
 	defer close(done)
@@ -514,9 +515,23 @@ func (s *SSHServer) GetClientSessions() map[string]string {
 	return sessions
 }
 
-// writeInputEvent writes an input event to a client
+// writeInputEvent writes an input event to a client with connection health checks
 func (s *SSHServer) writeInputEvent(w io.Writer, event *protocol.InputEvent) error {
 	logger.Debugf("[SSH-SERVER] writeInputEvent: marshaling event type=%T", event.Event)
+
+	// Check if writer supports connection validation
+	if conn, ok := w.(interface{ SetWriteDeadline(time.Time) error }); ok {
+		// Set write timeout for connection health check
+		if err := conn.SetWriteDeadline(time.Now().Add(5 * time.Second)); err != nil {
+			logger.Warnf("[SSH-SERVER] Failed to set write deadline: %v", err)
+		}
+		// Reset deadline after operation
+		defer func() {
+			if err := conn.SetWriteDeadline(time.Time{}); err != nil {
+				logger.Warnf("[SSH-SERVER] Failed to reset write deadline: %v", err)
+			}
+		}()
+	}
 
 	data, err := proto.Marshal(event)
 	if err != nil {
@@ -533,6 +548,12 @@ func (s *SSHServer) writeInputEvent(w io.Writer, event *protocol.InputEvent) err
 		byte(length >> 16),
 		byte(length >> 8),
 		byte(length),
+	}
+
+	// Perform health check before writing
+	if err := s.validateConnectionHealth(w); err != nil {
+		logger.Warnf("[SSH-SERVER] Connection health check failed: %v", err)
+		return fmt.Errorf("connection unhealthy: %w", err)
 	}
 
 	if _, err := w.Write(lengthBuf); err != nil {
@@ -559,11 +580,55 @@ func (s *SSHServer) writeInputEvent(w io.Writer, event *protocol.InputEvent) err
 	return nil
 }
 
+// validateConnectionHealth performs a lightweight check to ensure the connection is still healthy
+func (s *SSHServer) validateConnectionHealth(w io.Writer) error {
+	// Check if this is an SSH session (which implements the full Session interface)
+	if sess, ok := w.(ssh.Session); ok {
+		// Check if session context is still valid
+		select {
+		case <-sess.Context().Done():
+			return fmt.Errorf("session context cancelled")
+		default:
+			// Context is still active
+		}
+
+		// Basic connection validation - ensure addresses are still valid
+		if sess.RemoteAddr() == nil {
+			return fmt.Errorf("remote address is nil")
+		}
+		if sess.LocalAddr() == nil {
+			return fmt.Errorf("local address is nil")
+		}
+
+		logger.Debugf("[SSH-SERVER] SSH session health check passed: %s -> %s",
+			sess.RemoteAddr(), sess.LocalAddr())
+		return nil
+	}
+
+	// For other types of writers, perform basic validation
+	if conn, ok := w.(interface {
+		RemoteAddr() net.Addr
+		LocalAddr() net.Addr
+	}); ok {
+		// Basic connection validation - ensure addresses are still valid
+		if conn.RemoteAddr() == nil {
+			return fmt.Errorf("remote address is nil")
+		}
+		if conn.LocalAddr() == nil {
+			return fmt.Errorf("local address is nil")
+		}
+		logger.Debugf("[SSH-SERVER] Connection health check passed: %s -> %s",
+			conn.RemoteAddr(), conn.LocalAddr())
+	}
+
+	return nil
+}
+
 // handleClientLog handles log events from clients
 func (s *SSHServer) handleClientLog(clientAddr string, logEvent *protocol.LogEvent) {
-	logger.Debugf("[SSH-SERVER] handleClientLog called: clientAddr=%s, hostname=%s, message=%s", 
+	logger.Debugf("[SSH-SERVER] handleClientLog called: clientAddr=%s, hostname=%s, message=%s",
 		clientAddr, logEvent.ClientHostname, logEvent.Message)
-		
+
 	s.logFilesMu.Lock()
 	defer s.logFilesMu.Unlock()
 
@@ -611,7 +676,7 @@ func (s *SSHServer) handleClientLog(clientAddr string, logEvent *protocol.LogEve
 	}
 
 	// Write log entry
-	fmt.Fprintf(logFile, "%s %s %s: %s\n", 
+	fmt.Fprintf(logFile, "%s %s %s: %s\n",
 		timestamp, levelStr, logEvent.LoggerName, logEvent.Message)
 
 	// Flush the file

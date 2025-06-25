@@ -73,7 +73,7 @@ func main() {
 
 	// Print summary
 	printSummary(results)
-	
+
 	// Give a moment for async operations to complete
 	time.Sleep(100 * time.Millisecond)
 }
@@ -87,7 +87,7 @@ func testSSHConnection(tempDir string) TestResult {
 	// Generate test keys
 	hostKeyPath := filepath.Join(tempDir, "host_key")
 	clientKeyPath := filepath.Join(tempDir, "client_key")
-	
+
 	if err := generateTestKey(hostKeyPath); err != nil {
 		return TestResult{
 			Name:    "SSH Connection",
@@ -115,7 +115,7 @@ func testSSHConnection(tempDir string) TestResult {
 	}
 
 	server := network.NewSSHServer(*port, hostKeyPath, authKeysPath)
-	
+
 	// Set auth handler to accept test connections
 	server.SetAuthHandlers(func(addr, publicKey, fingerprint string) bool {
 		if *verbose {
@@ -123,7 +123,7 @@ func testSSHConnection(tempDir string) TestResult {
 		}
 		return true // Accept all for testing
 	})
-	
+
 	// Start server
 	serverReady := make(chan struct{})
 	go func() {
@@ -139,7 +139,7 @@ func testSSHConnection(tempDir string) TestResult {
 
 	// Create client
 	client := network.NewSSHClient(clientKeyPath)
-	
+
 	// Connect
 	if err := client.Connect(ctx, fmt.Sprintf("localhost:%d", *port)); err != nil {
 		return TestResult{
@@ -162,7 +162,7 @@ func testSSHConnection(tempDir string) TestResult {
 	if err := client.Disconnect(); err != nil && *verbose {
 		fmt.Println(dimStyle.Render(fmt.Sprintf("Client disconnect error: %v", err)))
 	}
-	
+
 	// Stop server gracefully
 	cancel()
 	time.Sleep(50 * time.Millisecond) // Give server time to shut down
@@ -189,12 +189,12 @@ func testEventTransmission(tempDir string) TestResult {
 	createAuthorizedKeys(clientKeyPath, authKeysPath)
 
 	server := network.NewSSHServer(*port+1, hostKeyPath, authKeysPath)
-	
+
 	// Set auth handler to accept test connections
 	server.SetAuthHandlers(func(addr, publicKey, fingerprint string) bool {
 		return true // Accept all for testing
 	})
-	
+
 	// Track received events
 	receivedEvents := atomic.Int64{}
 	server.OnInputEvent = func(event *protocol.InputEvent) {
@@ -304,12 +304,12 @@ func testHighThroughput(tempDir string) TestResult {
 	createAuthorizedKeys(clientKeyPath, authKeysPath)
 
 	server := network.NewSSHServer(*port+2, hostKeyPath, authKeysPath)
-	
+
 	// Set auth handler to accept test connections
 	server.SetAuthHandlers(func(addr, publicKey, fingerprint string) bool {
 		return true // Accept all for testing
 	})
-	
+
 	// Track performance
 	receivedEvents := atomic.Int64{}
 	latencies := make([]time.Duration, 0, 1000)
@@ -381,7 +381,7 @@ func testHighThroughput(tempDir string) TestResult {
 
 	// Calculate stats
 	throughput := float64(received) / elapsed.Seconds()
-	
+
 	// Calculate average latency
 	var totalLatency time.Duration
 	for _, l := range latencies {
@@ -393,13 +393,13 @@ func testHighThroughput(tempDir string) TestResult {
 	}
 
 	passed := received >= int64(eventCount)*95/100 // Allow 5% loss
-	
+
 	return TestResult{
-		Name:    "High Throughput",
-		Passed:  passed,
+		Name:   "High Throughput",
+		Passed: passed,
 		Message: fmt.Sprintf("%.0f events/sec, avg latency: %v, received: %d/%d",
 			throughput, avgLatency, received, eventCount),
-		Events:  int(received),
+		Events: int(received),
 	}
 }
 
@@ -419,16 +419,16 @@ func testClientServerManagers(tempDir string) TestResult {
 
 	// Create SSH server
 	sshServer := network.NewSSHServer(*port+3, hostKeyPath, authKeysPath)
-	
+
 	// Set auth handler to accept test connections
 	sshServer.SetAuthHandlers(func(addr, publicKey, fingerprint string) bool {
 		return true // Accept all for testing
 	})
-	
+
 	// Track client connections
 	connectedClients := make(map[string]string)
 	var clientMu sync.Mutex
-	
+
 	sshServer.OnClientConnected = func(addr, publicKey string) {
 		clientMu.Lock()
 		connectedClients[addr] = publicKey
@@ -437,14 +437,14 @@ func testClientServerManagers(tempDir string) TestResult {
 			fmt.Println(infoStyle.Render(fmt.Sprintf("Client connected: %s", addr)))
 		}
 	}
-	
+
 	// Start server
 	go sshServer.Start(ctx)
 	time.Sleep(100 * time.Millisecond)
 
 	// Create SSH client
 	sshClient := network.NewSSHClient(clientKeyPath)
-	
+
 	// Connect
 	if err := sshClient.Connect(ctx, fmt.Sprintf("localhost:%d", *port+3)); err != nil {
 		return TestResult{
@@ -496,7 +496,7 @@ func testClientServerManagers(tempDir string) TestResult {
 	clientMu.Lock()
 	numClients := len(connectedClients)
 	clientMu.Unlock()
-	
+
 	if numClients == 0 {
 		return TestResult{
 			Name:    "Client/Server Managers",
@@ -504,7 +504,7 @@ func testClientServerManagers(tempDir string) TestResult {
 			Message: "No clients connected to SSH server",
 		}
 	}
-	
+
 	// Verify the client config was received
 	// In a real scenario, the server manager would process this
 	// For now, we just verify the connection works
@@ -586,11 +586,11 @@ func createAuthorizedKeys(privateKeyPath, authKeysPath string) error {
 
 func printSummary(results []TestResult) {
 	fmt.Println("\n" + titleStyle.Render("=== Test Summary ==="))
-	
+
 	passed := 0
 	failed := 0
 	totalEvents := 0
-	
+
 	for _, result := range results {
 		if result.Passed {
 			passed++
@@ -599,23 +599,23 @@ func printSummary(results []TestResult) {
 			failed++
 			fmt.Println(errorStyle.Render(fmt.Sprintf("✗ %s: %s", result.Name, result.Message)))
 		}
-		
+
 		if result.Events > 0 {
 			totalEvents += result.Events
 			fmt.Println(dimStyle.Render(fmt.Sprintf("  Events: %d", result.Events)))
 		}
 	}
-	
+
 	status := successStyle
 	if failed > 0 {
 		status = errorStyle
 	}
-	
+
 	fmt.Println("\n" + status.Render(fmt.Sprintf("Total: %d passed, %d failed", passed, failed)))
 	if totalEvents > 0 {
 		fmt.Println(dimStyle.Render(fmt.Sprintf("Total events processed: %d", totalEvents)))
 	}
-	
+
 	if failed > 0 {
 		os.Exit(1)
 	}

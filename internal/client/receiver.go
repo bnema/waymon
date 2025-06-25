@@ -130,12 +130,12 @@ func (ir *InputReceiver) Connect(ctx context.Context, privateKeyPath string) err
 	// Note: Input events are received automatically by SSH client
 
 	logger.Infof("Connected to server: %s", ir.serverAddress)
-	
+
 	// Notify connection callback asynchronously
 	if ir.onConnected != nil {
 		go ir.onConnected()
 	}
-	
+
 	return nil
 }
 
@@ -177,7 +177,7 @@ func (ir *InputReceiver) Disconnect() error {
 		statusCopy := ir.controlStatus
 		go ir.onStatusChange(statusCopy)
 	}
-	
+
 	// Notify disconnection callback asynchronously
 	if ir.onDisconnected != nil {
 		go ir.onDisconnected()
@@ -635,12 +635,12 @@ func (ir *InputReceiver) monitorConnection() {
 					ir.reconnectInProgress = true
 					logger.Info("Connection lost - starting reconnection attempts")
 					ir.notifyReconnectStatus("Connection lost - attempting to reconnect...")
-					
+
 					// Notify disconnection callback asynchronously
 					if ir.onDisconnected != nil {
 						go ir.onDisconnected()
 					}
-					
+
 					// Start reconnection in a goroutine so monitoring continues
 					go ir.attemptReconnection()
 				}

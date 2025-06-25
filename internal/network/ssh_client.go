@@ -283,15 +283,22 @@ func (c *SSHClient) Reconnect(ctx context.Context, serverAddr string) error {
 	return c.Connect(ctx, serverAddr)
 }
 
-// SendInputEvent sends an input event to the server
+// SendInputEvent sends an input event to the server with connection health checks
 func (c *SSHClient) SendInputEvent(event *protocol.InputEvent) error {
 	c.mu.Lock()
 	writer := c.writer
 	connected := c.connected
+	session := c.session
 	c.mu.Unlock()
 
 	if !connected || writer == nil {
 		return fmt.Errorf("not connected")
+	}
+
+	// Perform connection health check before sending
+	if err := c.validateConnectionHealth(session); err != nil {
+		logger.Warnf("[SSH-CLIENT] Connection health check failed: %v", err)
+		return fmt.Errorf("connection unhealthy: %w", err)
 	}
 
 	return writeInputMessage(writer, event)
@@ -525,8 +532,22 @@ func (c *SSHClient) loadPrivateKeyIfExists(keyPath string) (ssh.Signer, error) {
 	return c.loadPrivateKey(keyPath)
 }
 
-// writeInputMessage writes an InputEvent message with length prefix
+// writeInputMessage writes an InputEvent message with length prefix and connection checks
 func writeInputMessage(w io.Writer, event *protocol.InputEvent) error {
+	// Set write timeout if writer supports it
+	if conn, ok := w.(interface{ SetWriteDeadline(time.Time) error }); ok {
+		// Set write timeout for connection health check
+		if err := conn.SetWriteDeadline(time.Now().Add(5 * time.Second)); err != nil {
+			logger.Warnf("[SSH-CLIENT] Failed to set write deadline: %v", err)
+		}
+		// Reset deadline after operation
+		defer func() {
+			if err := conn.SetWriteDeadline(time.Time{}); err != nil {
+				logger.Warnf("[SSH-CLIENT] Failed to reset write deadline: %v", err)
+			}
+		}()
+	}
+
 	data, err := proto.Marshal(event)
 	if err != nil {
 		return fmt.Errorf("failed to marshal input event: %w", err)
@@ -547,6 +568,34 @@ func writeInputMessage(w io.Writer, event *protocol.InputEvent) error {
 
 	if _, err := w.Write(data); err != nil {
 		return fmt.Errorf("failed to write data: %w", err)
+	}
+
+	return nil
+}
+
+// validateConnectionHealth performs a lightweight check to ensure the connection is still healthy
+func (c *SSHClient) validateConnectionHealth(session *ssh.Session) error {
+	if session == nil {
+		return fmt.Errorf("session is nil")
+	}
+
+	// Check if the underlying SSH client connection is still alive
+	if c.client == nil {
+		return fmt.Errorf("SSH client is nil")
+	}
+
+	// For SSH sessions, check if the underlying connection is still active
+	// This is a lightweight check that accesses the connection state
+	if conn := c.client.Conn; conn != nil {
+		// Check if we can get remote address (indicates connection is alive)
+		if remoteAddr := conn.RemoteAddr(); remoteAddr == nil {
+			return fmt.Errorf("remote address is nil - connection likely closed")
+		}
+		if localAddr := conn.LocalAddr(); localAddr == nil {
+			return fmt.Errorf("local address is nil - connection likely closed")
+		}
+		logger.Debugf("[SSH-CLIENT] Connection health check passed: %s -> %s",
+			conn.LocalAddr(), conn.RemoteAddr())
 	}
 
 	return nil

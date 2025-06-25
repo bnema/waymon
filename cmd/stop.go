@@ -16,7 +16,7 @@ var stopCmd = &cobra.Command{
 		// Try to stop via systemctl
 		stopCmd := exec.Command("systemctl", "stop", "waymon")
 		output, err := stopCmd.CombinedOutput()
-		
+
 		if err != nil {
 			// Check if it's a permission error
 			if exec.Command("systemctl", "is-active", "waymon").Run() == nil {
@@ -28,12 +28,12 @@ var stopCmd = &cobra.Command{
 			fmt.Println(ui.WarningStyle.Render("Waymon service not found or not running"))
 			return nil
 		}
-		
+
 		fmt.Println(ui.SuccessStyle.Render("✓") + " Waymon server stopped")
 		if len(output) > 0 {
 			fmt.Printf("Output: %s\n", output)
 		}
-		
+
 		return nil
 	},
 }

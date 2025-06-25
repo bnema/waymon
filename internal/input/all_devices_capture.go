@@ -165,7 +165,7 @@ func (a *AllDevicesCapture) SetTarget(clientID string) error {
 				}
 			}
 		}
-		
+
 		// If normal release failed, force release
 		if len(releaseErrors) > 0 {
 			logger.Errorf("Failed to release %d devices normally, attempting force release", len(releaseErrors))
@@ -289,18 +289,18 @@ func (a *AllDevicesCapture) discoverAndStartDevices() error {
 	}
 
 	ignoredCount := len(a.ignoredDevices)
-	
+
 	// Check if we have any working devices
 	if deviceCount == 0 {
 		if ignoredCount > 0 {
 			return fmt.Errorf("no usable input devices found (%d devices ignored due to permissions or capabilities). "+
 				"Make sure you are running as root: sudo waymon server", ignoredCount)
 		} else {
-			return fmt.Errorf("no input devices found in /dev/input/. "+
+			return fmt.Errorf("no input devices found in /dev/input/. " +
 				"Make sure input devices are connected and the evdev module is loaded")
 		}
 	}
-	
+
 	if ignoredCount > 0 {
 		logger.Infof("Started capturing from %d input devices (%d devices ignored)", deviceCount, ignoredCount)
 	} else {
@@ -840,7 +840,7 @@ func (a *AllDevicesCapture) processEvents() {
 // This is a last resort when normal Release() fails
 func (a *AllDevicesCapture) ForceReleaseDevices() {
 	logger.Warn("CRITICAL: Force releasing all devices by closing and reopening")
-	
+
 	// Close all devices
 	for _, handler := range a.devices {
 		if handler.device != nil {
@@ -849,10 +849,10 @@ func (a *AllDevicesCapture) ForceReleaseDevices() {
 			handler.grabbed = false
 		}
 	}
-	
+
 	// Clear devices list
 	a.devices = make(map[string]*deviceHandler)
-	
+
 	// Rediscover and open devices (but don't grab them)
 	if err := a.discoverAndStartDevices(); err != nil {
 		logger.Errorf("Failed to rediscover devices after force release: %v", err)
@@ -863,12 +863,12 @@ func (a *AllDevicesCapture) ForceReleaseDevices() {
 func (a *AllDevicesCapture) watchdog() {
 	ticker := time.NewTicker(5 * time.Second)
 	defer ticker.Stop()
-	
+
 	for {
 		select {
 		case <-ticker.C:
 			a.validateAndRecoverState()
-			
+
 		case <-a.watchdogStop:
 			logger.Info("Watchdog stopped")
 			return
@@ -883,7 +883,7 @@ func (a *AllDevicesCapture) validateAndRecoverState() {
 	deviceCount := len(a.devices)
 	grabbedCount := 0
 	var inconsistentDevices []string
-	
+
 	for path, handler := range a.devices {
 		if handler.grabbed {
 			grabbedCount++
@@ -895,7 +895,7 @@ func (a *AllDevicesCapture) validateAndRecoverState() {
 	}
 	lastActivityAge := time.Since(a.lastActivity)
 	a.mu.RUnlock()
-	
+
 	// Fix inconsistent device states
 	if len(inconsistentDevices) > 0 {
 		logger.Errorf("WATCHDOG: Found %d devices marked as grabbed but with nil device handle", len(inconsistentDevices))
@@ -907,7 +907,7 @@ func (a *AllDevicesCapture) validateAndRecoverState() {
 		}
 		a.mu.Unlock()
 	}
-	
+
 	// Check for inconsistent state
 	if target == "" && grabbedCount > 0 {
 		logger.Errorf("WATCHDOG: Inconsistent state - no target but %d devices grabbed", grabbedCount)
@@ -915,7 +915,7 @@ func (a *AllDevicesCapture) validateAndRecoverState() {
 		a.ForceReleaseDevices()
 		a.mu.Unlock()
 	}
-	
+
 	// Check for stuck grab (no activity for extended period)
 	if target != "" && lastActivityAge > 60*time.Second {
 		logger.Warnf("WATCHDOG: No activity for %v with devices grabbed - forcing release", lastActivityAge)
@@ -926,7 +926,7 @@ func (a *AllDevicesCapture) validateAndRecoverState() {
 		}
 		a.mu.Unlock()
 	}
-	
+
 	// Verify all expected devices are present
 	if target != "" && grabbedCount == 0 && deviceCount > 0 {
 		logger.Warnf("WATCHDOG: Target set but no devices grabbed - attempting to re-grab")
@@ -937,10 +937,10 @@ func (a *AllDevicesCapture) validateAndRecoverState() {
 		a.SetTarget(oldTarget)
 		a.mu.Unlock()
 	}
-	
+
 	// Log state periodically when devices are grabbed
 	if grabbedCount > 0 {
-		logger.Debugf("WATCHDOG: %d/%d devices grabbed, target=%s, last_activity=%v ago", 
+		logger.Debugf("WATCHDOG: %d/%d devices grabbed, target=%s, last_activity=%v ago",
 			grabbedCount, deviceCount, target, lastActivityAge)
 	}
 }
