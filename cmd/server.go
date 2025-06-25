@@ -75,14 +75,14 @@ func initializeServer(ctx context.Context, srv *server.Server, cfg *config.Confi
 				logger.Infof("Client connected and registered: %s", addr)
 			}
 
-			// Send UI notification - just log it since the UI will get updates via ClientManager
+			// Send UI notification
 			if model != nil {
-				model.AddLogEntry(ui.LogEntry{
-					Timestamp: time.Now(),
-					Level:     "INFO",
-					Message:   fmt.Sprintf("Client connected: %s", addr),
-				})
-				// The UI will refresh client list automatically via ClientManager
+				// Send the proper ClientConnectedMsg to trigger UI update
+				if p := model.GetProgram(); p != nil {
+					p.Send(ui.ClientConnectedMsg{
+						ClientAddr: addr,
+					})
+				}
 			}
 		}
 
@@ -94,14 +94,14 @@ func initializeServer(ctx context.Context, srv *server.Server, cfg *config.Confi
 				logger.Infof("Client disconnected and unregistered: %s", addr)
 			}
 
-			// Send UI notification - just log it since the UI will get updates via ClientManager
+			// Send UI notification
 			if model != nil {
-				model.AddLogEntry(ui.LogEntry{
-					Timestamp: time.Now(),
-					Level:     "INFO",
-					Message:   fmt.Sprintf("Client disconnected: %s", addr),
-				})
-				// The UI will refresh client list automatically via ClientManager
+				// Send the proper ClientDisconnectedMsg to trigger UI update
+				if p := model.GetProgram(); p != nil {
+					p.Send(ui.ClientDisconnectedMsg{
+						ClientAddr: addr,
+					})
+				}
 			}
 		}
 
