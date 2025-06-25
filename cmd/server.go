@@ -77,12 +77,18 @@ func initializeServer(ctx context.Context, srv *server.Server, cfg *config.Confi
 
 			// Send UI notification
 			if model != nil {
+				logger.Debugf("Model is not nil, checking program...")
 				// Send the proper ClientConnectedMsg to trigger UI update
 				if p := model.GetProgram(); p != nil {
+					logger.Debugf("Sending ClientConnectedMsg to UI for %s", addr)
 					p.Send(ui.ClientConnectedMsg{
 						ClientAddr: addr,
 					})
+				} else {
+					logger.Warnf("model.GetProgram() returned nil, cannot send UI update")
 				}
+			} else {
+				logger.Warnf("Model is nil, cannot send UI update for client %s", addr)
 			}
 		}
 

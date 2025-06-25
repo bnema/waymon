@@ -293,7 +293,10 @@ func (s *SSHServer) sessionHandler() wish.Middleware {
 
 			// Notify connection
 			if s.OnClientConnected != nil {
+				logger.Debugf("[SSH-SERVER] Calling OnClientConnected callback for %s", addr)
 				s.OnClientConnected(addr, publicKey)
+			} else {
+				logger.Warnf("[SSH-SERVER] OnClientConnected callback is nil for %s", addr)
 			}
 
 			// Handle disconnection
