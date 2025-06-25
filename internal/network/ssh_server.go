@@ -586,7 +586,7 @@ func (s *SSHServer) handleClientLog(clientAddr string, logEvent *protocol.LogEve
 		}
 
 		// Open log file
-		file, err := os.OpenFile(logPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0600)
+		file, err := os.OpenFile(logPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
 		if err != nil {
 			logger.Errorf("[SSH-SERVER] Failed to open client log file %s: %v", logPath, err)
 			return
