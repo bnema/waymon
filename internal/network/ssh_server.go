@@ -377,9 +377,11 @@ func (s *SSHServer) handleMouseEvents(ctx context.Context, sess ssh.Session) {
 			if result.err != nil {
 				if result.err == io.EOF || result.err == io.ErrClosedPipe {
 					// Connection closed normally
+					logger.Debugf("[SSH-SERVER] Client disconnected normally: %v", result.err)
 					return
 				}
-				// Other error
+				// Log other errors before returning
+				logger.Errorf("[SSH-SERVER] Error reading message length: %v", result.err)
 				return
 			}
 
@@ -387,6 +389,7 @@ func (s *SSHServer) handleMouseEvents(ctx context.Context, sess ssh.Session) {
 			lengthBuf := result.data
 			length := int(lengthBuf[0])<<24 | int(lengthBuf[1])<<16 | int(lengthBuf[2])<<8 | int(lengthBuf[3])
 			if length <= 0 || length > 4096 {
+				logger.Errorf("[SSH-SERVER] Invalid message length: %d", length)
 				return
 			}
 
@@ -394,6 +397,11 @@ func (s *SSHServer) handleMouseEvents(ctx context.Context, sess ssh.Session) {
 			eventBuf := make([]byte, length)
 			_, err := io.ReadFull(sess, eventBuf)
 			if err != nil {
+				if err == io.EOF || err == io.ErrUnexpectedEOF {
+					logger.Debugf("[SSH-SERVER] Client disconnected while reading message data: %v", err)
+				} else {
+					logger.Errorf("[SSH-SERVER] Failed to read message data: %v", err)
+				}
 				return
 			}
 
@@ -577,7 +585,5 @@ func (s *SSHServer) handleClientLog(clientAddr string, logEvent *protocol.LogEve
 		timestamp, levelStr, logEvent.LoggerName, logEvent.Message)
 
 	// Flush the file
-	if syncer, ok := logFile.(*os.File); ok {
-		_ = syncer.Sync()
-	}
+	_ = logFile.Sync()
 }
