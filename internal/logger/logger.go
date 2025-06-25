@@ -15,6 +15,7 @@ var (
 	Logger        *log.Logger
 	currentWriter io.Writer                   = os.Stderr
 	uiNotifier    func(level, message string) // Callback to notify UI of new log entries
+	logForwarder  func(level, message string) // Callback to forward logs to server
 )
 
 func init() {
@@ -50,6 +51,11 @@ func SetUINotifier(notifier func(level, message string)) {
 	uiNotifier = notifier
 }
 
+// SetLogForwarder sets a callback function to forward logs to server
+func SetLogForwarder(forwarder func(level, message string)) {
+	logForwarder = forwarder
+}
+
 // notifyUI calls the UI notifier if set
 func notifyUI(level, message string) {
 	if uiNotifier != nil {
@@ -57,59 +63,86 @@ func notifyUI(level, message string) {
 	}
 }
 
+// forwardLog calls the log forwarder if set
+func forwardLog(level, message string) {
+	if logForwarder != nil {
+		logForwarder(level, message)
+	}
+}
+
 // Convenience functions for common operations
 func Info(msg interface{}, keyvals ...interface{}) {
 	Logger.Info(msg, keyvals...)
-	notifyUI("INFO", fmt.Sprintf("%v", msg))
+	msgStr := fmt.Sprintf("%v", msg)
+	notifyUI("INFO", msgStr)
+	forwardLog("INFO", msgStr)
 }
 
 func Debug(msg interface{}, keyvals ...interface{}) {
 	Logger.Debug(msg, keyvals...)
 	if Logger.GetLevel() <= log.DebugLevel {
-		notifyUI("DEBUG", fmt.Sprintf("%v", msg))
+		msgStr := fmt.Sprintf("%v", msg)
+		notifyUI("DEBUG", msgStr)
+		forwardLog("DEBUG", msgStr)
 	}
 }
 
 func Warn(msg interface{}, keyvals ...interface{}) {
 	Logger.Warn(msg, keyvals...)
-	notifyUI("WARN", fmt.Sprintf("%v", msg))
+	msgStr := fmt.Sprintf("%v", msg)
+	notifyUI("WARN", msgStr)
+	forwardLog("WARN", msgStr)
 }
 
 func Error(msg interface{}, keyvals ...interface{}) {
 	Logger.Error(msg, keyvals...)
-	notifyUI("ERROR", fmt.Sprintf("%v", msg))
+	msgStr := fmt.Sprintf("%v", msg)
+	notifyUI("ERROR", msgStr)
+	forwardLog("ERROR", msgStr)
 }
 
 func Fatal(msg interface{}, keyvals ...interface{}) {
 	Logger.Fatal(msg, keyvals...)
-	notifyUI("FATAL", fmt.Sprintf("%v", msg))
+	msgStr := fmt.Sprintf("%v", msg)
+	notifyUI("FATAL", msgStr)
+	forwardLog("FATAL", msgStr)
 }
 
 func Infof(format string, args ...interface{}) {
 	Logger.Infof(format, args...)
-	notifyUI("INFO", fmt.Sprintf(format, args...))
+	msgStr := fmt.Sprintf(format, args...)
+	notifyUI("INFO", msgStr)
+	forwardLog("INFO", msgStr)
 }
 
 func Debugf(format string, args ...interface{}) {
 	Logger.Debugf(format, args...)
 	if Logger.GetLevel() <= log.DebugLevel {
-		notifyUI("DEBUG", fmt.Sprintf(format, args...))
+		msgStr := fmt.Sprintf(format, args...)
+		notifyUI("DEBUG", msgStr)
+		forwardLog("DEBUG", msgStr)
 	}
 }
 
 func Warnf(format string, args ...interface{}) {
 	Logger.Warnf(format, args...)
-	notifyUI("WARN", fmt.Sprintf(format, args...))
+	msgStr := fmt.Sprintf(format, args...)
+	notifyUI("WARN", msgStr)
+	forwardLog("WARN", msgStr)
 }
 
 func Errorf(format string, args ...interface{}) {
 	Logger.Errorf(format, args...)
-	notifyUI("ERROR", fmt.Sprintf(format, args...))
+	msgStr := fmt.Sprintf(format, args...)
+	notifyUI("ERROR", msgStr)
+	forwardLog("ERROR", msgStr)
 }
 
 func Fatalf(format string, args ...interface{}) {
 	Logger.Fatalf(format, args...)
-	notifyUI("FATAL", fmt.Sprintf(format, args...))
+	msgStr := fmt.Sprintf(format, args...)
+	notifyUI("FATAL", msgStr)
+	forwardLog("FATAL", msgStr)
 }
 
 // SetLevel sets the log level from a string

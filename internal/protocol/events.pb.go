@@ -183,6 +183,58 @@ func (ControlEvent_Type) EnumDescriptor() ([]byte, []int) {
 	return file_internal_protocol_events_proto_rawDescGZIP(), []int{6, 0}
 }
 
+type LogEvent_LogLevel int32
+
+const (
+	LogEvent_DEBUG LogEvent_LogLevel = 0
+	LogEvent_INFO  LogEvent_LogLevel = 1
+	LogEvent_WARN  LogEvent_LogLevel = 2
+	LogEvent_ERROR LogEvent_LogLevel = 3
+)
+
+// Enum value maps for LogEvent_LogLevel.
+var (
+	LogEvent_LogLevel_name = map[int32]string{
+		0: "DEBUG",
+		1: "INFO",
+		2: "WARN",
+		3: "ERROR",
+	}
+	LogEvent_LogLevel_value = map[string]int32{
+		"DEBUG": 0,
+		"INFO":  1,
+		"WARN":  2,
+		"ERROR": 3,
+	}
+)
+
+func (x LogEvent_LogLevel) Enum() *LogEvent_LogLevel {
+	p := new(LogEvent_LogLevel)
+	*p = x
+	return p
+}
+
+func (x LogEvent_LogLevel) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (LogEvent_LogLevel) Descriptor() protoreflect.EnumDescriptor {
+	return file_internal_protocol_events_proto_enumTypes[3].Descriptor()
+}
+
+func (LogEvent_LogLevel) Type() protoreflect.EnumType {
+	return &file_internal_protocol_events_proto_enumTypes[3]
+}
+
+func (x LogEvent_LogLevel) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use LogEvent_LogLevel.Descriptor instead.
+func (LogEvent_LogLevel) EnumDescriptor() ([]byte, []int) {
+	return file_internal_protocol_events_proto_rawDescGZIP(), []int{13, 0}
+}
+
 // InputEvent is the main event message sent between server and clients
 type InputEvent struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
@@ -194,9 +246,10 @@ type InputEvent struct {
 	//	*InputEvent_Keyboard
 	//	*InputEvent_Control
 	//	*InputEvent_MousePosition
+	//	*InputEvent_Log
 	Event         isInputEvent_Event `protobuf_oneof:"event"`
-	Timestamp     int64              `protobuf:"varint,7,opt,name=timestamp,proto3" json:"timestamp,omitempty"`
-	SourceId      string             `protobuf:"bytes,8,opt,name=source_id,json=sourceId,proto3" json:"source_id,omitempty"` // Which server sent this
+	Timestamp     int64              `protobuf:"varint,8,opt,name=timestamp,proto3" json:"timestamp,omitempty"`
+	SourceId      string             `protobuf:"bytes,9,opt,name=source_id,json=sourceId,proto3" json:"source_id,omitempty"` // Which server sent this
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -292,6 +345,15 @@ func (x *InputEvent) GetMousePosition() *MousePositionEvent {
 	return nil
 }
 
+func (x *InputEvent) GetLog() *LogEvent {
+	if x != nil {
+		if x, ok := x.Event.(*InputEvent_Log); ok {
+			return x.Log
+		}
+	}
+	return nil
+}
+
 func (x *InputEvent) GetTimestamp() int64 {
 	if x != nil {
 		return x.Timestamp
@@ -334,6 +396,10 @@ type InputEvent_MousePosition struct {
 	MousePosition *MousePositionEvent `protobuf:"bytes,6,opt,name=mouse_position,json=mousePosition,proto3,oneof"`
 }
 
+type InputEvent_Log struct {
+	Log *LogEvent `protobuf:"bytes,7,opt,name=log,proto3,oneof"`
+}
+
 func (*InputEvent_MouseMove) isInputEvent_Event() {}
 
 func (*InputEvent_MouseButton) isInputEvent_Event() {}
@@ -345,6 +411,8 @@ func (*InputEvent_Keyboard) isInputEvent_Event() {}
 func (*InputEvent_Control) isInputEvent_Event() {}
 
 func (*InputEvent_MousePosition) isInputEvent_Event() {}
+
+func (*InputEvent_Log) isInputEvent_Event() {}
 
 // Mouse movement with relative coordinates
 type MouseMoveEvent struct {
@@ -1157,11 +1225,88 @@ func (x *ClientCapabilities) GetUinputVersion() string {
 	return ""
 }
 
+// LogEvent for forwarding client logs to server
+type LogEvent struct {
+	state          protoimpl.MessageState `protogen:"open.v1"`
+	Level          LogEvent_LogLevel      `protobuf:"varint,1,opt,name=level,proto3,enum=waymon.protocol.LogEvent_LogLevel" json:"level,omitempty"`
+	Message        string                 `protobuf:"bytes,2,opt,name=message,proto3" json:"message,omitempty"`
+	LoggerName     string                 `protobuf:"bytes,3,opt,name=logger_name,json=loggerName,proto3" json:"logger_name,omitempty"`
+	ClientHostname string                 `protobuf:"bytes,4,opt,name=client_hostname,json=clientHostname,proto3" json:"client_hostname,omitempty"`
+	TimestampMs    int64                  `protobuf:"varint,5,opt,name=timestamp_ms,json=timestampMs,proto3" json:"timestamp_ms,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
+}
+
+func (x *LogEvent) Reset() {
+	*x = LogEvent{}
+	mi := &file_internal_protocol_events_proto_msgTypes[13]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *LogEvent) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*LogEvent) ProtoMessage() {}
+
+func (x *LogEvent) ProtoReflect() protoreflect.Message {
+	mi := &file_internal_protocol_events_proto_msgTypes[13]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use LogEvent.ProtoReflect.Descriptor instead.
+func (*LogEvent) Descriptor() ([]byte, []int) {
+	return file_internal_protocol_events_proto_rawDescGZIP(), []int{13}
+}
+
+func (x *LogEvent) GetLevel() LogEvent_LogLevel {
+	if x != nil {
+		return x.Level
+	}
+	return LogEvent_DEBUG
+}
+
+func (x *LogEvent) GetMessage() string {
+	if x != nil {
+		return x.Message
+	}
+	return ""
+}
+
+func (x *LogEvent) GetLoggerName() string {
+	if x != nil {
+		return x.LoggerName
+	}
+	return ""
+}
+
+func (x *LogEvent) GetClientHostname() string {
+	if x != nil {
+		return x.ClientHostname
+	}
+	return ""
+}
+
+func (x *LogEvent) GetTimestampMs() int64 {
+	if x != nil {
+		return x.TimestampMs
+	}
+	return 0
+}
+
 var File_internal_protocol_events_proto protoreflect.FileDescriptor
 
 const file_internal_protocol_events_proto_rawDesc = "" +
 	"\n" +
-	"\x1einternal/protocol/events.proto\x12\x0fwaymon.protocol\"\xe9\x03\n" +
+	"\x1einternal/protocol/events.proto\x12\x0fwaymon.protocol\"\x98\x04\n" +
 	"\n" +
 	"InputEvent\x12@\n" +
 	"\n" +
@@ -1170,9 +1315,10 @@ const file_internal_protocol_events_proto_rawDesc = "" +
 	"\fmouse_scroll\x18\x03 \x01(\v2!.waymon.protocol.MouseScrollEventH\x00R\vmouseScroll\x12<\n" +
 	"\bkeyboard\x18\x04 \x01(\v2\x1e.waymon.protocol.KeyboardEventH\x00R\bkeyboard\x129\n" +
 	"\acontrol\x18\x05 \x01(\v2\x1d.waymon.protocol.ControlEventH\x00R\acontrol\x12L\n" +
-	"\x0emouse_position\x18\x06 \x01(\v2#.waymon.protocol.MousePositionEventH\x00R\rmousePosition\x12\x1c\n" +
-	"\ttimestamp\x18\a \x01(\x03R\ttimestamp\x12\x1b\n" +
-	"\tsource_id\x18\b \x01(\tR\bsourceIdB\a\n" +
+	"\x0emouse_position\x18\x06 \x01(\v2#.waymon.protocol.MousePositionEventH\x00R\rmousePosition\x12-\n" +
+	"\x03log\x18\a \x01(\v2\x19.waymon.protocol.LogEventH\x00R\x03log\x12\x1c\n" +
+	"\ttimestamp\x18\b \x01(\x03R\ttimestamp\x12\x1b\n" +
+	"\tsource_id\x18\t \x01(\tR\bsourceIdB\a\n" +
 	"\x05event\"0\n" +
 	"\x0eMouseMoveEvent\x12\x0e\n" +
 	"\x02dx\x18\x01 \x01(\x01R\x02dx\x12\x0e\n" +
@@ -1243,7 +1389,19 @@ const file_internal_protocol_events_proto_rawDesc = "" +
 	"\x11can_receive_mouse\x18\x02 \x01(\bR\x0fcanReceiveMouse\x12,\n" +
 	"\x12can_receive_scroll\x18\x03 \x01(\bR\x10canReceiveScroll\x12-\n" +
 	"\x12wayland_compositor\x18\x04 \x01(\tR\x11waylandCompositor\x12%\n" +
-	"\x0euinput_version\x18\x05 \x01(\tR\ruinputVersion*H\n" +
+	"\x0euinput_version\x18\x05 \x01(\tR\ruinputVersion\"\x81\x02\n" +
+	"\bLogEvent\x128\n" +
+	"\x05level\x18\x01 \x01(\x0e2\".waymon.protocol.LogEvent.LogLevelR\x05level\x12\x18\n" +
+	"\amessage\x18\x02 \x01(\tR\amessage\x12\x1f\n" +
+	"\vlogger_name\x18\x03 \x01(\tR\n" +
+	"loggerName\x12'\n" +
+	"\x0fclient_hostname\x18\x04 \x01(\tR\x0eclientHostname\x12!\n" +
+	"\ftimestamp_ms\x18\x05 \x01(\x03R\vtimestampMs\"4\n" +
+	"\bLogLevel\x12\t\n" +
+	"\x05DEBUG\x10\x00\x12\b\n" +
+	"\x04INFO\x10\x01\x12\b\n" +
+	"\x04WARN\x10\x02\x12\t\n" +
+	"\x05ERROR\x10\x03*H\n" +
 	"\n" +
 	"ScrollType\x12\x10\n" +
 	"\fSCROLL_WHEEL\x10\x00\x12\x11\n" +
@@ -1266,46 +1424,50 @@ func file_internal_protocol_events_proto_rawDescGZIP() []byte {
 	return file_internal_protocol_events_proto_rawDescData
 }
 
-var file_internal_protocol_events_proto_enumTypes = make([]protoimpl.EnumInfo, 3)
-var file_internal_protocol_events_proto_msgTypes = make([]protoimpl.MessageInfo, 13)
+var file_internal_protocol_events_proto_enumTypes = make([]protoimpl.EnumInfo, 4)
+var file_internal_protocol_events_proto_msgTypes = make([]protoimpl.MessageInfo, 14)
 var file_internal_protocol_events_proto_goTypes = []any{
 	(ScrollType)(0),            // 0: waymon.protocol.ScrollType
 	(ClientStatus)(0),          // 1: waymon.protocol.ClientStatus
 	(ControlEvent_Type)(0),     // 2: waymon.protocol.ControlEvent.Type
-	(*InputEvent)(nil),         // 3: waymon.protocol.InputEvent
-	(*MouseMoveEvent)(nil),     // 4: waymon.protocol.MouseMoveEvent
-	(*MousePositionEvent)(nil), // 5: waymon.protocol.MousePositionEvent
-	(*MouseButtonEvent)(nil),   // 6: waymon.protocol.MouseButtonEvent
-	(*MouseScrollEvent)(nil),   // 7: waymon.protocol.MouseScrollEvent
-	(*KeyboardEvent)(nil),      // 8: waymon.protocol.KeyboardEvent
-	(*ControlEvent)(nil),       // 9: waymon.protocol.ControlEvent
-	(*ClientInfo)(nil),         // 10: waymon.protocol.ClientInfo
-	(*ServerInfo)(nil),         // 11: waymon.protocol.ServerInfo
-	(*ServerCapabilities)(nil), // 12: waymon.protocol.ServerCapabilities
-	(*ClientConfig)(nil),       // 13: waymon.protocol.ClientConfig
-	(*Monitor)(nil),            // 14: waymon.protocol.Monitor
-	(*ClientCapabilities)(nil), // 15: waymon.protocol.ClientCapabilities
+	(LogEvent_LogLevel)(0),     // 3: waymon.protocol.LogEvent.LogLevel
+	(*InputEvent)(nil),         // 4: waymon.protocol.InputEvent
+	(*MouseMoveEvent)(nil),     // 5: waymon.protocol.MouseMoveEvent
+	(*MousePositionEvent)(nil), // 6: waymon.protocol.MousePositionEvent
+	(*MouseButtonEvent)(nil),   // 7: waymon.protocol.MouseButtonEvent
+	(*MouseScrollEvent)(nil),   // 8: waymon.protocol.MouseScrollEvent
+	(*KeyboardEvent)(nil),      // 9: waymon.protocol.KeyboardEvent
+	(*ControlEvent)(nil),       // 10: waymon.protocol.ControlEvent
+	(*ClientInfo)(nil),         // 11: waymon.protocol.ClientInfo
+	(*ServerInfo)(nil),         // 12: waymon.protocol.ServerInfo
+	(*ServerCapabilities)(nil), // 13: waymon.protocol.ServerCapabilities
+	(*ClientConfig)(nil),       // 14: waymon.protocol.ClientConfig
+	(*Monitor)(nil),            // 15: waymon.protocol.Monitor
+	(*ClientCapabilities)(nil), // 16: waymon.protocol.ClientCapabilities
+	(*LogEvent)(nil),           // 17: waymon.protocol.LogEvent
 }
 var file_internal_protocol_events_proto_depIdxs = []int32{
-	4,  // 0: waymon.protocol.InputEvent.mouse_move:type_name -> waymon.protocol.MouseMoveEvent
-	6,  // 1: waymon.protocol.InputEvent.mouse_button:type_name -> waymon.protocol.MouseButtonEvent
-	7,  // 2: waymon.protocol.InputEvent.mouse_scroll:type_name -> waymon.protocol.MouseScrollEvent
-	8,  // 3: waymon.protocol.InputEvent.keyboard:type_name -> waymon.protocol.KeyboardEvent
-	9,  // 4: waymon.protocol.InputEvent.control:type_name -> waymon.protocol.ControlEvent
-	5,  // 5: waymon.protocol.InputEvent.mouse_position:type_name -> waymon.protocol.MousePositionEvent
-	0,  // 6: waymon.protocol.MouseScrollEvent.type:type_name -> waymon.protocol.ScrollType
-	2,  // 7: waymon.protocol.ControlEvent.type:type_name -> waymon.protocol.ControlEvent.Type
-	13, // 8: waymon.protocol.ControlEvent.client_config:type_name -> waymon.protocol.ClientConfig
-	1,  // 9: waymon.protocol.ClientInfo.status:type_name -> waymon.protocol.ClientStatus
-	10, // 10: waymon.protocol.ServerInfo.connected_clients:type_name -> waymon.protocol.ClientInfo
-	12, // 11: waymon.protocol.ServerInfo.capabilities:type_name -> waymon.protocol.ServerCapabilities
-	14, // 12: waymon.protocol.ClientConfig.monitors:type_name -> waymon.protocol.Monitor
-	15, // 13: waymon.protocol.ClientConfig.capabilities:type_name -> waymon.protocol.ClientCapabilities
-	14, // [14:14] is the sub-list for method output_type
-	14, // [14:14] is the sub-list for method input_type
-	14, // [14:14] is the sub-list for extension type_name
-	14, // [14:14] is the sub-list for extension extendee
-	0,  // [0:14] is the sub-list for field type_name
+	5,  // 0: waymon.protocol.InputEvent.mouse_move:type_name -> waymon.protocol.MouseMoveEvent
+	7,  // 1: waymon.protocol.InputEvent.mouse_button:type_name -> waymon.protocol.MouseButtonEvent
+	8,  // 2: waymon.protocol.InputEvent.mouse_scroll:type_name -> waymon.protocol.MouseScrollEvent
+	9,  // 3: waymon.protocol.InputEvent.keyboard:type_name -> waymon.protocol.KeyboardEvent
+	10, // 4: waymon.protocol.InputEvent.control:type_name -> waymon.protocol.ControlEvent
+	6,  // 5: waymon.protocol.InputEvent.mouse_position:type_name -> waymon.protocol.MousePositionEvent
+	17, // 6: waymon.protocol.InputEvent.log:type_name -> waymon.protocol.LogEvent
+	0,  // 7: waymon.protocol.MouseScrollEvent.type:type_name -> waymon.protocol.ScrollType
+	2,  // 8: waymon.protocol.ControlEvent.type:type_name -> waymon.protocol.ControlEvent.Type
+	14, // 9: waymon.protocol.ControlEvent.client_config:type_name -> waymon.protocol.ClientConfig
+	1,  // 10: waymon.protocol.ClientInfo.status:type_name -> waymon.protocol.ClientStatus
+	11, // 11: waymon.protocol.ServerInfo.connected_clients:type_name -> waymon.protocol.ClientInfo
+	13, // 12: waymon.protocol.ServerInfo.capabilities:type_name -> waymon.protocol.ServerCapabilities
+	15, // 13: waymon.protocol.ClientConfig.monitors:type_name -> waymon.protocol.Monitor
+	16, // 14: waymon.protocol.ClientConfig.capabilities:type_name -> waymon.protocol.ClientCapabilities
+	3,  // 15: waymon.protocol.LogEvent.level:type_name -> waymon.protocol.LogEvent.LogLevel
+	16, // [16:16] is the sub-list for method output_type
+	16, // [16:16] is the sub-list for method input_type
+	16, // [16:16] is the sub-list for extension type_name
+	16, // [16:16] is the sub-list for extension extendee
+	0,  // [0:16] is the sub-list for field type_name
 }
 
 func init() { file_internal_protocol_events_proto_init() }
@@ -1320,14 +1482,15 @@ func file_internal_protocol_events_proto_init() {
 		(*InputEvent_Keyboard)(nil),
 		(*InputEvent_Control)(nil),
 		(*InputEvent_MousePosition)(nil),
+		(*InputEvent_Log)(nil),
 	}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_internal_protocol_events_proto_rawDesc), len(file_internal_protocol_events_proto_rawDesc)),
-			NumEnums:      3,
-			NumMessages:   13,
+			NumEnums:      4,
+			NumMessages:   14,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

@@ -213,6 +213,10 @@ func (c *SSHClient) Connect(ctx context.Context, serverAddr string) error {
 	logger.Info("[SSH-CLIENT] Starting receiveInputEvents goroutine")
 	go c.receiveInputEvents(ctx)
 
+	// Setup log forwarding to server (only for clients)
+	logger.Info("[SSH-CLIENT] Setting up log forwarding to server")
+	c.setupLogForwarding()
+
 	return nil
 }
 
@@ -226,6 +230,9 @@ func (c *SSHClient) Disconnect() error {
 	}
 
 	c.connected = false
+
+	// Remove log forwarder
+	logger.SetLogForwarder(nil)
 
 	if c.session != nil {
 		if err := c.session.Close(); err != nil {
@@ -532,4 +539,61 @@ func writeInputMessage(w io.Writer, event *protocol.InputEvent) error {
 	}
 
 	return nil
+}
+
+// setupLogForwarding sets up log forwarding from client to server
+func (c *SSHClient) setupLogForwarding() {
+	// Get the client hostname
+	hostname, err := os.Hostname()
+	if err != nil {
+		hostname = "unknown-client"
+	}
+
+	// Set up the log forwarder
+	logger.SetLogForwarder(func(level, message string) {
+		// Don't forward logs if not connected
+		c.mu.Lock()
+		connected := c.connected
+		c.mu.Unlock()
+
+		if !connected {
+			return
+		}
+
+		// Convert level string to protobuf enum
+		var logLevel protocol.LogEvent_LogLevel
+		switch level {
+		case "DEBUG":
+			logLevel = protocol.LogEvent_DEBUG
+		case "INFO":
+			logLevel = protocol.LogEvent_INFO
+		case "WARN":
+			logLevel = protocol.LogEvent_WARN
+		case "ERROR":
+			logLevel = protocol.LogEvent_ERROR
+		default:
+			logLevel = protocol.LogEvent_INFO
+		}
+
+		// Create log event
+		logEvent := &protocol.LogEvent{
+			Level:          logLevel,
+			Message:        message,
+			LoggerName:     "waymon-client",
+			ClientHostname: hostname,
+			TimestampMs:    time.Now().UnixMilli(),
+		}
+
+		// Create input event with log
+		inputEvent := &protocol.InputEvent{
+			Event: &protocol.InputEvent_Log{
+				Log: logEvent,
+			},
+			Timestamp: time.Now().UnixNano(),
+			SourceId:  hostname,
+		}
+
+		// Send the log event (ignore errors to avoid log loops)
+		_ = c.SendInputEvent(inputEvent)
+	})
 }

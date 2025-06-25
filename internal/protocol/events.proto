@@ -13,9 +13,10 @@ message InputEvent {
     KeyboardEvent keyboard = 4;
     ControlEvent control = 5;
     MousePositionEvent mouse_position = 6;
+    LogEvent log = 7;
   }
-  int64 timestamp = 7;
-  string source_id = 8;  // Which server sent this
+  int64 timestamp = 8;
+  string source_id = 9;  // Which server sent this
 }
 
 // Mouse movement with relative coordinates
@@ -132,4 +133,20 @@ message ClientCapabilities {
   bool can_receive_scroll = 3;
   string wayland_compositor = 4; // Wayland compositor type
   string uinput_version = 5;     // uinput library version
+}
+
+// LogEvent for forwarding client logs to server
+message LogEvent {
+  LogLevel level = 1;
+  string message = 2;
+  string logger_name = 3;
+  string client_hostname = 4;
+  int64 timestamp_ms = 5;
+  
+  enum LogLevel {
+    DEBUG = 0;
+    INFO = 1;
+    WARN = 2;
+    ERROR = 3;
+  }
 }

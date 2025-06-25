@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"os"
+	"path/filepath"
 	"sync"
 	"time"
 
@@ -39,6 +41,10 @@ type SSHServer struct {
 	stopOnce sync.Once
 	wg       sync.WaitGroup
 
+	// Client log files
+	logFilesMu sync.Mutex
+	logFiles   map[string]*os.File // hostname -> log file
+
 	// Event handlers
 	OnInputEvent         func(event *protocol.InputEvent)
 	OnClientConnected    func(addr string, publicKey string)
@@ -63,6 +69,7 @@ func NewSSHServer(port int, hostKeyPath, authKeysPath string) *SSHServer {
 		clients:      make(map[string]*sshClient),
 		pendingAuth:  make(map[string]chan bool),
 		stop:         make(chan struct{}),
+		logFiles:     make(map[string]*os.File),
 	}
 }
 
@@ -158,6 +165,14 @@ func (s *SSHServer) Stop() {
 		}
 		s.clients = make(map[string]*sshClient)
 		s.mu.Unlock()
+
+		// Close all log files
+		s.logFilesMu.Lock()
+		for _, logFile := range s.logFiles {
+			_ = logFile.Close()
+		}
+		s.logFiles = make(map[string]*os.File)
+		s.logFilesMu.Unlock()
 
 		s.wg.Wait()
 	})
@@ -389,10 +404,16 @@ func (s *SSHServer) handleMouseEvents(ctx context.Context, sess ssh.Session) {
 				continue
 			}
 
-			// Call event handler
-			if s.OnInputEvent != nil {
-				logger.Debugf("[SSH-SERVER] Forwarding input event: type=%T, sourceId=%s", inputEvent.Event, inputEvent.SourceId)
-				s.OnInputEvent(&inputEvent)
+			// Check if this is a log event
+			if logEvent := inputEvent.GetLog(); logEvent != nil {
+				// Handle log event separately
+				s.handleClientLog(sess.RemoteAddr().String(), logEvent)
+			} else {
+				// Call normal event handler
+				if s.OnInputEvent != nil {
+					logger.Debugf("[SSH-SERVER] Forwarding input event: type=%T, sourceId=%s", inputEvent.Event, inputEvent.SourceId)
+					s.OnInputEvent(&inputEvent)
+				}
 			}
 		}
 	}
@@ -501,4 +522,62 @@ func (s *SSHServer) writeInputEvent(w io.Writer, event *protocol.InputEvent) err
 
 	logger.Debugf("[SSH-SERVER] Successfully wrote %d bytes to client", length)
 	return nil
+}
+
+// handleClientLog handles log events from clients
+func (s *SSHServer) handleClientLog(clientAddr string, logEvent *protocol.LogEvent) {
+	s.logFilesMu.Lock()
+	defer s.logFilesMu.Unlock()
+
+	// Get or create log file for this client
+	hostname := logEvent.ClientHostname
+	if hostname == "" {
+		hostname = "unknown"
+	}
+
+	logFile, exists := s.logFiles[hostname]
+	if !exists {
+		// Create log file
+		logDir := "/var/log/waymon"
+		logPath := filepath.Join(logDir, fmt.Sprintf("waymon_client_%s.log", hostname))
+
+		// Create directory if it doesn't exist
+		if err := os.MkdirAll(logDir, 0750); err != nil {
+			logger.Errorf("[SSH-SERVER] Failed to create log directory: %v", err)
+			return
+		}
+
+		// Open log file
+		file, err := os.OpenFile(logPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0600)
+		if err != nil {
+			logger.Errorf("[SSH-SERVER] Failed to open client log file %s: %v", logPath, err)
+			return
+		}
+
+		// Write header
+		fmt.Fprintf(file, "\n=== Client log session started: %s from %s ===\n",
+			time.Now().Format("2006-01-02 15:04:05"), clientAddr)
+
+		s.logFiles[hostname] = file
+		logFile = file
+		logger.Infof("[SSH-SERVER] Created client log file: %s", logPath)
+	}
+
+	// Format timestamp
+	timestamp := time.UnixMilli(logEvent.TimestampMs).Format("15:04:05")
+
+	// Format log level
+	levelStr := logEvent.Level.String()
+	if levelStr == "" {
+		levelStr = "INFO"
+	}
+
+	// Write log entry
+	fmt.Fprintf(logFile, "%s %s %s: %s\n", 
+		timestamp, levelStr, logEvent.LoggerName, logEvent.Message)
+
+	// Flush the file
+	if syncer, ok := logFile.(*os.File); ok {
+		_ = syncer.Sync()
+	}
 }
