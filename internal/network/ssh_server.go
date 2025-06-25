@@ -415,6 +415,7 @@ func (s *SSHServer) handleMouseEvents(ctx context.Context, sess ssh.Session) {
 			// Check if this is a log event
 			if logEvent := inputEvent.GetLog(); logEvent != nil {
 				// Handle log event separately
+				logger.Debugf("[SSH-SERVER] Received log event from client: %s", sess.RemoteAddr().String())
 				s.handleClientLog(sess.RemoteAddr().String(), logEvent)
 			} else {
 				// Call normal event handler
@@ -534,6 +535,9 @@ func (s *SSHServer) writeInputEvent(w io.Writer, event *protocol.InputEvent) err
 
 // handleClientLog handles log events from clients
 func (s *SSHServer) handleClientLog(clientAddr string, logEvent *protocol.LogEvent) {
+	logger.Debugf("[SSH-SERVER] handleClientLog called: clientAddr=%s, hostname=%s, message=%s", 
+		clientAddr, logEvent.ClientHostname, logEvent.Message)
+		
 	s.logFilesMu.Lock()
 	defer s.logFilesMu.Unlock()
 

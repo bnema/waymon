@@ -594,6 +594,12 @@ func (c *SSHClient) setupLogForwarding() {
 		}
 
 		// Send the log event (ignore errors to avoid log loops)
-		_ = c.SendInputEvent(inputEvent)
+		if err := c.SendInputEvent(inputEvent); err != nil {
+			// Don't log the error to avoid recursion, but we can print to stderr for debugging
+			fmt.Fprintf(os.Stderr, "[LOG-FORWARDER] Failed to send log: %v\n", err)
+		} else {
+			// Debug: log successful sends to stderr
+			fmt.Fprintf(os.Stderr, "[LOG-FORWARDER] Sent log: level=%s msg=%s\n", level, message)
+		}
 	})
 }
