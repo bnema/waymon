@@ -337,6 +337,26 @@ func (c *SSHClient) receiveInputEvents(ctx context.Context) {
 
 			logger.Debugf("[SSH-CLIENT] Waiting for message #%d", messageCount+1)
 
+			// Validate connection state before attempting to read
+			c.mu.Lock()
+			session := c.session
+			connected = c.connected
+			c.mu.Unlock()
+
+			if !connected || session == nil {
+				logger.Info("[SSH-CLIENT] Connection no longer valid, stopping receive loop")
+				return
+			}
+
+			// Perform connection health check before reading
+			if err := c.validateConnectionHealth(session); err != nil {
+				logger.Warnf("[SSH-CLIENT] Connection health check failed before read: %v", err)
+				c.mu.Lock()
+				c.connected = false
+				c.mu.Unlock()
+				return
+			}
+
 			// Read length prefix (4 bytes) - blocking read
 			lengthBuf := make([]byte, 4)
 
@@ -418,6 +438,15 @@ func (c *SSHClient) receiveInputEvents(ctx context.Context) {
 				}
 			}
 
+			// Validate connection state before reading message data
+			if err := c.validateConnectionHealth(session); err != nil {
+				logger.Warnf("[SSH-CLIENT] Connection health check failed before message data read: %v", err)
+				c.mu.Lock()
+				c.connected = false
+				c.mu.Unlock()
+				return
+			}
+
 			// Read message data
 			msgBuf := make([]byte, length)
 
@@ -442,10 +471,34 @@ func (c *SSHClient) receiveInputEvents(ctx context.Context) {
 				}
 			}
 
-			// Unmarshal input event
+			// Final connection state validation before processing message
+			c.mu.Lock()
+			connected = c.connected
+			c.mu.Unlock()
+
+			if !connected {
+				logger.Info("[SSH-CLIENT] Connection lost during message processing")
+				return
+			}
+
+			// Unmarshal input event with enhanced error handling
 			var inputEvent protocol.InputEvent
 			if err := proto.Unmarshal(msgBuf, &inputEvent); err != nil {
-				logger.Errorf("[SSH-CLIENT] Failed to unmarshal input event: %v", err)
+				logger.Errorf("[SSH-CLIENT] Failed to unmarshal input event (length=%d): %v", length, err)
+				// Log first few bytes for debugging
+				if len(msgBuf) > 0 {
+					debugBytes := msgBuf
+					if len(debugBytes) > 16 {
+						debugBytes = debugBytes[:16]
+					}
+					logger.Errorf("[SSH-CLIENT] Message data preview: %02x", debugBytes)
+				}
+				continue
+			}
+
+			// Validate unmarshaled message
+			if inputEvent.Event == nil {
+				logger.Errorf("[SSH-CLIENT] Received invalid input event with nil Event field")
 				continue
 			}
 

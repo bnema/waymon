@@ -384,6 +384,12 @@ func (s *SSHServer) handleMouseEvents(ctx context.Context, sess ssh.Session) {
 		default:
 		}
 
+		// Validate connection state before attempting to read
+		if err := s.validateConnectionHealth(sess); err != nil {
+			logger.Warnf("[SSH-SERVER] Connection health check failed before read: %v", err)
+			return
+		}
+
 		// Start async read for length prefix
 		go func() {
 			lengthBuf := make([]byte, 4)
@@ -420,6 +426,12 @@ func (s *SSHServer) handleMouseEvents(ctx context.Context, sess ssh.Session) {
 				return
 			}
 
+			// Validate connection state before reading message data
+			if err := s.validateConnectionHealth(sess); err != nil {
+				logger.Warnf("[SSH-SERVER] Connection health check failed before message data read: %v", err)
+				return
+			}
+
 			// Read event data
 			eventBuf := make([]byte, length)
 			_, err := io.ReadFull(sess, eventBuf)
@@ -432,10 +444,30 @@ func (s *SSHServer) handleMouseEvents(ctx context.Context, sess ssh.Session) {
 				return
 			}
 
-			// Unmarshal protobuf event
+			// Final connection state validation before processing message
+			if err := s.validateConnectionHealth(sess); err != nil {
+				logger.Warnf("[SSH-SERVER] Connection health check failed before message processing: %v", err)
+				return
+			}
+
+			// Unmarshal protobuf event with enhanced error handling
 			var inputEvent protocol.InputEvent
 			if err := proto.Unmarshal(eventBuf, &inputEvent); err != nil {
-				logger.Debugf("[SSH-SERVER] Failed to unmarshal input event: %v", err)
+				logger.Errorf("[SSH-SERVER] Failed to unmarshal input event (length=%d): %v", length, err)
+				// Log first few bytes for debugging
+				if len(eventBuf) > 0 {
+					debugBytes := eventBuf
+					if len(debugBytes) > 16 {
+						debugBytes = debugBytes[:16]
+					}
+					logger.Errorf("[SSH-SERVER] Message data preview: %02x", debugBytes)
+				}
+				continue
+			}
+
+			// Validate unmarshaled message
+			if inputEvent.Event == nil && inputEvent.GetLog() == nil {
+				logger.Errorf("[SSH-SERVER] Received invalid input event with nil Event and Log fields")
 				continue
 			}
 
