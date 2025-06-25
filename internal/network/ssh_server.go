@@ -79,6 +79,8 @@ func (s *SSHServer) SetAuthHandlers(onAuthRequest func(addr, publicKey, fingerpr
 
 // Start begins listening for SSH connections
 func (s *SSHServer) Start(ctx context.Context) error {
+	logger.Debugf("[SSH-SERVER] Starting SSH server on port %d", s.port)
+	
 	// Create SSH server
 	server, err := wish.NewServer(
 		wish.WithAddress(fmt.Sprintf(":%d", s.port)),
@@ -93,6 +95,7 @@ func (s *SSHServer) Start(ctx context.Context) error {
 		return fmt.Errorf("failed to create SSH server: %w", err)
 	}
 
+	logger.Debugf("[SSH-SERVER] SSH server created successfully")
 	s.sshServer = server
 
 	// Start listening
@@ -178,6 +181,8 @@ func (s *SSHServer) Stop() {
 
 // publicKeyAuth handles SSH public key authentication
 func (s *SSHServer) publicKeyAuth(ctx ssh.Context, key ssh.PublicKey) bool {
+	logger.Debugf("[SSH-AUTH] publicKeyAuth called from %s", ctx.RemoteAddr())
+	
 	// Convert Wish SSH public key to golang.org/x/crypto/ssh public key
 	var goKey gossh.PublicKey
 	if wishKey, ok := key.(gossh.PublicKey); ok {
@@ -200,6 +205,7 @@ func (s *SSHServer) publicKeyAuth(ctx ssh.Context, key ssh.PublicKey) bool {
 	// Check if key is already whitelisted
 	if config.IsSSHKeyWhitelisted(fingerprint) {
 		logger.Infof("SSH key is whitelisted key=%s", fingerprint)
+		logger.Debugf("[SSH-AUTH] Authentication successful for %s", addr)
 		return true
 	}
 
@@ -237,13 +243,18 @@ func (s *SSHServer) loggingMiddleware() wish.Middleware {
 	return func(h ssh.Handler) ssh.Handler {
 		return func(sess ssh.Session) {
 			// Log the connection details
-			logger.Debugf("SSH session started: user=%s addr=%s", sess.User(), sess.RemoteAddr())
+			logger.Debugf("[SSH-MIDDLEWARE] loggingMiddleware: session started - user=%s addr=%s", sess.User(), sess.RemoteAddr())
+			logger.Debugf("[SSH-MIDDLEWARE] Session context: %+v", sess.Context())
+			pty, _, hasPty := sess.Pty()
+			logger.Debugf("[SSH-MIDDLEWARE] Has PTY: %v (term: %s)", hasPty, pty.Term)
 
 			// Call the next handler
+			logger.Debugf("[SSH-MIDDLEWARE] Calling next handler...")
 			h(sess)
+			logger.Debugf("[SSH-MIDDLEWARE] Next handler returned")
 
 			// Log disconnection
-			logger.Debugf("SSH session ended: addr=%s", sess.RemoteAddr())
+			logger.Debugf("[SSH-MIDDLEWARE] loggingMiddleware: session ended - addr=%s", sess.RemoteAddr())
 		}
 	}
 }
@@ -312,15 +323,27 @@ func (s *SSHServer) sessionHandler() wish.Middleware {
 
 			// Log connection info instead of sending to client
 			logger.Infof("Waymon SSH connection established - Public key: %s", publicKey)
+			
+			// Debug: Check session state
+			logger.Debugf("[SSH-SESSION] Session established, checking state...")
+			logger.Debugf("[SSH-SESSION] Session ID: %s", sess.Context().SessionID())
+			logger.Debugf("[SSH-SESSION] User: %s", sess.User())
+			logger.Debugf("[SSH-SESSION] Remote addr: %s", sess.RemoteAddr())
+			_, _, hasPty := sess.Pty()
+			logger.Debugf("[SSH-SESSION] Has PTY: %v", hasPty)
 
 			// Handle mouse events with context
+			logger.Debugf("[SSH-SESSION] Starting handleMouseEvents...")
 			s.handleMouseEvents(s.ctx, sess)
+			logger.Debugf("[SSH-SESSION] handleMouseEvents returned")
 		}
 	}
 }
 
 // handleMouseEvents reads and processes mouse events from the SSH session
 func (s *SSHServer) handleMouseEvents(ctx context.Context, sess ssh.Session) {
+	logger.Debugf("[SSH-HANDLER] handleMouseEvents started for %s", sess.RemoteAddr())
+	
 	// Create channels for coordinating shutdown
 	done := make(chan struct{})
 	defer close(done)
