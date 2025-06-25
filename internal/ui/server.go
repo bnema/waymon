@@ -47,6 +47,10 @@ type ServerModel struct {
 	// UI state
 	selectedClientIndex int
 
+	// Debouncing for key commands
+	lastKeyPress      time.Time
+	keyDebounceDelay  time.Duration
+
 	// Program reference for sending messages
 	program *tea.Program
 
@@ -68,6 +72,7 @@ func NewServerModel(port int, serverName, version string) *ServerModel {
 		version:             version,
 		localControl:        true, // Start controlling local
 		selectedClientIndex: -1,   // No client selected initially
+		keyDebounceDelay:    300 * time.Millisecond, // Prevent rapid key presses
 
 		// Define styles
 		headerStyle: lipgloss.NewStyle().
@@ -249,6 +254,14 @@ func (m *ServerModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 
 		case "1", "2", "3", "4", "5":
+			// Debounce rapid key presses
+			now := time.Now()
+			if now.Sub(m.lastKeyPress) < m.keyDebounceDelay {
+				// Ignore rapid key presses
+				return m, nil
+			}
+			m.lastKeyPress = now
+
 			// Switch to specific client by slot number via IPC
 			slot, _ := strconv.Atoi(msg.String())
 			cmd := m.sendConnectCommand(int32(slot))
@@ -554,9 +567,39 @@ func (m *ServerModel) sendReleaseCommand() tea.Cmd {
 
 // sendConnectCommand sends an IPC connect command and updates UI
 func (m *ServerModel) sendConnectCommand(slot int32) tea.Cmd {
-	// Validate slot and get client info
-	if slot < 1 || slot > 5 || int(slot) > len(m.clients) {
-		return nil
+	// Validate slot range
+	if slot < 1 || slot > 5 {
+		return func() tea.Msg {
+			return LogMsg{
+				Entry: LogEntry{
+					Level:   "error",
+					Message: fmt.Sprintf("Invalid slot number: %d (must be 1-5)", slot),
+				},
+			}
+		}
+	}
+
+	// Check if we have clients and if the slot is valid
+	if len(m.clients) == 0 {
+		return func() tea.Msg {
+			return LogMsg{
+				Entry: LogEntry{
+					Level:   "warn",
+					Message: "No clients connected - cannot switch to slot",
+				},
+			}
+		}
+	}
+
+	if int(slot) > len(m.clients) {
+		return func() tea.Msg {
+			return LogMsg{
+				Entry: LogEntry{
+					Level:   "warn",
+					Message: fmt.Sprintf("No client in slot %d (only %d clients connected)", slot, len(m.clients)),
+				},
+			}
+		}
 	}
 
 	client := m.clients[slot-1]
@@ -579,7 +622,7 @@ func (m *ServerModel) sendConnectCommand(slot int32) tea.Cmd {
 			return LogMsg{
 				Entry: LogEntry{
 					Level:   "error",
-					Message: fmt.Sprintf("Failed to send connect command: %v", err),
+					Message: fmt.Sprintf("Failed to connect to slot %d: %v", slot, err),
 				},
 			}
 		}
