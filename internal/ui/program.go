@@ -8,6 +8,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/log"
+	"github.com/bnema/waymon/internal/logger"
 )
 
 // ProgramConfig holds configuration for running a UI program
@@ -71,6 +72,9 @@ func (r *ProgramRunner) Run(ctx context.Context, model UIModel) error {
 	// Ensure done channel is closed when we exit
 	defer close(r.done)
 	
+	// Clean up logger notifier on exit
+	defer logger.SetUINotifier(nil)
+	
 	// Create base UI with context
 	r.base = NewBaseUI(ctx, r.config.ShutdownConfig)
 
@@ -114,6 +118,20 @@ func (r *ProgramRunner) Run(ctx context.Context, model UIModel) error {
 	if pm, ok := model.(ProgramModel); ok {
 		pm.SetProgram(r.program)
 	}
+
+	// Set up logger UI notifier to send logs to the UI
+	logger.SetUINotifier(func(level, message string) {
+		// Send log message to the UI
+		if r.program != nil {
+			r.program.Send(LogMsg{
+				Entry: LogEntry{
+					Level:     level,
+					Message:   message,
+					Timestamp: time.Now(),
+				},
+			})
+		}
+	})
 
 	// Run in a goroutine to handle context cancellation
 	errCh := make(chan error, 1)
