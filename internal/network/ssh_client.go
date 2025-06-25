@@ -197,8 +197,19 @@ func (c *SSHClient) Connect(ctx context.Context, serverAddr string) error {
 	// Starting a shell would send shell prompts and other text that interferes with our protocol
 	logger.Debug("[SSH-CLIENT] Using raw session without shell for clean protocol communication")
 
-	// Important: Do NOT call session.Run() as it will immediately terminate the session
-	// The session will remain open as long as we hold references to it and keep reading/writing
+	// We need to start the session somehow. Let's use Shell() which establishes
+	// the session but we won't send any commands
+	go func() {
+		// Request a shell but don't send any commands
+		// This establishes the session properly
+		if err := session.Shell(); err != nil {
+			logger.Debugf("[SSH-CLIENT] Shell() returned error (might be normal): %v", err)
+		}
+		// Wait for session to end
+		if err := session.Wait(); err != nil {
+			logger.Debugf("[SSH-CLIENT] Session ended: %v", err)
+		}
+	}()
 
 	// No handshake messages expected from server anymore
 	// Server only sends protocol buffer messages or error text
