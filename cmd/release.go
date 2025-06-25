@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	"github.com/bnema/waymon/internal/ipc"
+	"github.com/bnema/waymon/internal/logger"
 	"github.com/spf13/cobra"
 )
 
@@ -21,7 +22,11 @@ This command is useful for keybindings in window managers like Hyprland.`,
 		if err != nil {
 			return fmt.Errorf("failed to create IPC client: %w", err)
 		}
-		defer client.Close()
+		defer func() {
+			if err := client.Close(); err != nil {
+				logger.Errorf("Failed to close IPC client: %v", err)
+			}
+		}()
 
 		// Send release command
 		if err := client.SendRelease(); err != nil {

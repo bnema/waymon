@@ -5,6 +5,7 @@ import (
 	"strconv"
 
 	"github.com/bnema/waymon/internal/ipc"
+	"github.com/bnema/waymon/internal/logger"
 	"github.com/spf13/cobra"
 )
 
@@ -39,10 +40,14 @@ For example, you can bind:
 		if err != nil {
 			return fmt.Errorf("failed to create IPC client: %w", err)
 		}
-		defer client.Close()
+		defer func() {
+			if err := client.Close(); err != nil {
+				logger.Errorf("Failed to close IPC client: %v", err)
+			}
+		}()
 
 		// Send connect command
-		if err := client.SendConnect(int32(slot)); err != nil {
+		if err := client.SendConnect(int32(slot)); err != nil { //nolint:gosec // slot is validated to be 1-5
 			return fmt.Errorf("failed to connect to slot %d: %w", slot, err)
 		}
 

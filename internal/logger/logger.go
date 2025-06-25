@@ -70,7 +70,7 @@ func forwardLog(level, message string) {
 	}
 }
 
-// Convenience functions for common operations
+// Info logs a message at info level with optional key-value pairs
 func Info(msg interface{}, keyvals ...interface{}) {
 	Logger.Info(msg, keyvals...)
 	msgStr := fmt.Sprintf("%v", msg)

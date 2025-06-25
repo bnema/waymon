@@ -157,13 +157,17 @@ func (s *SSHServer) Stop() {
 		if s.sshServer != nil {
 			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 			defer cancel()
-			_ = s.sshServer.Shutdown(ctx)
+			if err := s.sshServer.Shutdown(ctx); err != nil {
+				logger.Errorf("Failed to shutdown SSH server: %v", err)
+			}
 		}
 
 		// Close all active sessions
 		s.mu.Lock()
 		for _, client := range s.clients {
-			_ = client.session.Close()
+			if err := client.session.Close(); err != nil {
+				logger.Errorf("Failed to close SSH session: %v", err)
+			}
 		}
 		s.clients = make(map[string]*sshClient)
 		s.mu.Unlock()
@@ -171,7 +175,9 @@ func (s *SSHServer) Stop() {
 		// Close all log files
 		s.logFilesMu.Lock()
 		for _, logFile := range s.logFiles {
-			_ = logFile.Close()
+			if err := logFile.Close(); err != nil {
+				logger.Errorf("Failed to close log file: %v", err)
+			}
 		}
 		s.logFiles = make(map[string]*os.File)
 		s.logFilesMu.Unlock()
@@ -476,12 +482,10 @@ func (s *SSHServer) handleMouseEvents(ctx context.Context, sess ssh.Session) {
 				// Handle log event separately
 				logger.Debugf("[SSH-SERVER] Received log event from client: %s", sess.RemoteAddr().String())
 				s.handleClientLog(sess.RemoteAddr().String(), logEvent)
-			} else {
+			} else if s.OnInputEvent != nil {
 				// Call normal event handler
-				if s.OnInputEvent != nil {
-					logger.Debugf("[SSH-SERVER] Forwarding input event: type=%T, sourceId=%s", inputEvent.Event, inputEvent.SourceId)
-					s.OnInputEvent(&inputEvent)
-				}
+				logger.Debugf("[SSH-SERVER] Forwarding input event: type=%T, sourceId=%s", inputEvent.Event, inputEvent.SourceId)
+				s.OnInputEvent(&inputEvent)
 			}
 		}
 	}
@@ -683,15 +687,17 @@ func (s *SSHServer) handleClientLog(clientAddr string, logEvent *protocol.LogEve
 		}
 
 		// Open log file
-		file, err := os.OpenFile(logPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
+		file, err := os.OpenFile(logPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0600)
 		if err != nil {
 			logger.Errorf("[SSH-SERVER] Failed to open client log file %s: %v", logPath, err)
 			return
 		}
 
 		// Write header
-		fmt.Fprintf(file, "\n=== Client log session started: %s from %s ===\n",
-			time.Now().Format("2006-01-02 15:04:05"), clientAddr)
+		if _, err := fmt.Fprintf(file, "\n=== Client log session started: %s from %s ===\n",
+			time.Now().Format("2006-01-02 15:04:05"), clientAddr); err != nil {
+			logger.Errorf("Failed to write client log header: %v", err)
+		}
 
 		s.logFiles[hostname] = file
 		logFile = file
@@ -708,9 +714,13 @@ func (s *SSHServer) handleClientLog(clientAddr string, logEvent *protocol.LogEve
 	}
 
 	// Write log entry
-	fmt.Fprintf(logFile, "%s %s %s: %s\n",
-		timestamp, levelStr, logEvent.LoggerName, logEvent.Message)
+	if _, err := fmt.Fprintf(logFile, "%s %s %s: %s\n",
+		timestamp, levelStr, logEvent.LoggerName, logEvent.Message); err != nil {
+		logger.Errorf("Failed to write log entry: %v", err)
+	}
 
 	// Flush the file
-	_ = logFile.Sync()
+	if err := logFile.Sync(); err != nil {
+		logger.Errorf("Failed to sync log file: %v", err)
+	}
 }

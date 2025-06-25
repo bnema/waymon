@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/bnema/waymon/internal/ipc"
+	"github.com/bnema/waymon/internal/logger"
 	"github.com/bnema/waymon/internal/ui"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/lipgloss/table"
@@ -27,7 +28,11 @@ var listCmd = &cobra.Command{
 		if err != nil {
 			return fmt.Errorf("failed to create IPC client: %w", err)
 		}
-		defer client.Close()
+		defer func() {
+			if err := client.Close(); err != nil {
+				logger.Errorf("Failed to close IPC client: %v", err)
+			}
+		}()
 
 		// Get status
 		status, err := client.GetStatus()

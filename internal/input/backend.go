@@ -103,7 +103,9 @@ func IsEvdevAvailableWithDiagnostic() (bool, string) {
 	// Additional check: verify we can open at least one device
 	for _, device := range devices {
 		// We already have opened devices from ListInputDevices, just close them
-		device.File.Close()
+		if err := device.File.Close(); err != nil {
+			logger.Errorf("Failed to close device during validation: %v", err)
+		}
 	}
 
 	// If we got here, we have working devices

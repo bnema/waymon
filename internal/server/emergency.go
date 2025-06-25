@@ -106,7 +106,9 @@ func (er *EmergencyRelease) monitorFileTriger() {
 		case <-ticker.C:
 			if _, err := os.Stat(triggerFile); err == nil {
 				logger.Warn("[EMERGENCY] Release file detected - triggering emergency release")
-				os.Remove(triggerFile) // Clean up
+				if err := os.Remove(triggerFile); err != nil {
+					logger.Errorf("Failed to remove emergency trigger file: %v", err)
+				}
 				er.triggerRelease("file")
 			}
 		case <-er.stopChan:

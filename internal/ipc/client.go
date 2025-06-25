@@ -295,7 +295,11 @@ func IsWaymonRunning() bool {
 	if err != nil {
 		return false
 	}
-	defer client.Close()
+	defer func() { 
+		if err := client.Close(); err != nil {
+			logger.Errorf("Failed to close IPC client: %v", err)
+		}
+	}()
 
 	// Try to get status - if we can connect, server is running
 	_, err = client.SendStatus()

@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/bnema/waymon/internal/ipc"
+	"github.com/bnema/waymon/internal/logger"
 	"github.com/bnema/waymon/internal/server"
 	"github.com/charmbracelet/bubbles/spinner"
 	"github.com/charmbracelet/bubbles/viewport"
@@ -263,8 +264,12 @@ func (m *ServerModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.lastKeyPress = now
 
 			// Switch to specific client by slot number via IPC
-			slot, _ := strconv.Atoi(msg.String())
-			cmd := m.sendConnectCommand(int32(slot))
+			slot, err := strconv.Atoi(msg.String())
+			if err != nil || slot < 1 || slot > 5 {
+				// Invalid slot, ignore
+				break
+			}
+			cmd := m.sendConnectCommand(int32(slot)) //nolint:gosec // slot is validated to be 1-5
 			if cmd != nil {
 				cmds = append(cmds, cmd)
 			}
@@ -380,11 +385,12 @@ func (m *ServerModel) renderServerStatusBar() string {
 
 	// Current control status
 	var controlStatus string
-	if m.localControl {
+	switch {
+	case m.localControl:
 		controlStatus = "Controlling: LOCAL"
-	} else if m.activeClient != nil {
+	case m.activeClient != nil:
 		controlStatus = fmt.Sprintf("Controlling: %s", m.activeClient.Name)
-	} else {
+	default:
 		controlStatus = "Controlling: NONE"
 	}
 
@@ -531,7 +537,11 @@ func (m *ServerModel) sendReleaseCommand() tea.Cmd {
 				},
 			}
 		}
-		defer client.Close()
+		defer func() {
+			if err := client.Close(); err != nil {
+				logger.Errorf("Failed to close IPC client: %v", err)
+			}
+		}()
 
 		// Send release command
 		if err := client.SendRelease(); err != nil {
@@ -615,7 +625,11 @@ func (m *ServerModel) sendConnectCommand(slot int32) tea.Cmd {
 				},
 			}
 		}
-		defer ipcClient.Close()
+		defer func() {
+			if err := ipcClient.Close(); err != nil {
+				logger.Errorf("Failed to close IPC client: %v", err)
+			}
+		}()
 
 		// Send connect command
 		if err := ipcClient.SendConnect(slot); err != nil {

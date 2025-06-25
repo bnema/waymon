@@ -807,6 +807,11 @@ func (ir *InputReceiver) injectEvent(event *protocol.InputEvent) error {
 	case *protocol.InputEvent_MousePosition:
 		logger.Debugf("[CLIENT-RECEIVER] Received mouse position event")
 		// Use absolute positioning if supported by the backend
+		// Validate coordinates are non-negative before conversion
+		if e.MousePosition.X < 0 || e.MousePosition.Y < 0 {
+			logger.Warnf("[CLIENT-RECEIVER] Invalid negative mouse coordinates: x=%d, y=%d", e.MousePosition.X, e.MousePosition.Y)
+			return nil
+		}
 		if err := backend.InjectMousePosition(uint32(e.MousePosition.X), uint32(e.MousePosition.Y)); err != nil {
 			logger.Warnf("[CLIENT-RECEIVER] Failed to inject absolute mouse position: %v", err)
 			// Fall back to relative movement calculation if absolute positioning fails

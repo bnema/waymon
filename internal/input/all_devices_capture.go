@@ -325,7 +325,9 @@ func (a *AllDevicesCapture) addDevice(path string) error {
 
 	// Check if device has input capabilities we care about
 	if !a.isValidInputDevice(device) {
-		device.File.Close()
+		if err := device.File.Close(); err != nil {
+			logger.Errorf("Failed to close device %s: %v", path, err)
+		}
 		return fmt.Errorf("device %s has no relevant input capabilities", path)
 	}
 
@@ -372,12 +374,16 @@ func (a *AllDevicesCapture) stopDeviceHandler(handler *deviceHandler) {
 	}
 	// Release device if grabbed
 	if handler.device != nil && handler.grabbed {
-		handler.device.Release()
+		if err := handler.device.Release(); err != nil {
+			logger.Errorf("Failed to release device %s: %v", handler.path, err)
+		}
 		handler.grabbed = false
 	}
 	// Close the device file handle
 	if handler.device != nil {
-		handler.device.File.Close()
+		if err := handler.device.File.Close(); err != nil {
+			logger.Errorf("Failed to close device %s: %v", handler.path, err)
+		}
 		handler.device = nil
 	}
 }
@@ -844,7 +850,9 @@ func (a *AllDevicesCapture) ForceReleaseDevices() {
 	// Close all devices
 	for _, handler := range a.devices {
 		if handler.device != nil {
-			handler.device.File.Close()
+			if err := handler.device.File.Close(); err != nil {
+				logger.Errorf("Failed to close device %s during force release: %v", handler.path, err)
+			}
 			handler.device = nil
 			handler.grabbed = false
 		}
@@ -920,7 +928,9 @@ func (a *AllDevicesCapture) validateAndRecoverState() {
 	if target != "" && lastActivityAge > 60*time.Second {
 		logger.Warnf("WATCHDOG: No activity for %v with devices grabbed - forcing release", lastActivityAge)
 		a.mu.Lock()
-		a.SetTarget("")
+		if err := a.SetTarget(""); err != nil {
+			logger.Errorf("Failed to clear target during watchdog release: %v", err)
+		}
 		if a.emergencyHandler != nil {
 			a.emergencyHandler()
 		}
@@ -933,8 +943,12 @@ func (a *AllDevicesCapture) validateAndRecoverState() {
 		a.mu.Lock()
 		// Re-apply the target to grab devices
 		oldTarget := a.currentTarget
-		a.SetTarget("")
-		a.SetTarget(oldTarget)
+		if err := a.SetTarget(""); err != nil {
+			logger.Errorf("Failed to clear target during re-grab: %v", err)
+		}
+		if err := a.SetTarget(oldTarget); err != nil {
+			logger.Errorf("Failed to restore target during re-grab: %v", err)
+		}
 		a.mu.Unlock()
 	}
 

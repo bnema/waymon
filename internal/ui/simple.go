@@ -100,11 +100,12 @@ func (m *SimpleClientModel) View() string {
 
 	// Capture status
 	var captureStatus string
-	if !m.connected {
+	switch {
+	case !m.connected:
 		captureStatus = MutedStyle.Render("Connect to server to enable capture")
-	} else if m.capturing {
+	case m.capturing:
 		captureStatus = SuccessStyle.Render("✓ Mouse capture active")
-	} else {
+	default:
 		captureStatus = MutedStyle.Render("○ Mouse capture inactive")
 	}
 

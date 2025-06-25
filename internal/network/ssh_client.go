@@ -66,7 +66,9 @@ func (c *SSHClient) Connect(ctx context.Context, serverAddr string) error {
 			} else {
 				logger.Debugf("SSH agent available but no keys loaded")
 			}
-			conn.Close()
+			if err := conn.Close(); err != nil {
+				logger.Errorf("Failed to close SSH agent connection: %v", err)
+			}
 		} else {
 			logger.Debugf("Failed to connect to SSH agent: %v", err)
 		}
@@ -153,7 +155,9 @@ func (c *SSHClient) Connect(ctx context.Context, serverAddr string) error {
 	// Create SSH connection over the TCP connection
 	sshConn, chans, reqs, err := ssh.NewClientConn(conn, serverAddr, config)
 	if err != nil {
-		conn.Close()
+		if closeErr := conn.Close(); closeErr != nil {
+			logger.Errorf("Failed to close connection after SSH handshake failure: %v", closeErr)
+		}
 		return fmt.Errorf("failed to create SSH connection: %w", err)
 	}
 
@@ -559,7 +563,7 @@ func (c *SSHClient) loadPrivateKey(keyPath string) (ssh.Signer, error) {
 		keyPath = filepath.Join(homeDir, keyPath[1:])
 	}
 
-	keyData, err := os.ReadFile(keyPath)
+	keyData, err := os.ReadFile(keyPath) //nolint:gosec // Reading SSH key file is intended
 	if err != nil {
 		return nil, fmt.Errorf("failed to read private key from %s: %w", keyPath, err)
 	}

@@ -155,10 +155,10 @@ func (w *wlrRandrBackend) GetMonitors() ([]*Monitor, error) {
 		monitor := &Monitor{
 			ID:      fmt.Sprintf("%d", i),
 			Name:    output.Name,
-			X:       int32(x), //nolint:gosec // display coordinates are safe to convert
-			Y:       int32(y),
-			Width:   int32(width),
-			Height:  int32(height),
+			X:       int32(x),      //nolint:gosec // display coordinates are safe to convert
+			Y:       int32(y),      //nolint:gosec // display coordinates are safe to convert
+			Width:   int32(width),  //nolint:gosec // display coordinates are safe to convert
+			Height:  int32(height), //nolint:gosec // display coordinates are safe to convert
 			Scale:   scale,
 			Primary: output.Primary,
 		}

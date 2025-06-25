@@ -285,13 +285,14 @@ func FormatSummaryHeader(title string) string {
 }
 
 func FormatSummaryStatus(allSuccess, needsRelogin bool) string {
-	if allSuccess && !needsRelogin {
+	switch {
+	case allSuccess && !needsRelogin:
 		coloredIcon := SuccessStyle.Render(IconDone)
 		return SummarySuccessStyle.Render(coloredIcon + " Setup completed successfully!")
-	} else if needsRelogin {
+	case needsRelogin:
 		coloredIcon := WarningStyle.Render(IconWarning)
 		return SummaryWarningStyle.Render(coloredIcon + " Setup completed, but requires relogin")
-	} else {
+	default:
 		coloredIcon := ErrorStyle.Render(IconError)
 		return SummaryErrorStyle.Render(coloredIcon + " Setup completed with some issues")
 	}

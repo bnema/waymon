@@ -103,11 +103,15 @@ func (r *ProgramRunner) Run(ctx context.Context, model UIModel) error {
 	}
 
 	if r.config.LogFile != "" {
-		f, err := os.OpenFile(r.config.LogFile, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
+		f, err := os.OpenFile(r.config.LogFile, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0600)
 		if err != nil {
 			return fmt.Errorf("failed to open log file: %w", err)
 		}
-		defer f.Close()
+		defer func() {
+			if err := f.Close(); err != nil {
+				logger.Errorf("Failed to close log file: %v", err)
+			}
+		}()
 		opts = append(opts, tea.WithOutput(f))
 	}
 
