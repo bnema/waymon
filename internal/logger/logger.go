@@ -250,8 +250,9 @@ func SetupFileLogging(prefix string) (*os.File, error) {
 	log.SetDefault(fileLogger)
 
 	// Configure the internal logger to use the file with prefix
-	// IMPORTANT: Preserve any existing UI notifier
+	// IMPORTANT: Preserve any existing UI notifier AND log level
 	savedNotifier := uiNotifier
+	savedLogLevel := Logger.GetLevel()
 
 	currentWriter = logFile
 	Logger = log.NewWithOptions(logFile, log.Options{
@@ -263,13 +264,19 @@ func SetupFileLogging(prefix string) (*os.File, error) {
 	// Restore the UI notifier
 	uiNotifier = savedNotifier
 
-	// Set log level
-	currentLevel := strings.ToUpper(os.Getenv("LOG_LEVEL"))
-	if currentLevel == "" {
-		currentLevel = "INFO"
+	// Preserve current log level if already set, otherwise use env var or default
+	currentLevel := savedLogLevel.String()
+	envLevel := strings.ToUpper(os.Getenv("LOG_LEVEL"))
+
+	if envLevel != "" {
+		// Environment variable takes precedence if set
+		currentLevel = envLevel
+		Logger.Infof("Setting log level to: %s (from LOG_LEVEL env var)", currentLevel)
+	} else {
+		// Keep existing level (may have been set from config)
+		Logger.Infof("Keeping current log level: %s", currentLevel)
 	}
-	// Debug: Print what level we're setting (this will go to file)
-	Logger.Infof("Setting log level to: %s (from env: %s)", currentLevel, os.Getenv("LOG_LEVEL"))
+
 	SetLevel(currentLevel)
 
 	// Test that file logging is working

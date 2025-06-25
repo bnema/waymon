@@ -231,12 +231,18 @@ func runServer(cmd *cobra.Command, args []string) error {
 	// Set config path to system-wide location for server mode
 	config.SetConfigPath("/etc/waymon/waymon.toml")
 
+	// Initialize config before trying to use it
+	if err := config.Init(); err != nil {
+		return fmt.Errorf("failed to initialize config: %w", err)
+	}
+
 	// Get configuration first to check logging settings
 	cfg := config.Get()
 
-	// Apply log level from config if set
+	// Apply log level from config BEFORE setting up file logging
 	if cfg.Logging.LogLevel != "" {
 		logger.SetLevel(cfg.Logging.LogLevel)
+		// Don't log yet - file logging not set up
 	}
 
 	// Set up file logging if enabled
@@ -247,6 +253,11 @@ func runServer(cmd *cobra.Command, args []string) error {
 		logFile, err = logger.SetupFileLogging("SERVER")
 		if err != nil {
 			return fmt.Errorf("failed to setup file logging: %w", err)
+		}
+		// Now we can log after file logging is set up
+		if cfg.Logging.LogLevel != "" {
+			logger.Infof("Server command: Set log level to '%s' from config file", cfg.Logging.LogLevel)
+			logger.Debugf("DEBUG TEST: This message should appear if debug logging is working")
 		}
 	}
 	defer func() {

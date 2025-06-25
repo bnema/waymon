@@ -1,6 +1,8 @@
 package cmd
 
 import (
+	"os"
+
 	"github.com/bnema/waymon/internal/config"
 	"github.com/bnema/waymon/internal/logger"
 	"github.com/spf13/cobra"
@@ -46,9 +48,28 @@ func initConfig() {
 	// Set log level from flag if provided
 	if logLevel != "" {
 		logger.SetLevel(logLevel)
+		logger.Infof("Setting log level to '%s' from command line flag", logLevel)
 	}
 
 	if err := config.Init(); err != nil {
 		logger.Warnf("Warning: %v", err)
+		return
+	}
+
+	// Apply log level from config file if not overridden by flag
+	if logLevel == "" {
+		cfg := config.Get()
+		if cfg.Logging.LogLevel != "" {
+			logger.SetLevel(cfg.Logging.LogLevel)
+			logger.Infof("Setting log level to '%s' from config file", cfg.Logging.LogLevel)
+		} else {
+			// Check if LOG_LEVEL env var is set
+			envLevel := os.Getenv("LOG_LEVEL")
+			if envLevel != "" {
+				logger.Infof("Using log level '%s' from LOG_LEVEL environment variable", envLevel)
+			} else {
+				logger.Info("Using default log level 'INFO' (no config, flag, or env var specified)")
+			}
+		}
 	}
 }
