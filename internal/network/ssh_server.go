@@ -14,7 +14,6 @@ import (
 	"github.com/bnema/waymon/internal/protocol"
 	"github.com/charmbracelet/ssh"
 	"github.com/charmbracelet/wish"
-	"github.com/charmbracelet/wish/activeterm"
 	gossh "golang.org/x/crypto/ssh"
 	"google.golang.org/protobuf/proto"
 )
@@ -87,7 +86,6 @@ func (s *SSHServer) Start(ctx context.Context) error {
 		wish.WithPublicKeyAuth(s.publicKeyAuth),
 		wish.WithMiddleware(
 			s.loggingMiddleware(),
-			activeterm.Middleware(),
 			s.sessionHandler(),
 		),
 	)
@@ -254,6 +252,8 @@ func (s *SSHServer) loggingMiddleware() wish.Middleware {
 func (s *SSHServer) sessionHandler() wish.Middleware {
 	return func(h ssh.Handler) ssh.Handler {
 		return func(sess ssh.Session) {
+			logger.Infof("[SSH-SERVER] Session handler called for %s", sess.RemoteAddr())
+			
 			// Check if we already have max clients BEFORE accepting the session
 			s.mu.Lock()
 			if s.maxClients > 0 && len(s.clients) >= s.maxClients {
