@@ -197,14 +197,8 @@ func (c *SSHClient) Connect(ctx context.Context, serverAddr string) error {
 	// Starting a shell would send shell prompts and other text that interferes with our protocol
 	logger.Debug("[SSH-CLIENT] Using raw session without shell for clean protocol communication")
 
-	// Start the session without a command (raw mode)
-	// This is necessary to establish the data channels
-	go func() {
-		if err := session.Run(""); err != nil {
-			// This is expected to return an error when session closes
-			logger.Debugf("[SSH-CLIENT] Session ended: %v", err)
-		}
-	}()
+	// Important: Do NOT call session.Run() as it will immediately terminate the session
+	// The session will remain open as long as we hold references to it and keep reading/writing
 
 	// No handshake messages expected from server anymore
 	// Server only sends protocol buffer messages or error text
@@ -334,8 +328,8 @@ func (c *SSHClient) receiveInputEvents(ctx context.Context) {
 				return
 			case err := <-readChan:
 				if err != nil {
-					if err == io.EOF || err == io.ErrClosedPipe {
-						logger.Info("[SSH-CLIENT] Connection closed (EOF/ErrClosedPipe)")
+					if err == io.EOF || err == io.ErrClosedPipe || err == io.ErrUnexpectedEOF {
+						logger.Infof("[SSH-CLIENT] Connection closed gracefully: %v", err)
 						return // Connection closed
 					}
 					logger.Errorf("[SSH-CLIENT] Failed to read message length: %v", err)
@@ -414,6 +408,10 @@ func (c *SSHClient) receiveInputEvents(ctx context.Context) {
 				return
 			case err := <-readChan:
 				if err != nil {
+					if err == io.EOF || err == io.ErrUnexpectedEOF {
+						logger.Infof("[SSH-CLIENT] Connection closed while reading message data: %v", err)
+						return
+					}
 					logger.Errorf("[SSH-CLIENT] Failed to read message data: %v", err)
 					continue
 				}
