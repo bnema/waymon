@@ -390,11 +390,7 @@ func (s *SSHServer) handleMouseEvents(ctx context.Context, sess ssh.Session) {
 		default:
 		}
 
-		// Validate connection state before attempting to read
-		if err := s.validateConnectionHealth(sess); err != nil {
-			logger.Warnf("[SSH-SERVER] Connection health check failed before read: %v", err)
-			return
-		}
+		// Health check removed - TCP keepalive handles connection monitoring
 
 		// Start async read for length prefix
 		go func() {
@@ -432,11 +428,7 @@ func (s *SSHServer) handleMouseEvents(ctx context.Context, sess ssh.Session) {
 				return
 			}
 
-			// Validate connection state before reading message data
-			if err := s.validateConnectionHealth(sess); err != nil {
-				logger.Warnf("[SSH-SERVER] Connection health check failed before message data read: %v", err)
-				return
-			}
+			// Health check removed - TCP keepalive handles connection monitoring
 
 			// Read event data
 			eventBuf := make([]byte, length)
@@ -450,11 +442,7 @@ func (s *SSHServer) handleMouseEvents(ctx context.Context, sess ssh.Session) {
 				return
 			}
 
-			// Final connection state validation before processing message
-			if err := s.validateConnectionHealth(sess); err != nil {
-				logger.Warnf("[SSH-SERVER] Connection health check failed before message processing: %v", err)
-				return
-			}
+			// Health check removed - TCP keepalive handles connection monitoring
 
 			// Unmarshal protobuf event with enhanced error handling
 			var inputEvent protocol.InputEvent
@@ -482,6 +470,34 @@ func (s *SSHServer) handleMouseEvents(ctx context.Context, sess ssh.Session) {
 				// Handle log event separately
 				logger.Debugf("[SSH-SERVER] Received log event from client: %s", sess.RemoteAddr().String())
 				s.handleClientLog(sess.RemoteAddr().String(), logEvent)
+			} else if controlEvent, ok := inputEvent.Event.(*protocol.InputEvent_Control); ok {
+				// Handle ping/pong messages
+				if controlEvent.Control.Type == protocol.ControlEvent_PING {
+					logger.Debugf("[SSH-SERVER] Received ping from %s, sending pong", sess.RemoteAddr().String())
+					// Get server hostname
+					hostname, err := os.Hostname()
+					if err != nil {
+						hostname = "waymon-server"
+					}
+					pongEvent := &protocol.InputEvent{
+						Event: &protocol.InputEvent_Control{
+							Control: &protocol.ControlEvent{
+								Type: protocol.ControlEvent_PONG,
+							},
+						},
+						Timestamp: time.Now().UnixNano(),
+						SourceId:  hostname,
+					}
+					if err := writeInputMessage(sess, pongEvent); err != nil {
+						logger.Warnf("[SSH-SERVER] Failed to send pong: %v", err)
+					}
+				} else if controlEvent.Control.Type == protocol.ControlEvent_PONG {
+					logger.Debugf("[SSH-SERVER] Received pong from %s", sess.RemoteAddr().String())
+				} else if s.OnInputEvent != nil {
+					// Forward other control events
+					logger.Debugf("[SSH-SERVER] Forwarding control event: type=%v, sourceId=%s", controlEvent.Control.Type, inputEvent.SourceId)
+					s.OnInputEvent(&inputEvent)
+				}
 			} else if s.OnInputEvent != nil {
 				// Call normal event handler
 				logger.Debugf("[SSH-SERVER] Forwarding input event: type=%T, sourceId=%s", inputEvent.Event, inputEvent.SourceId)
@@ -586,11 +602,7 @@ func (s *SSHServer) writeInputEvent(w io.Writer, event *protocol.InputEvent) err
 		byte(length),
 	}
 
-	// Perform health check before writing
-	if err := s.validateConnectionHealth(w); err != nil {
-		logger.Warnf("[SSH-SERVER] Connection health check failed: %v", err)
-		return fmt.Errorf("connection unhealthy: %w", err)
-	}
+	// Health check removed - TCP keepalive handles connection monitoring
 
 	if _, err := w.Write(lengthBuf); err != nil {
 		logger.Errorf("[SSH-SERVER] Failed to write length prefix: %v", err)
@@ -636,8 +648,9 @@ func (s *SSHServer) validateConnectionHealth(w io.Writer) error {
 			return fmt.Errorf("local address is nil")
 		}
 
-		logger.Debugf("[SSH-SERVER] SSH session health check passed: %s -> %s",
-			sess.RemoteAddr(), sess.LocalAddr())
+		// Health check passed - removed debug log to reduce spam
+		// logger.Debugf("[SSH-SERVER] SSH session health check passed: %s -> %s",
+		//	sess.RemoteAddr(), sess.LocalAddr())
 		return nil
 	}
 

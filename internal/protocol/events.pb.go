@@ -130,6 +130,8 @@ const (
 	ControlEvent_CLIENT_LIST_RESPONSE ControlEvent_Type = 5
 	ControlEvent_CLIENT_CONFIG        ControlEvent_Type = 6 // Client sends its configuration
 	ControlEvent_SERVER_SHUTDOWN      ControlEvent_Type = 7 // Server is shutting down gracefully
+	ControlEvent_PING                 ControlEvent_Type = 8 // Ping message for connection keepalive
+	ControlEvent_PONG                 ControlEvent_Type = 9 // Pong response to ping
 )
 
 // Enum value maps for ControlEvent_Type.
@@ -143,6 +145,8 @@ var (
 		5: "CLIENT_LIST_RESPONSE",
 		6: "CLIENT_CONFIG",
 		7: "SERVER_SHUTDOWN",
+		8: "PING",
+		9: "PONG",
 	}
 	ControlEvent_Type_value = map[string]int32{
 		"SWITCH_TO_LOCAL":      0,
@@ -153,6 +157,8 @@ var (
 		"CLIENT_LIST_RESPONSE": 5,
 		"CLIENT_CONFIG":        6,
 		"SERVER_SHUTDOWN":      7,
+		"PING":                 8,
+		"PONG":                 9,
 	}
 )
 
@@ -1336,11 +1342,11 @@ const file_internal_protocol_events_proto_rawDesc = "" +
 	"\rKeyboardEvent\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\rR\x03key\x12\x18\n" +
 	"\apressed\x18\x02 \x01(\bR\apressed\x12\x1c\n" +
-	"\tmodifiers\x18\x03 \x01(\rR\tmodifiers\"\xe0\x02\n" +
+	"\tmodifiers\x18\x03 \x01(\rR\tmodifiers\"\xf4\x02\n" +
 	"\fControlEvent\x126\n" +
 	"\x04type\x18\x01 \x01(\x0e2\".waymon.protocol.ControlEvent.TypeR\x04type\x12\x1b\n" +
 	"\ttarget_id\x18\x02 \x01(\tR\btargetId\x12B\n" +
-	"\rclient_config\x18\x03 \x01(\v2\x1d.waymon.protocol.ClientConfigR\fclientConfig\"\xb6\x01\n" +
+	"\rclient_config\x18\x03 \x01(\v2\x1d.waymon.protocol.ClientConfigR\fclientConfig\"\xca\x01\n" +
 	"\x04Type\x12\x13\n" +
 	"\x0fSWITCH_TO_LOCAL\x10\x00\x12\x14\n" +
 	"\x10SWITCH_TO_CLIENT\x10\x01\x12\x13\n" +
@@ -1349,7 +1355,9 @@ const file_internal_protocol_events_proto_rawDesc = "" +
 	"\x13CLIENT_LIST_REQUEST\x10\x04\x12\x18\n" +
 	"\x14CLIENT_LIST_RESPONSE\x10\x05\x12\x11\n" +
 	"\rCLIENT_CONFIG\x10\x06\x12\x13\n" +
-	"\x0fSERVER_SHUTDOWN\x10\a\"\xa4\x01\n" +
+	"\x0fSERVER_SHUTDOWN\x10\a\x12\b\n" +
+	"\x04PING\x10\b\x12\b\n" +
+	"\x04PONG\x10\t\"\xa4\x01\n" +
 	"\n" +
 	"ClientInfo\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x12\n" +

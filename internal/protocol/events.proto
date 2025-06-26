@@ -72,6 +72,8 @@ message ControlEvent {
     CLIENT_LIST_RESPONSE = 5;
     CLIENT_CONFIG = 6;  // Client sends its configuration
     SERVER_SHUTDOWN = 7;  // Server is shutting down gracefully
+    PING = 8;  // Ping message for connection keepalive
+    PONG = 9;  // Pong response to ping
   }
 }
 

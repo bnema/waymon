@@ -232,6 +232,9 @@ func (c *SSHClient) Connect(ctx context.Context, serverAddr string) error {
 	logger.Info("[SSH-CLIENT] Setting up log forwarding to server")
 	c.setupLogForwarding()
 
+	// Start periodic ping (every 30 seconds)
+	go c.startPeriodicPing(ctx)
+
 	return nil
 }
 
@@ -292,18 +295,13 @@ func (c *SSHClient) SendInputEvent(event *protocol.InputEvent) error {
 	c.mu.Lock()
 	writer := c.writer
 	connected := c.connected
-	session := c.session
 	c.mu.Unlock()
 
 	if !connected || writer == nil {
 		return fmt.Errorf("not connected")
 	}
 
-	// Perform connection health check before sending
-	if err := c.validateConnectionHealth(session); err != nil {
-		logger.Warnf("[SSH-CLIENT] Connection health check failed: %v", err)
-		return fmt.Errorf("connection unhealthy: %w", err)
-	}
+	// Health check removed - TCP keepalive handles connection monitoring
 
 	return writeInputMessage(writer, event)
 }
@@ -352,14 +350,7 @@ func (c *SSHClient) receiveInputEvents(ctx context.Context) {
 				return
 			}
 
-			// Perform connection health check before reading
-			if err := c.validateConnectionHealth(session); err != nil {
-				logger.Warnf("[SSH-CLIENT] Connection health check failed before read: %v", err)
-				c.mu.Lock()
-				c.connected = false
-				c.mu.Unlock()
-				return
-			}
+			// Health check removed - TCP keepalive handles connection monitoring
 
 			// Read length prefix (4 bytes) - blocking read
 			lengthBuf := make([]byte, 4)
@@ -510,6 +501,30 @@ func (c *SSHClient) receiveInputEvents(ctx context.Context) {
 			logger.Debugf("[SSH-CLIENT] Successfully received message #%d: type=%T, sourceId=%s",
 				messageCount, inputEvent.Event, inputEvent.SourceId)
 
+			// Handle ping/pong messages internally
+			if controlEvent, ok := inputEvent.Event.(*protocol.InputEvent_Control); ok {
+				if controlEvent.Control.Type == protocol.ControlEvent_PING {
+					// Respond with pong
+					logger.Debugf("[SSH-CLIENT] Received ping, sending pong")
+					pongEvent := &protocol.InputEvent{
+						Event: &protocol.InputEvent_Control{
+							Control: &protocol.ControlEvent{
+								Type: protocol.ControlEvent_PONG,
+							},
+						},
+						Timestamp: time.Now().UnixNano(),
+						SourceId:  inputEvent.SourceId, // Echo back the source
+					}
+					if err := c.SendInputEvent(pongEvent); err != nil {
+						logger.Warnf("[SSH-CLIENT] Failed to send pong: %v", err)
+					}
+					continue // Don't forward ping to callback
+				} else if controlEvent.Control.Type == protocol.ControlEvent_PONG {
+					logger.Debugf("[SSH-CLIENT] Received pong response")
+					continue // Don't forward pong to callback
+				}
+			}
+
 			// Call the callback if set
 			c.mu.Lock()
 			callback := c.onInputEvent
@@ -651,8 +666,9 @@ func (c *SSHClient) validateConnectionHealth(session *ssh.Session) error {
 		if localAddr := conn.LocalAddr(); localAddr == nil {
 			return fmt.Errorf("local address is nil - connection likely closed")
 		}
-		logger.Debugf("[SSH-CLIENT] Connection health check passed: %s -> %s",
-			conn.LocalAddr(), conn.RemoteAddr())
+		// Health check passed - removed debug log to reduce spam
+		// logger.Debugf("[SSH-CLIENT] Connection health check passed: %s -> %s",
+		//	conn.LocalAddr(), conn.RemoteAddr())
 	}
 
 	return nil
@@ -719,4 +735,43 @@ func (c *SSHClient) setupLogForwarding() {
 			fmt.Fprintf(os.Stderr, "[LOG-FORWARDER] Sent log: level=%s msg=%s\n", level, message)
 		}
 	})
+}
+
+// startPeriodicPing sends periodic ping messages to keep connection alive
+func (c *SSHClient) startPeriodicPing(ctx context.Context) {
+	logger.Info("[SSH-CLIENT] Starting periodic ping (30s interval)")
+	ticker := time.NewTicker(30 * time.Second)
+	defer ticker.Stop()
+
+	// Get hostname for source ID
+	hostname, err := os.Hostname()
+	if err != nil {
+		hostname = "unknown-client"
+	}
+
+	for {
+		select {
+		case <-ctx.Done():
+			logger.Info("[SSH-CLIENT] Stopping periodic ping")
+			return
+		case <-ticker.C:
+			// Send ping
+			pingEvent := &protocol.InputEvent{
+				Event: &protocol.InputEvent_Control{
+					Control: &protocol.ControlEvent{
+						Type: protocol.ControlEvent_PING,
+					},
+				},
+				Timestamp: time.Now().UnixNano(),
+				SourceId:  hostname,
+			}
+
+			if err := c.SendInputEvent(pingEvent); err != nil {
+				logger.Warnf("[SSH-CLIENT] Failed to send ping: %v", err)
+				// Connection might be dead, let TCP keepalive handle it
+			} else {
+				logger.Debugf("[SSH-CLIENT] Sent ping")
+			}
+		}
+	}
 }
