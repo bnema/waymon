@@ -7,6 +7,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/bnema/waymon/internal/input"
 	"github.com/bnema/waymon/internal/logger"
 )
 
@@ -129,6 +130,11 @@ func (er *EmergencyRelease) triggerRelease(reason string) {
 		if backend := er.manager.inputBackend; backend != nil {
 			if err := backend.SetTarget(""); err != nil {
 				logger.Errorf("[EMERGENCY] Failed to release input backend: %v", err)
+				
+				// Last resort: force release through backend if available
+				if allDevices, ok := backend.(*input.AllDevicesCapture); ok {
+					allDevices.ForceReleaseDevices()
+				}
 			}
 		}
 	}

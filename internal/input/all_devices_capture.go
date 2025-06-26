@@ -35,6 +35,8 @@ type AllDevicesCapture struct {
 	noGrab           bool          // Disable exclusive grab (for safer testing)
 	ctrlPressed      bool          // Track if Ctrl key is pressed
 	emergencyHandler func()        // Optional callback for emergency release
+	watchdogTimer    *time.Timer   // Watchdog timer to verify device state
+	watchdogStop     chan struct{} // Channel to stop watchdog
 }
 
 // deviceHandler manages a single input device
@@ -51,7 +53,7 @@ func NewAllDevicesCapture() *AllDevicesCapture {
 	return &AllDevicesCapture{
 		devices:        make(map[string]*deviceHandler),
 		ignoredDevices: make(map[string]bool),
-		eventChan:      make(chan *protocol.InputEvent, 1000), // Increased buffer to handle bursts
+		eventChan:      make(chan *protocol.InputEvent, 5000), // Large buffer to handle bursts
 		capturing:      false,
 		grabTimeout:    30 * time.Second, // Default 30 second safety timeout
 		emergencyKey:   evdev.KEY_ESC,    // ESC key for emergency release (requires Ctrl)
@@ -78,6 +80,10 @@ func (a *AllDevicesCapture) Start(ctx context.Context) error {
 
 	// Start event processing goroutine
 	go a.processEvents()
+
+	// Start watchdog
+	a.watchdogStop = make(chan struct{})
+	go a.watchdog()
 
 	// Discover and start capturing from existing devices
 	if err := a.discoverAndStartDevices(); err != nil {
@@ -115,9 +121,14 @@ func (a *AllDevicesCapture) Stop() error {
 	// Clear ignored devices (fresh start)
 	a.ignoredDevices = make(map[string]bool)
 
+	// Stop watchdog
+	if a.watchdogStop != nil {
+		close(a.watchdogStop)
+	}
+
 	// Close event channel
 	close(a.eventChan)
-	a.eventChan = make(chan *protocol.InputEvent, 1000) // Match the initial buffer size
+	a.eventChan = make(chan *protocol.InputEvent, 5000) // Match the initial buffer size
 
 	a.capturing = false
 	logger.Info("All-devices input capture stopped")
@@ -142,9 +153,11 @@ func (a *AllDevicesCapture) SetTarget(clientID string) error {
 
 		// Release all devices when controlling local system
 		var releaseCount int
+		var releaseErrors []string
 		for _, handler := range a.devices {
 			if handler.device != nil && handler.grabbed {
 				if err := handler.device.Release(); err != nil {
+					releaseErrors = append(releaseErrors, fmt.Sprintf("%s: %v", handler.path, err))
 					logger.Errorf("Failed to release device %s: %v", handler.path, err)
 				} else {
 					handler.grabbed = false
@@ -152,7 +165,12 @@ func (a *AllDevicesCapture) SetTarget(clientID string) error {
 				}
 			}
 		}
-		if releaseCount > 0 {
+		
+		// If normal release failed, force release
+		if len(releaseErrors) > 0 {
+			logger.Errorf("Failed to release %d devices normally, attempting force release", len(releaseErrors))
+			a.ForceReleaseDevices()
+		} else if releaseCount > 0 {
 			logger.Infof("Released %d devices", releaseCount)
 		}
 		logger.Info("Input capture target cleared - controlling local system")
@@ -189,11 +207,28 @@ func (a *AllDevicesCapture) SetTarget(clientID string) error {
 				a.mu.Lock()
 				if a.currentTarget != "" {
 					a.currentTarget = ""
+					var releaseErrors []string
 					for _, handler := range a.devices {
 						if handler.device != nil && handler.grabbed {
-							handler.device.Release()
-							handler.grabbed = false
+							if err := handler.device.Release(); err != nil {
+								releaseErrors = append(releaseErrors, fmt.Sprintf("%s: %v", handler.path, err))
+								logger.Errorf("Failed to release device %s in safety timeout: %v", handler.path, err)
+							} else {
+								handler.grabbed = false
+							}
 						}
+					}
+					if len(releaseErrors) > 0 {
+						logger.Errorf("CRITICAL: Failed to release %d devices in safety timeout", len(releaseErrors))
+						// Force ungrab by closing and reopening devices
+						a.ForceReleaseDevices()
+					}
+					// Always trigger emergency handler in safety timeout
+					if a.emergencyHandler != nil {
+						a.mu.Unlock()
+						logger.Warn("Emergency handler triggered from input backend")
+						a.emergencyHandler()
+						return
 					}
 				}
 				a.mu.Unlock()
@@ -320,8 +355,16 @@ func (a *AllDevicesCapture) stopDeviceHandler(handler *deviceHandler) {
 	if handler.cancel != nil {
 		handler.cancel()
 	}
-	// evdev devices are automatically closed when the process exits
-	// No explicit Close() method needed
+	// Release device if grabbed
+	if handler.device != nil && handler.grabbed {
+		handler.device.Release()
+		handler.grabbed = false
+	}
+	// Close the device file handle
+	if handler.device != nil {
+		handler.device.File.Close()
+		handler.device = nil
+	}
 }
 
 // isValidInputDevice checks if a device has input capabilities we care about
@@ -553,14 +596,18 @@ func (a *AllDevicesCapture) captureFromDevice(ctx context.Context, handler *devi
 							event.Value, ctrlPressed, currentTarget, noGrab)
 					}
 
-					// Only check emergency key if we're grabbing devices and Ctrl is pressed
-					if !noGrab && event.Code == emergencyKey && event.Value == 1 && currentTarget != "" && ctrlPressed {
+					// Check emergency key regardless of grab state for safety
+					if event.Code == emergencyKey && event.Value == 1 && ctrlPressed {
 						logger.Warnf("Emergency release triggered - Ctrl+ESC pressed")
 						// Use goroutine to avoid deadlock
 						go func() {
 							// First try to release at our level
 							if err := a.SetTarget(""); err != nil {
 								logger.Errorf("Failed to release on emergency: %v", err)
+								// Force release if normal release fails
+								a.mu.Lock()
+								a.ForceReleaseDevices()
+								a.mu.Unlock()
 							}
 
 							// Also notify the handler if set (ClientManager)
@@ -599,11 +646,27 @@ func (a *AllDevicesCapture) sendEvent(event *protocol.InputEvent) {
 	}
 	a.mu.Unlock()
 
-	select {
-	case a.eventChan <- event:
-	default:
-		// Channel full, drop event
-		logger.Warnf("Event channel full, dropping event")
+	// Try to send with a short timeout for important events
+	if event.GetControl() != nil || event.GetKeyboard() != nil {
+		// Critical events - try harder to deliver
+		select {
+		case a.eventChan <- event:
+		case <-time.After(10 * time.Millisecond):
+			logger.Errorf("CRITICAL: Event channel full, dropping important event: %T", event.Event)
+			// Force clear some space by dropping old events
+			select {
+			case <-a.eventChan:
+				a.eventChan <- event
+			default:
+			}
+		}
+	} else {
+		// Non-critical events - drop immediately if full
+		select {
+		case a.eventChan <- event:
+		default:
+			logger.Debugf("Event channel full, dropping non-critical event")
+		}
 	}
 }
 
@@ -755,5 +818,114 @@ func (a *AllDevicesCapture) processEvents() {
 				logger.Warnf("No callback set for input events!")
 			}
 		}
+	}
+}
+
+// ForceReleaseDevices forcefully releases all devices by closing and reopening them
+// This is a last resort when normal Release() fails
+func (a *AllDevicesCapture) ForceReleaseDevices() {
+	logger.Warn("CRITICAL: Force releasing all devices by closing and reopening")
+	
+	// Close all devices
+	for _, handler := range a.devices {
+		if handler.device != nil {
+			handler.device.File.Close()
+			handler.device = nil
+			handler.grabbed = false
+		}
+	}
+	
+	// Clear devices list
+	a.devices = make(map[string]*deviceHandler)
+	
+	// Rediscover and open devices (but don't grab them)
+	if err := a.discoverAndStartDevices(); err != nil {
+		logger.Errorf("Failed to rediscover devices after force release: %v", err)
+	}
+}
+
+// watchdog monitors device state and ensures they can be released
+func (a *AllDevicesCapture) watchdog() {
+	ticker := time.NewTicker(5 * time.Second)
+	defer ticker.Stop()
+	
+	for {
+		select {
+		case <-ticker.C:
+			a.validateAndRecoverState()
+			
+		case <-a.watchdogStop:
+			logger.Info("Watchdog stopped")
+			return
+		}
+	}
+}
+
+// validateAndRecoverState checks device state consistency and recovers if needed
+func (a *AllDevicesCapture) validateAndRecoverState() {
+	a.mu.RLock()
+	target := a.currentTarget
+	deviceCount := len(a.devices)
+	grabbedCount := 0
+	var inconsistentDevices []string
+	
+	for path, handler := range a.devices {
+		if handler.grabbed {
+			grabbedCount++
+			// Verify device is actually grabbed at kernel level
+			if handler.device == nil {
+				inconsistentDevices = append(inconsistentDevices, path)
+			}
+		}
+	}
+	lastActivityAge := time.Since(a.lastActivity)
+	a.mu.RUnlock()
+	
+	// Fix inconsistent device states
+	if len(inconsistentDevices) > 0 {
+		logger.Errorf("WATCHDOG: Found %d devices marked as grabbed but with nil device handle", len(inconsistentDevices))
+		a.mu.Lock()
+		for _, path := range inconsistentDevices {
+			if handler, ok := a.devices[path]; ok {
+				handler.grabbed = false
+			}
+		}
+		a.mu.Unlock()
+	}
+	
+	// Check for inconsistent state
+	if target == "" && grabbedCount > 0 {
+		logger.Errorf("WATCHDOG: Inconsistent state - no target but %d devices grabbed", grabbedCount)
+		a.mu.Lock()
+		a.ForceReleaseDevices()
+		a.mu.Unlock()
+	}
+	
+	// Check for stuck grab (no activity for extended period)
+	if target != "" && lastActivityAge > 60*time.Second {
+		logger.Warnf("WATCHDOG: No activity for %v with devices grabbed - forcing release", lastActivityAge)
+		a.mu.Lock()
+		a.SetTarget("")
+		if a.emergencyHandler != nil {
+			a.emergencyHandler()
+		}
+		a.mu.Unlock()
+	}
+	
+	// Verify all expected devices are present
+	if target != "" && grabbedCount == 0 && deviceCount > 0 {
+		logger.Warnf("WATCHDOG: Target set but no devices grabbed - attempting to re-grab")
+		a.mu.Lock()
+		// Re-apply the target to grab devices
+		oldTarget := a.currentTarget
+		a.SetTarget("")
+		a.SetTarget(oldTarget)
+		a.mu.Unlock()
+	}
+	
+	// Log state periodically when devices are grabbed
+	if grabbedCount > 0 {
+		logger.Debugf("WATCHDOG: %d/%d devices grabbed, target=%s, last_activity=%v ago", 
+			grabbedCount, deviceCount, target, lastActivityAge)
 	}
 }
