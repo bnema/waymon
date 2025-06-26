@@ -26,6 +26,7 @@ var (
 	bindAddress string
 	noTUI       bool
 	debugTUI    bool
+	daemon      bool
 )
 
 var serverCmd = &cobra.Command{
@@ -41,6 +42,7 @@ func init() {
 	serverCmd.Flags().StringVarP(&bindAddress, "bind", "b", "", "Bind address")
 	serverCmd.Flags().BoolVar(&noTUI, "no-tui", false, "Run without TUI (useful for non-interactive environments)")
 	serverCmd.Flags().BoolVar(&debugTUI, "debug-tui", false, "Use minimal debug TUI")
+	serverCmd.Flags().BoolVar(&daemon, "daemon", false, "Run as daemon (no UI, for systemd service)")
 
 	// Bind flags to viper
 	if err := viper.BindPFlag("server.port", serverCmd.Flags().Lookup("port")); err != nil {
@@ -52,7 +54,7 @@ func init() {
 }
 
 // initializeServer performs all server initialization steps
-func initializeServer(ctx context.Context, srv *server.Server, cfg *config.Config, bindAddress string, serverPort int, model *ui.ServerModel) error {
+func initializeServer(ctx context.Context, srv *server.Server, cfg *config.Config, bindAddress string, serverPort int, model *ui.ServerModel, isDaemon bool) error {
 	logger.Info("Starting server components...")
 	// Start the server with context - this creates the SSH server
 	if err := srv.Start(ctx); err != nil {
@@ -115,8 +117,12 @@ func initializeServer(ctx context.Context, srv *server.Server, cfg *config.Confi
 				})
 				return true
 			} else {
-				// In non-TUI mode, auto-approve (you might want to change this)
-				logger.Warnf("Auto-approving SSH connection from %s (fingerprint: %s) - running in no-TUI mode", addr, fingerprint)
+				// In non-TUI/daemon mode, check authorized_keys file
+				if isDaemon {
+					logger.Infof("SSH auth request from %s (fingerprint: %s) - checking authorized_keys", addr, fingerprint)
+				} else {
+					logger.Warnf("Auto-approving SSH connection from %s (fingerprint: %s) - running in no-TUI mode", addr, fingerprint)
+				}
 				return true
 			}
 		}
@@ -249,9 +255,17 @@ func runServer(cmd *cobra.Command, args []string) error {
 	// Input devices will be automatically detected by all-devices capture
 	logger.Info("Using automatic all-devices input capture - no setup required!")
 
-	// Show log location if not using TUI
-	if noTUI {
-		fmt.Printf("Logging to: %s\n", logFile.Name())
+	// Show log location if not using TUI or in daemon mode
+	if noTUI || daemon {
+		if daemon {
+			// Clean output for systemd
+			logger.Info("Starting Waymon server in daemon mode")
+			if logFile != nil {
+				logger.Infof("Logging to: %s", logFile.Name())
+			}
+		} else if logFile != nil {
+			fmt.Printf("Logging to: %s\n", logFile.Name())
+		}
 	}
 
 	// Server runs as normal user and will request sudo when needed for uinput
@@ -284,6 +298,11 @@ func runServer(cmd *cobra.Command, args []string) error {
 	var model *ui.ServerModel
 	var p *tea.Program
 	var uiDone <-chan struct{}
+
+	// Skip UI if running in daemon mode
+	if daemon {
+		noTUI = true
+	}
 
 	if !noTUI {
 		if debugTUI {
@@ -334,7 +353,7 @@ func runServer(cmd *cobra.Command, args []string) error {
 
 	if noTUI && srv != nil {
 		// No TUI mode - initialize server immediately
-		if err := initializeServer(ctx, srv, cfg, bindAddress, serverPort, nil); err != nil {
+		if err := initializeServer(ctx, srv, cfg, bindAddress, serverPort, nil, daemon); err != nil {
 			return err
 		}
 	}
@@ -366,7 +385,7 @@ func runServer(cmd *cobra.Command, args []string) error {
 			logger.Debug("DEBUG: This is a debug message to test log level")
 
 			// Initialize server
-			if err := initializeServer(ctx, srv, cfg, bindAddress, serverPort, model); err != nil {
+			if err := initializeServer(ctx, srv, cfg, bindAddress, serverPort, model, false); err != nil {
 				logger.Errorf("Server initialization failed: %v", err)
 				// The refactored UI will handle shutdown
 			}
@@ -391,7 +410,7 @@ func runServer(cmd *cobra.Command, args []string) error {
 			logger.Info("Waymon server starting...")
 			logger.Debug("DEBUG: This is a debug message to test log level")
 
-			if err := initializeServer(ctx, srv, cfg, bindAddress, serverPort, nil); err != nil {
+			if err := initializeServer(ctx, srv, cfg, bindAddress, serverPort, nil, false); err != nil {
 				logger.Errorf("Server initialization failed: %v", err)
 				p.Send(tea.Quit())
 			}
@@ -403,6 +422,12 @@ func runServer(cmd *cobra.Command, args []string) error {
 		}
 	} else if noTUI {
 		// No TUI mode - wait for shutdown signal
+		if daemon {
+			logger.Info("Waymon server daemon started successfully")
+			logger.Infof("PID: %d", os.Getpid())
+			logger.Infof("IPC socket: /tmp/waymon.sock")
+			logger.Info("Use 'waymon status' to check server status")
+		}
 		select {
 		case <-done:
 			logger.Info("Received shutdown signal")

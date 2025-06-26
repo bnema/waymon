@@ -138,6 +138,11 @@ func (c *Client) IsWaymonRunning() bool {
 	return err == nil
 }
 
+// GetStatus is a convenience method that calls SendStatus
+func (c *Client) GetStatus() (*pb.StatusResponse, error) {
+	return c.SendStatus()
+}
+
 // SendRelease sends a release command to return control to the local machine
 func (c *Client) SendRelease() error {
 	msg, err := NewReleaseMessage()
