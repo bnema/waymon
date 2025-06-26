@@ -138,6 +138,56 @@ func (c *Client) IsWaymonRunning() bool {
 	return err == nil
 }
 
+// SendRelease sends a release command to return control to the local machine
+func (c *Client) SendRelease() error {
+	msg, err := NewReleaseMessage()
+	if err != nil {
+		return fmt.Errorf("failed to create release message: %w", err)
+	}
+
+	response, err := c.sendMessage(msg)
+	if err != nil {
+		return err
+	}
+
+	// Check for error response
+	if response.Type == pb.IPCMessageType_IPC_MESSAGE_TYPE_ERROR {
+		errResp, _ := GetErrorResponse(response)
+		if errResp != nil {
+			return fmt.Errorf("server error: %s", errResp.Error)
+		}
+	}
+
+	return nil
+}
+
+// SendConnect sends a connect command to switch to a specific computer slot
+func (c *Client) SendConnect(slot int32) error {
+	if slot < 1 || slot > 5 {
+		return fmt.Errorf("invalid slot number: %d (must be 1-5)", slot)
+	}
+
+	msg, err := NewConnectMessage(slot)
+	if err != nil {
+		return fmt.Errorf("failed to create connect message: %w", err)
+	}
+
+	response, err := c.sendMessage(msg)
+	if err != nil {
+		return err
+	}
+
+	// Check for error response
+	if response.Type == pb.IPCMessageType_IPC_MESSAGE_TYPE_ERROR {
+		errResp, _ := GetErrorResponse(response)
+		if errResp != nil {
+			return fmt.Errorf("server error: %s", errResp.Error)
+		}
+	}
+
+	return nil
+}
+
 // sendMessage sends a message and returns the response
 func (c *Client) sendMessage(msg *pb.IPCMessage) (*pb.IPCMessage, error) {
 	// Connect to socket
@@ -226,4 +276,23 @@ func isConnectionRefused(err error) bool {
 		}
 	}
 	return false
+}
+
+// Close closes the client connection
+func (c *Client) Close() error {
+	// Nothing to close as we create connections per request
+	return nil
+}
+
+// IsWaymonRunning checks if the waymon server is running
+func IsWaymonRunning() bool {
+	client, err := NewClient()
+	if err != nil {
+		return false
+	}
+	defer client.Close()
+
+	// Try to get status - if we can connect, server is running
+	_, err = client.SendStatus()
+	return err == nil
 }

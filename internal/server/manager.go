@@ -986,6 +986,60 @@ func (cm *ClientManager) HandleStatusQuery(query *pb.StatusQuery) (*pb.IPCMessag
 	)
 }
 
+// HandleReleaseCommand implements ipc.MessageHandler
+func (cm *ClientManager) HandleReleaseCommand() (*pb.IPCMessage, error) {
+	logger.Debug("[SERVER-MANAGER] HandleReleaseCommand: releasing control to local")
+	
+	// Switch to local
+	if err := cm.SwitchToLocal(); err != nil {
+		return nil, fmt.Errorf("failed to release control: %w", err)
+	}
+	
+	// Return status response with current state
+	return cm.HandleStatusQuery(&pb.StatusQuery{})
+}
+
+// HandleConnectCommand implements ipc.MessageHandler
+func (cm *ClientManager) HandleConnectCommand(slot int32) (*pb.IPCMessage, error) {
+	logger.Debugf("[SERVER-MANAGER] HandleConnectCommand: connecting to slot %d", slot)
+	
+	cm.mu.RLock()
+	
+	// Get sorted list of client IDs
+	clientIDs := make([]string, 0, len(cm.clients))
+	for id := range cm.clients {
+		clientIDs = append(clientIDs, id)
+	}
+	sort.Strings(clientIDs)
+	
+	// Slot 0 is server (local), slots 1-5 are clients
+	if slot == 0 {
+		cm.mu.RUnlock()
+		if err := cm.SwitchToLocal(); err != nil {
+			return nil, fmt.Errorf("failed to switch to local: %w", err)
+		}
+	} else if slot >= 1 && slot <= 5 {
+		clientIndex := int(slot - 1)
+		if clientIndex >= len(clientIDs) {
+			cm.mu.RUnlock()
+			return nil, fmt.Errorf("no client in slot %d", slot)
+		}
+		
+		clientID := clientIDs[clientIndex]
+		cm.mu.RUnlock()
+		
+		if err := cm.SwitchToClient(clientID); err != nil {
+			return nil, fmt.Errorf("failed to switch to client in slot %d: %w", slot, err)
+		}
+	} else {
+		cm.mu.RUnlock()
+		return nil, fmt.Errorf("invalid slot number: %d (must be 0-5)", slot)
+	}
+	
+	// Return status response with current state
+	return cm.HandleStatusQuery(&pb.StatusQuery{})
+}
+
 // switchToNextClientOrLocal switches to the next client in rotation, or to local if only one client
 func (cm *ClientManager) switchToNextClientOrLocal() error {
 	cm.mu.Lock()

@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/bnema/waymon/internal/ipc"
 	"github.com/bnema/waymon/internal/server"
 	"github.com/charmbracelet/bubbles/spinner"
 	"github.com/charmbracelet/bubbles/viewport"
@@ -229,26 +230,9 @@ func (m *ServerModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// Normal key handling
 		switch msg.String() {
 		case "0", "esc":
-			// Switch to local control
-			if m.clientManager != nil {
-				go func() {
-					if err := m.clientManager.SwitchToLocal(); err != nil {
-						m.base.AddLogEntry("error", fmt.Sprintf("Failed to switch to local: %v", err))
-					}
-				}()
-
-				// Update state immediately
-				m.localControl = true
-				m.selectedClientIndex = -1
-				m.activeClient = nil
-
-				m.base.AddLogEntry("info", "Released client control - now controlling local system")
-				m.updateViewport()
-
-				// Schedule a delayed refresh
-				cmd := tea.Tick(200*time.Millisecond, func(t time.Time) tea.Msg {
-					return RefreshClientListMsg{}
-				})
+			// Switch to local control via IPC
+			cmd := m.sendReleaseCommand()
+			if cmd != nil {
 				cmds = append(cmds, cmd)
 			}
 
@@ -265,54 +249,20 @@ func (m *ServerModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 
 		case "1", "2", "3", "4", "5":
-			// Switch to specific client by number
-			clientNum, _ := strconv.Atoi(msg.String())
-			if m.clientManager != nil && clientNum <= len(m.clients) && clientNum > 0 {
-				client := m.clients[clientNum-1]
-				
-				m.base.AddLogEntry("debug", fmt.Sprintf("Key %s pressed: localControl=%v, clients=%d, switching to %s", 
-					msg.String(), m.localControl, len(m.clients), client.Name))
-
-				go func() {
-					if err := m.clientManager.SwitchToClient(client.ID); err != nil {
-						m.base.AddLogEntry("error", fmt.Sprintf("Failed to switch to client %s: %v", client.Name, err))
-					}
-				}()
-
-				// Update state immediately
-				m.localControl = false
-				m.selectedClientIndex = clientNum - 1
-				m.activeClient = client
-
-				m.base.AddLogEntry("info", fmt.Sprintf("Switching to control %s (%s)...", client.Name, client.Address))
-				m.updateViewport()
-
-				// Schedule a refresh
-				cmd := tea.Tick(200*time.Millisecond, func(t time.Time) tea.Msg {
-					return RefreshClientListMsg{}
-				})
+			// Switch to specific client by slot number via IPC
+			slot, _ := strconv.Atoi(msg.String())
+			cmd := m.sendConnectCommand(int32(slot))
+			if cmd != nil {
 				cmds = append(cmds, cmd)
-			} else {
-				m.base.AddLogEntry("debug", fmt.Sprintf("Key %s pressed but conditions not met: clientManager=%v, clientNum=%d, len(clients)=%d", 
-					msg.String(), m.clientManager != nil, clientNum, len(m.clients)))
 			}
 
 		case "r", "R":
-			// Manual emergency release
-			if m.clientManager != nil && !m.localControl {
-				go func() {
-					if err := m.clientManager.SwitchToLocal(); err != nil {
-						m.base.AddLogEntry("error", fmt.Sprintf("Failed to release control: %v", err))
-					} else {
-						m.base.AddLogEntry("info", "Manual emergency release - control returned to local")
-					}
-				}()
-
-				// Update UI state immediately
-				m.localControl = true
-				m.selectedClientIndex = -1
-				m.activeClient = nil
-				m.updateViewport()
+			// Manual emergency release via IPC
+			if !m.localControl {
+				cmd := m.sendReleaseCommand()
+				if cmd != nil {
+					cmds = append(cmds, cmd)
+				}
 			}
 
 		case "g":
@@ -553,6 +503,107 @@ func (m *ServerModel) SetProgram(p *tea.Program) {
 // GetProgram returns the tea.Program reference
 func (m *ServerModel) GetProgram() *tea.Program {
 	return m.program
+}
+
+// sendReleaseCommand sends an IPC release command and updates UI
+func (m *ServerModel) sendReleaseCommand() tea.Cmd {
+	return func() tea.Msg {
+		// Create IPC client
+		client, err := ipc.NewClient()
+		if err != nil {
+			return LogMsg{
+				Entry: LogEntry{
+					Level:   "error",
+					Message: fmt.Sprintf("Failed to create IPC client: %v", err),
+				},
+			}
+		}
+		defer client.Close()
+
+		// Send release command
+		if err := client.SendRelease(); err != nil {
+			return LogMsg{
+				Entry: LogEntry{
+					Level:   "error",
+					Message: fmt.Sprintf("Failed to send release command: %v", err),
+				},
+			}
+		}
+
+		// Update UI state immediately
+		m.localControl = true
+		m.selectedClientIndex = -1
+		m.activeClient = nil
+
+		// Schedule a refresh
+		go func() {
+			time.Sleep(200 * time.Millisecond)
+			if m.program != nil {
+				m.program.Send(RefreshClientListMsg{})
+			}
+		}()
+
+		return LogMsg{
+			Entry: LogEntry{
+				Level:   "info",
+				Message: "Released client control - now controlling local system",
+			},
+		}
+	}
+}
+
+// sendConnectCommand sends an IPC connect command and updates UI
+func (m *ServerModel) sendConnectCommand(slot int32) tea.Cmd {
+	// Validate slot and get client info
+	if slot < 1 || slot > 5 || int(slot) > len(m.clients) {
+		return nil
+	}
+
+	client := m.clients[slot-1]
+	
+	return func() tea.Msg {
+		// Create IPC client
+		ipcClient, err := ipc.NewClient()
+		if err != nil {
+			return LogMsg{
+				Entry: LogEntry{
+					Level:   "error",
+					Message: fmt.Sprintf("Failed to create IPC client: %v", err),
+				},
+			}
+		}
+		defer ipcClient.Close()
+
+		// Send connect command
+		if err := ipcClient.SendConnect(slot); err != nil {
+			return LogMsg{
+				Entry: LogEntry{
+					Level:   "error",
+					Message: fmt.Sprintf("Failed to send connect command: %v", err),
+				},
+			}
+		}
+
+		// Update UI state immediately
+		m.localControl = false
+		m.selectedClientIndex = int(slot - 1)
+		m.activeClient = client
+
+		// Schedule a refresh
+		go func() {
+			time.Sleep(200 * time.Millisecond)
+			if m.program != nil {
+				m.program.Send(RefreshClientListMsg{})
+			}
+		}()
+
+		return LogMsg{
+			Entry: LogEntry{
+				Level:   "info",
+				Message: fmt.Sprintf("Switching to control %s (%s)...", client.Name, client.Address),
+			},
+		}
+	}
 }
 
 // RunServerUI runs the server UI with proper lifecycle management

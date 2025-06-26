@@ -142,3 +142,53 @@ func GetErrorResponse(msg *pb.IPCMessage) (*pb.ErrorResponse, error) {
 
 	return errResp.ErrorResponse, nil
 }
+
+// NewReleaseMessage creates a new release command message
+func NewReleaseMessage() (*pb.IPCMessage, error) {
+	return &pb.IPCMessage{
+		Type: pb.IPCMessageType_IPC_MESSAGE_TYPE_RELEASE,
+		Payload: &pb.IPCMessage_ReleaseCommand{
+			ReleaseCommand: &pb.ReleaseCommand{},
+		},
+	}, nil
+}
+
+// NewConnectMessage creates a new connect command message
+func NewConnectMessage(slot int32) (*pb.IPCMessage, error) {
+	return &pb.IPCMessage{
+		Type: pb.IPCMessageType_IPC_MESSAGE_TYPE_CONNECT,
+		Payload: &pb.IPCMessage_ConnectCommand{
+			ConnectCommand: &pb.ConnectCommand{
+				Slot: slot,
+			},
+		},
+	}, nil
+}
+
+// GetReleaseCommand extracts release command from message
+func GetReleaseCommand(msg *pb.IPCMessage) (*pb.ReleaseCommand, error) {
+	if msg.Type != pb.IPCMessageType_IPC_MESSAGE_TYPE_RELEASE {
+		return nil, fmt.Errorf("message is not a release command")
+	}
+
+	cmd, ok := msg.Payload.(*pb.IPCMessage_ReleaseCommand)
+	if !ok {
+		return nil, fmt.Errorf("invalid release command payload")
+	}
+
+	return cmd.ReleaseCommand, nil
+}
+
+// GetConnectCommand extracts connect command from message
+func GetConnectCommand(msg *pb.IPCMessage) (*pb.ConnectCommand, error) {
+	if msg.Type != pb.IPCMessageType_IPC_MESSAGE_TYPE_CONNECT {
+		return nil, fmt.Errorf("message is not a connect command")
+	}
+
+	cmd, ok := msg.Payload.(*pb.IPCMessage_ConnectCommand)
+	if !ok {
+		return nil, fmt.Errorf("invalid connect command payload")
+	}
+
+	return cmd.ConnectCommand, nil
+}

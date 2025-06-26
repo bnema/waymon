@@ -77,6 +77,8 @@ enum IPCMessageType {
   IPC_MESSAGE_TYPE_STATUS = 2;
   IPC_MESSAGE_TYPE_STATUS_RESPONSE = 3;
   IPC_MESSAGE_TYPE_ERROR = 4;
+  IPC_MESSAGE_TYPE_RELEASE = 5;
+  IPC_MESSAGE_TYPE_CONNECT = 6;
 }
 
 // IPCMessage represents an IPC message
@@ -87,6 +89,8 @@ message IPCMessage {
     StatusQuery status_query = 3;
     StatusResponse status_response = 4;
     ErrorResponse error_response = 5;
+    ReleaseCommand release_command = 6;
+    ConnectCommand connect_command = 7;
   }
 }
 
@@ -122,4 +126,13 @@ message StatusResponse {
 // ErrorResponse represents an error response
 message ErrorResponse {
   string error = 1;
+}
+
+// ReleaseCommand releases control back to the server (local)
+message ReleaseCommand {
+}
+
+// ConnectCommand connects to a specific computer by slot number
+message ConnectCommand {
+  int32 slot = 1; // Slot number (1-5)
 }

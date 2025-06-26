@@ -31,6 +31,8 @@ type SocketServer struct {
 type MessageHandler interface {
 	HandleSwitchCommand(cmd *pb.SwitchCommand) (*pb.IPCMessage, error)
 	HandleStatusQuery(query *pb.StatusQuery) (*pb.IPCMessage, error)
+	HandleReleaseCommand() (*pb.IPCMessage, error)
+	HandleConnectCommand(slot int32) (*pb.IPCMessage, error)
 }
 
 // NewSocketServer creates a new socket server
@@ -210,6 +212,34 @@ func (s *SocketServer) handleMessage(msg *pb.IPCMessage) *pb.IPCMessage {
 		}
 
 		response, err := s.handler.HandleStatusQuery(query)
+		if err != nil {
+			errMsg, _ := NewErrorMessage(err.Error())
+			return errMsg
+		}
+		return response
+
+	case pb.IPCMessageType_IPC_MESSAGE_TYPE_RELEASE:
+		_, err := GetReleaseCommand(msg)
+		if err != nil {
+			errMsg, _ := NewErrorMessage(fmt.Sprintf("Invalid release command: %v", err))
+			return errMsg
+		}
+
+		response, err := s.handler.HandleReleaseCommand()
+		if err != nil {
+			errMsg, _ := NewErrorMessage(err.Error())
+			return errMsg
+		}
+		return response
+
+	case pb.IPCMessageType_IPC_MESSAGE_TYPE_CONNECT:
+		cmd, err := GetConnectCommand(msg)
+		if err != nil {
+			errMsg, _ := NewErrorMessage(fmt.Sprintf("Invalid connect command: %v", err))
+			return errMsg
+		}
+
+		response, err := s.handler.HandleConnectCommand(cmd.Slot)
 		if err != nil {
 			errMsg, _ := NewErrorMessage(err.Error())
 			return errMsg
