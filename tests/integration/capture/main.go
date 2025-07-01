@@ -411,7 +411,7 @@ func (t *CaptureTest) TestInteractiveCombined() TestResult {
 func logEvent(event *protocol.InputEvent) {
 	switch ev := event.Event.(type) {
 	case *protocol.InputEvent_MouseMove:
-		fmt.Println(dimStyle.Render(fmt.Sprintf("[MouseMove] dx=%d, dy=%d", ev.MouseMove.Dx, ev.MouseMove.Dy)))
+		fmt.Println(dimStyle.Render(fmt.Sprintf("[MouseMove] dx=%.2f, dy=%.2f", ev.MouseMove.Dx, ev.MouseMove.Dy)))
 	case *protocol.InputEvent_MouseButton:
 		action := "released"
 		if ev.MouseButton.Pressed {
@@ -419,7 +419,7 @@ func logEvent(event *protocol.InputEvent) {
 		}
 		fmt.Println(dimStyle.Render(fmt.Sprintf("[MouseButton] button=%d %s", ev.MouseButton.Button, action)))
 	case *protocol.InputEvent_MouseScroll:
-		fmt.Println(dimStyle.Render(fmt.Sprintf("[MouseScroll] dx=%d, dy=%d", ev.MouseScroll.Dx, ev.MouseScroll.Dy)))
+		fmt.Println(dimStyle.Render(fmt.Sprintf("[MouseScroll] dx=%.2f, dy=%.2f", ev.MouseScroll.Dx, ev.MouseScroll.Dy)))
 	case *protocol.InputEvent_Keyboard:
 		action := "released"
 		if ev.Keyboard.Pressed {
