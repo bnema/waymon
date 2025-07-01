@@ -635,3 +635,9 @@ type (
 	SetClientManagerMsg struct{ ClientManager interface{} }
 	SetServerMsg        struct{ Server interface{ Stop() } }
 )
+
+// ControlStateChangedMsg notifies the UI when control state changes between local and remote
+type ControlStateChangedMsg struct {
+	LocalControl bool
+	ClientName   string
+}

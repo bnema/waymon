@@ -167,11 +167,33 @@ func initializeServer(ctx context.Context, srv *server.Server, cfg *config.Confi
 						Message:   message,
 					})
 
-					// Trigger a client list refresh when clients connect/disconnect
-					if strings.Contains(message, "Client connected:") || strings.Contains(message, "Client disconnected:") {
-						// Send a refresh message to the UI
-						if p := model.GetProgram(); p != nil {
+					// Send program messages for state changes
+					if p := model.GetProgram(); p != nil {
+						// Trigger a client list refresh when clients connect/disconnect
+						if strings.Contains(message, "Client connected:") || strings.Contains(message, "Client disconnected:") {
 							p.Send(ui.RefreshClientListMsg{})
+						}
+
+						// Send control state change messages
+						if strings.Contains(message, "Released client control - now controlling local system") {
+							p.Send(ui.ControlStateChangedMsg{
+								LocalControl: true,
+								ClientName:   "",
+							})
+						} else if strings.Contains(message, "Started controlling client:") {
+							// Extract client name from message like "Started controlling client: clientname (address)"
+							clientName := ""
+							parts := strings.Split(message, "Started controlling client: ")
+							if len(parts) > 1 {
+								clientPart := parts[1]
+								if idx := strings.Index(clientPart, " ("); idx != -1 {
+									clientName = clientPart[:idx]
+								}
+							}
+							p.Send(ui.ControlStateChangedMsg{
+								LocalControl: false,
+								ClientName:   clientName,
+							})
 						}
 					}
 				}

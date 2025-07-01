@@ -332,6 +332,18 @@ func (m *ServerModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case SetServerMsg:
 		m.serverInstance = msg.Server
+
+	case ControlStateChangedMsg:
+		m.localControl = msg.LocalControl
+		if msg.LocalControl {
+			m.activeClient = nil
+			m.selectedClientIndex = -1
+			m.base.AddLogEntry("info", "Control switched to local")
+		} else {
+			m.localControl = false
+			m.base.AddLogEntry("info", fmt.Sprintf("Control switched to %s", msg.ClientName))
+		}
+		m.refreshClientList()
 	}
 
 	// Update viewport
