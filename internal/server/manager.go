@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"sort"
+	"strings"
 	"sync"
 	"time"
 
@@ -370,6 +371,13 @@ func (cm *ClientManager) HandleInputEvent(event *protocol.InputEvent) {
 
 	logger.Debugf("[SERVER-MANAGER] handleInputEvent called: type=%T, timestamp=%d, sourceId=%s",
 		event.Event, event.Timestamp, event.SourceId)
+
+	// IMPORTANT: Prevent feedback loop - don't forward events that came from SSH clients
+	// Only forward events that originated from local input capture
+	if strings.HasPrefix(event.SourceId, "ssh-client-") {
+		logger.Debugf("[SERVER-MANAGER] Ignoring event from SSH client to prevent feedback loop: sourceId=%s", event.SourceId)
+		return
+	}
 
 	cm.mu.RLock()
 	defer cm.mu.RUnlock()

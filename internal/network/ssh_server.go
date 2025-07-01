@@ -509,6 +509,8 @@ func (s *SSHServer) handleMouseEvents(ctx context.Context, sess ssh.Session) {
 
 // SetMaxClients sets the maximum number of concurrent clients
 func (s *SSHServer) SetMaxClients(max int) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	s.maxClients = max
 }
 
