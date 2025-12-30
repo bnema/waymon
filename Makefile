@@ -22,10 +22,10 @@ clean:
 	@rm -rf ${BUILD_DIR}
 	@go clean
 
-# Run all tests
+# Run all tests (excluding legacy integration tests)
 test:
 	@echo "Running unit tests..."
-	go test -v ./...
+	go test -v ./internal/... ./cmd/...
 
 # Run integration tests
 test-integration: test-capture test-network test-wayland
@@ -97,8 +97,12 @@ dev-build:
 proto:
 	@echo "Generating protobuf files..."
 	protoc --go_out=. --go_opt=paths=source_relative \
-		--go-grpc_out=. --go-grpc_opt=paths=source_relative \
-		internal/protocol/*.proto
+		internal/adapters/out/ssh/proto/events.proto
+
+# Generate mocks
+mocks:
+	@echo "Generating mocks..."
+	mockery
 
 # Quick test - run basic non-interactive capture test
 quick-test:
@@ -106,7 +110,7 @@ quick-test:
 	@if [ "$$(id -u)" != "0" ]; then \
 		echo "Note: Running without root - some tests may be skipped"; \
 	fi
-	go test -v -short ./internal/input/...
+	go test -v -short ./internal/adapters/out/evdev/... ./internal/adapters/out/input/...
 
 # Help
 help:
@@ -125,4 +129,5 @@ help:
 	@echo "  make run-client            - Run the client"
 	@echo "  make dev-build             - Build with race detector"
 	@echo "  make proto                 - Generate protobuf files"
+	@echo "  make mocks                 - Generate mock implementations"
 	@echo "  make quick-test            - Run quick tests"

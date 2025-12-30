@@ -1,6 +1,8 @@
 // Package ssh provides SSH-based network transport implementations.
 package ssh
 
+//go:generate protoc --go_out=. --go_opt=paths=source_relative proto/events.proto
+
 import (
 	"fmt"
 	"io"

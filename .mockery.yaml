@@ -1,0 +1,34 @@
+# Mockery v3 configuration
+# Generate mocks with: mockery
+# See: https://vektra.github.io/mockery/
+
+template: testify
+all: false
+# Output mocks to internal/mocks/<package>/<interface>.go
+dir: "internal/mocks/{{.SrcPackageName}}"
+filename: "{{.InterfaceName | snakecase}}.go"
+pkgname: "mocks"
+structname: "Mock{{.InterfaceName}}"
+
+packages:
+  # Input ports (boundaries/in)
+  github.com/bnema/waymon/internal/boundaries/in:
+    interfaces:
+      ClientUseCase:
+      IPCHandler:
+      ServerUseCase:
+
+  # Output ports (boundaries/out)
+  github.com/bnema/waymon/internal/boundaries/out:
+    interfaces:
+      ConfigRepository:
+      DisplayPort:
+      InputCapturePort:
+      InputInjectionPort:
+      NetworkServerPort:
+      NetworkClientPort:
+
+  # CLI adapter interface
+  github.com/bnema/waymon/internal/adapters/in/cli:
+    interfaces:
+      IPCClient:
