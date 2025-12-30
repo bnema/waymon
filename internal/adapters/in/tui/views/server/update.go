@@ -128,15 +128,20 @@ func (m Model) handleKeyPress(msg tea.KeyMsg) tea.Cmd {
 	case "p", "shift+tab":
 		return m.switchToPrevious()
 
-	case "r":
-		return m.releaseControl()
+	case "ctrl+r":
+		// Emergency release with cooldown - deliberate key combo
+		return m.emergencyRelease()
 
 	case "?":
 		// Toggle help - could be handled by expanding help component
 
 	case "esc":
-		// Clear error if any
-		m.err = nil
+		// Clear error if any, or release control if controlling a client
+		if m.err != nil {
+			m.err = nil
+		} else if !m.controlLocal {
+			return m.switchToLocal()
+		}
 	}
 
 	return nil
@@ -194,9 +199,24 @@ func (m Model) switchToPrevious() tea.Cmd {
 	}
 }
 
-// releaseControl releases control (switches to local).
-func (m Model) releaseControl() tea.Cmd {
-	return m.switchToLocal()
+// emergencyRelease releases control with cooldown to prevent immediate re-control.
+// This is triggered by Ctrl+R and marks the emergency release timestamp,
+// preventing clients from requesting control for a cooldown period.
+func (m Model) emergencyRelease() tea.Cmd {
+	return func() tea.Msg {
+		// Mark emergency release first to engage cooldown
+		m.useCase.MarkEmergencyRelease(m.ctx)
+
+		// Then switch to local
+		err := m.useCase.SwitchToLocal(m.ctx)
+		if err != nil {
+			return messages.ErrorMsg{Err: err}
+		}
+		return messages.ControlSwitchedMsg{
+			ActiveClientID: "",
+			IsLocal:        true,
+		}
+	}
 }
 
 // removeClient removes a client from the local list.

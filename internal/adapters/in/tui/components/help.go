@@ -100,7 +100,8 @@ func ServerBindings() []Binding {
 		{Key: "tab", Desc: "next client"},
 		{Key: "shift+tab", Desc: "prev client"},
 		{Key: "enter", Desc: "switch to client"},
-		{Key: "r", Desc: "release control"},
+		{Key: "esc", Desc: "release control"},
+		{Key: "ctrl+r", Desc: "emergency release"},
 		{Key: "?", Desc: "help"},
 	}
 }

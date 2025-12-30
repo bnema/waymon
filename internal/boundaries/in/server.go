@@ -31,6 +31,9 @@ type ServerUseCase interface {
 	ConnectToSlot(ctx context.Context, slot int32) error
 	IsControllingLocal(ctx context.Context) bool
 
+	// Emergency release (marks cooldown to prevent immediate re-control)
+	MarkEmergencyRelease(ctx context.Context)
+
 	// Event handling
 	HandleInputEvent(ctx context.Context, event *domain.InputEvent)
 
