@@ -1,0 +1,244 @@
+package app
+
+import (
+	"context"
+	"fmt"
+	"io"
+	"os"
+	"os/signal"
+	"path/filepath"
+	"syscall"
+	"time"
+
+	"github.com/rs/zerolog"
+
+	"github.com/bnema/waymon/internal/adapters/in/tui"
+	"github.com/bnema/waymon/internal/adapters/out/config"
+	"github.com/bnema/waymon/internal/adapters/out/display"
+	"github.com/bnema/waymon/internal/adapters/out/input"
+	"github.com/bnema/waymon/internal/adapters/out/ssh"
+	"github.com/bnema/waymon/internal/domain"
+	clientuc "github.com/bnema/waymon/internal/usecase/client"
+)
+
+// ClientOptions configures the client application.
+type ClientOptions struct {
+	// ServerAddress overrides the config server address (host:port).
+	ServerAddress string
+	// HostName specifies a named host from the config to connect to.
+	HostName string
+	// ConfigPath overrides the default config file path.
+	ConfigPath string
+	// LogLevel overrides the config log level.
+	LogLevel string
+	// NoTUI disables the terminal user interface.
+	NoTUI bool
+}
+
+// RunClient starts the client application with all dependencies wired together.
+func RunClient(ctx context.Context, opts ClientOptions) error {
+	// Set up signal handling for graceful shutdown
+	ctx, cancel := signal.NotifyContext(ctx, syscall.SIGINT, syscall.SIGTERM)
+	defer cancel()
+
+	// Create config repository
+	configRepo := config.NewViperRepository()
+	if opts.ConfigPath != "" {
+		configRepo.SetConfigPath(opts.ConfigPath)
+	}
+
+	// Load configuration
+	cfg, err := configRepo.Load(ctx)
+	if err != nil {
+		// Use defaults if config not found
+		cfg = defaultClientConfig()
+	}
+
+	// Determine server address
+	serverAddress := resolveServerAddress(cfg, opts)
+	if serverAddress == "" {
+		return fmt.Errorf("no server address specified (use --host flag or set in config)")
+	}
+
+	// Update config with resolved address for use case
+	cfg.Client.ServerAddress = serverAddress
+
+	// Set up logging
+	ctx, logCleanup, err := setupClientLogging(ctx, cfg, opts.LogLevel)
+	if err != nil {
+		return fmt.Errorf("failed to setup logging: %w", err)
+	}
+	defer logCleanup()
+
+	log := zerolog.Ctx(ctx)
+	log.Info().
+		Str("server", serverAddress).
+		Bool("tui", !opts.NoTUI).
+		Msg("starting waymon client")
+
+	// Create display adapter for monitor detection
+	displayAdapter, err := display.New(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to create display adapter: %w", err)
+	}
+	defer func() {
+		if err := displayAdapter.Close(); err != nil {
+			log.Error().Err(err).Msg("error closing display adapter")
+		}
+	}()
+
+	// Create input injection adapter
+	inputInjection, err := input.New(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to create input injection adapter: %w", err)
+	}
+
+	// Create SSH client adapter
+	networkClient := ssh.NewClientAdapter()
+
+	// Create client use case
+	clientUseCase := clientuc.NewClientUseCase(inputInjection, networkClient, displayAdapter, configRepo)
+
+	// Connect to server
+	if err := clientUseCase.Connect(ctx); err != nil {
+		return fmt.Errorf("failed to connect to server: %w", err)
+	}
+	defer func() {
+		log.Debug().Msg("disconnecting from server")
+		if err := clientUseCase.Disconnect(ctx); err != nil {
+			log.Error().Err(err).Msg("error disconnecting")
+		}
+	}()
+
+	// Run TUI or wait for signals
+	if opts.NoTUI {
+		// No TUI mode: wait for context cancellation
+		log.Info().Msg("running without TUI, waiting for shutdown signal")
+		<-ctx.Done()
+		log.Info().Msg("received shutdown signal")
+	} else {
+		// TUI mode: run the terminal interface
+		tuiOpts := tui.DefaultOptions()
+
+		if err := tui.RunClient(ctx, clientUseCase, tuiOpts); err != nil {
+			// Check if it was a normal exit due to context cancellation
+			if ctx.Err() != nil {
+				log.Debug().Msg("TUI exited due to context cancellation")
+			} else {
+				return fmt.Errorf("TUI error: %w", err)
+			}
+		}
+	}
+
+	log.Info().Msg("client shutdown complete")
+	return nil
+}
+
+// resolveServerAddress determines the server address from options and config.
+func resolveServerAddress(cfg *domain.Config, opts ClientOptions) string {
+	// Priority 1: Command line --host flag
+	if opts.ServerAddress != "" {
+		return opts.ServerAddress
+	}
+
+	// Priority 2: Named host from config
+	if opts.HostName != "" {
+		for _, host := range cfg.Hosts {
+			if host.Name == opts.HostName {
+				return host.Address
+			}
+		}
+		// Host name specified but not found - return empty to trigger error
+		return ""
+	}
+
+	// Priority 3: Default server address from config
+	return cfg.Client.ServerAddress
+}
+
+// setupClientLogging configures zerolog with file and console output.
+// Returns a cleanup function to close log files.
+func setupClientLogging(ctx context.Context, cfg *domain.Config, levelOverride string) (context.Context, func(), error) {
+	// Determine log level
+	level := zerolog.InfoLevel
+	levelStr := cfg.Logging.LogLevel
+	if levelOverride != "" {
+		levelStr = levelOverride
+	}
+	if levelStr != "" {
+		var err error
+		level, err = zerolog.ParseLevel(levelStr)
+		if err != nil {
+			level = zerolog.InfoLevel
+		}
+	}
+
+	// Create console writer
+	consoleWriter := zerolog.ConsoleWriter{
+		Out:        os.Stderr,
+		TimeFormat: time.RFC3339,
+	}
+
+	var writers []io.Writer
+	writers = append(writers, consoleWriter)
+
+	var fileHandle *os.File
+
+	// Set up file logging if enabled
+	if cfg.Logging.FileLogging {
+		logDir := cfg.Logging.LogDir
+		if logDir == "" {
+			// For client, use user's cache directory
+			cacheDir, err := os.UserCacheDir()
+			if err != nil {
+				cacheDir = "/tmp"
+			}
+			logDir = filepath.Join(cacheDir, "waymon")
+		}
+
+		// Create log directory if it doesn't exist
+		if err := os.MkdirAll(logDir, 0750); err != nil {
+			return ctx, func() {}, fmt.Errorf("failed to create log directory: %w", err)
+		}
+
+		logPath := filepath.Join(logDir, "waymon-client.log")
+		var err error
+		fileHandle, err = os.OpenFile(logPath, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0640)
+		if err != nil {
+			return ctx, func() {}, fmt.Errorf("failed to open log file: %w", err)
+		}
+		writers = append(writers, fileHandle)
+	}
+
+	// Create multi-writer
+	multi := zerolog.MultiLevelWriter(writers...)
+	logger := zerolog.New(multi).
+		Level(level).
+		With().
+		Timestamp().
+		Str("component", "client").
+		Logger()
+
+	// Store logger in context
+	ctx = logger.WithContext(ctx)
+
+	cleanup := func() {
+		if fileHandle != nil {
+			fileHandle.Close()
+		}
+	}
+
+	return ctx, cleanup, nil
+}
+
+// defaultClientConfig returns a default client configuration.
+func defaultClientConfig() *domain.Config {
+	return &domain.Config{
+		Client: domain.ClientCfg{
+			ReconnectDelay: 5,
+		},
+		Logging: domain.LoggingConfig{
+			LogLevel: "info",
+		},
+	}
+}

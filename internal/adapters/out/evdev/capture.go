@@ -219,7 +219,7 @@ func (c *Capture) SetEventCallback(callback func(*domain.InputEvent)) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	c.onInputEvent = callback
-	zerolog.Ctx(c.ctx).Info().Msg("input event callback set")
+	// Note: c.ctx may be nil if called before Start(), so we don't log here
 }
 
 // SetGrabTimeout sets the safety timeout for device grabbing.
