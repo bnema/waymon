@@ -21,7 +21,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.width = msg.Width
 		m.height = msg.Height
 		m = m.updateClientList()
-		m = m.updateStatusBar()
+		m = m.updateFooter()
 		m = m.updateHeader()
 
 	// Keyboard input
@@ -35,21 +35,21 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case messages.ClientConnectedMsg:
 		m.clients = append(m.clients, msg.Client)
 		m = m.updateClientList()
-		m = m.updateStatusBar()
+		m = m.updateFooter()
 		m.toasts = m.toasts.AddSuccess("Client connected: " + msg.Client.Name)
 		cmds = append(cmds, m.toasts.Init())
 
 	case messages.ClientDisconnectedMsg:
 		m = m.removeClient(msg.ClientID)
 		m = m.updateClientList()
-		m = m.updateStatusBar()
+		m = m.updateFooter()
 		m.toasts = m.toasts.AddWarning("Client disconnected: " + msg.ClientID)
 		cmds = append(cmds, m.toasts.Init())
 
 	case messages.ClientListUpdatedMsg:
 		m.clients = msg.Clients
 		m = m.updateClientList()
-		m = m.updateStatusBar()
+		m = m.updateFooter()
 		m.ready = true
 
 	case messages.ClientUpdatedMsg:
@@ -61,7 +61,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.activeClientID = msg.ActiveClientID
 		m.controlLocal = msg.IsLocal
 		m = m.updateClientList()
-		m = m.updateStatusBar()
+		m = m.updateFooter()
 		m = m.updateHeader()
 		if msg.IsLocal {
 			m.toasts = m.toasts.AddMessage("Control switched to local")

@@ -1,9 +1,20 @@
 package server
 
 import (
+	"strings"
+
 	"github.com/charmbracelet/lipgloss"
 
 	"github.com/bnema/waymon/internal/adapters/in/tui/styles"
+)
+
+const (
+	// MinPaneWidth is the minimum width for a pane to be readable.
+	MinPaneWidth = 35
+	// MinTerminalWidth is the minimum supported terminal width.
+	MinTerminalWidth = 40
+	// MinTerminalHeight is the minimum supported terminal height.
+	MinTerminalHeight = 12
 )
 
 // View renders the server view.
@@ -12,115 +23,184 @@ func (m Model) View() string {
 		return "Shutting down...\n"
 	}
 
-	// Build layout
-	var sections []string
-
-	// Header
-	sections = append(sections, m.header.View())
-
-	// Main content area
-	mainContent := m.renderMainContent()
-	sections = append(sections, mainContent)
-
-	// Status bar at bottom
-	sections = append(sections, m.statusBar.View())
-
-	// Help line
-	helpLine := m.help.View()
-	if helpLine != "" {
-		sections = append(sections, helpLine)
+	// Check minimum terminal size
+	if m.width < MinTerminalWidth || m.height < MinTerminalHeight {
+		return m.renderTooSmall()
 	}
 
-	// Join all sections vertically
-	content := lipgloss.JoinVertical(lipgloss.Left, sections...)
+	// 1. Render header and footer first (they have fixed content)
+	header := m.header.View()
+	footer := m.footer.View()
 
-	// Add toasts overlay if any
+	// 2. Measure their heights using lipgloss
+	headerHeight := lipgloss.Height(header)
+	footerHeight := lipgloss.Height(footer)
+
+	// 3. Calculate available space for main content
+	mainHeight := m.height - headerHeight - footerHeight
+	mainWidth := m.width
+
+	// 4. Render main content (responsive horizontal/vertical)
+	var mainContent string
+	switch {
+	case !m.ready:
+		mainContent = m.renderLoading(mainHeight, mainWidth)
+	case m.err != nil:
+		mainContent = m.renderError(mainHeight, mainWidth)
+	default:
+		mainContent = m.renderMainContent(mainHeight, mainWidth)
+	}
+
+	// 5. Assemble layout
+	content := lipgloss.JoinVertical(lipgloss.Left, header, mainContent, footer)
+
+	// 6. Handle toast overlay (top-right, absolute positioning)
 	if m.toasts.HasToasts() {
-		toastView := m.toasts.View()
-		// Position toasts at the top right
-		toastStyle := lipgloss.NewStyle().
-			MarginLeft(m.width - lipgloss.Width(toastView) - 2)
-		toastOverlay := toastStyle.Render(toastView)
-
-		// Overlay toasts on top of content
-		content = lipgloss.JoinVertical(lipgloss.Left,
-			toastOverlay,
-			content,
-		)
+		content = m.overlayToasts(content)
 	}
 
 	return content
 }
 
-// renderMainContent renders the main content area.
-func (m Model) renderMainContent() string {
-	if !m.ready {
-		return m.renderLoading()
+// renderTooSmall renders a message when terminal is too small.
+func (m Model) renderTooSmall() string {
+	msg := styles.WarningStyle.Render("Terminal too small\nMinimum: 80x24")
+	return lipgloss.Place(m.width, m.height, lipgloss.Center, lipgloss.Center, msg)
+}
+
+// renderMainContent renders the main content area with responsive layout.
+func (m Model) renderMainContent(height, width int) string {
+	// Determine layout mode based on available width
+	if width >= MinPaneWidth*2+4 {
+		return m.renderHorizontalLayout(height, width)
+	}
+	return m.renderVerticalLayout(height, width)
+}
+
+// renderHorizontalLayout renders two panes side by side.
+func (m Model) renderHorizontalLayout(height, width int) string {
+	leftWidth := width / 2
+	rightWidth := width - leftWidth
+
+	// Render pane contents
+	leftContent := m.clientList.View()
+	rightContent := m.renderControlPanel()
+
+	// Create bordered panes with titles
+	leftPane := m.renderPane(
+		styles.IconUsers+" Connected Clients",
+		leftContent,
+		leftWidth,
+		height,
+	)
+	rightPane := m.renderPane(
+		styles.IconMouse+" Control Status",
+		rightContent,
+		rightWidth,
+		height,
+	)
+
+	return lipgloss.JoinHorizontal(lipgloss.Top, leftPane, rightPane)
+}
+
+// renderVerticalLayout renders two panes stacked vertically (50/50).
+func (m Model) renderVerticalLayout(height, width int) string {
+	topHeight := height / 2
+	bottomHeight := height - topHeight
+
+	// Render pane contents
+	topContent := m.clientList.View()
+	bottomContent := m.renderControlPanel()
+
+	// Create bordered panes with titles
+	topPane := m.renderPane(
+		styles.IconUsers+" Connected Clients",
+		topContent,
+		width,
+		topHeight,
+	)
+	bottomPane := m.renderPane(
+		styles.IconMouse+" Control Status",
+		bottomContent,
+		width,
+		bottomHeight,
+	)
+
+	return lipgloss.JoinVertical(lipgloss.Left, topPane, bottomPane)
+}
+
+// renderPane renders a bordered pane with title.
+func (m Model) renderPane(title, content string, width, height int) string {
+	// Account for border (2) and padding (2)
+	innerWidth := width - 4
+	innerHeight := height - 4
+
+	if innerWidth < 1 {
+		innerWidth = 1
+	}
+	if innerHeight < 1 {
+		innerHeight = 1
 	}
 
-	if m.err != nil {
-		return m.renderError()
+	// Title style
+	titleRendered := styles.TitleStyle.Render(title)
+
+	// Content area height (subtract title height)
+	titleHeight := lipgloss.Height(titleRendered)
+	contentHeight := innerHeight - titleHeight - 1 // -1 for spacing
+
+	if contentHeight < 1 {
+		contentHeight = 1
 	}
 
-	// Main layout: client list on left, details on right
-	leftPane := m.clientList.View()
+	// Style content to fit within bounds
+	contentStyle := lipgloss.NewStyle().
+		Width(innerWidth).
+		Height(contentHeight)
 
-	// Right pane: control status and activity
-	rightPane := m.renderControlPanel()
+	styledContent := contentStyle.Render(content)
 
-	// Calculate widths
-	leftWidth := m.width / 2
-	rightWidth := m.width - leftWidth - 4 // Account for margin
+	// Combine title and content
+	inner := lipgloss.JoinVertical(lipgloss.Left, titleRendered, "", styledContent)
 
-	// Apply widths
-	leftStyle := lipgloss.NewStyle().
-		Width(leftWidth).
-		Padding(1, 1)
-	rightStyle := lipgloss.NewStyle().
-		Width(rightWidth).
-		Padding(1, 1)
+	// Apply pane style with border
+	paneStyle := lipgloss.NewStyle().
+		Width(width - 2).
+		Height(height - 2).
+		BorderStyle(lipgloss.RoundedBorder()).
+		BorderForeground(styles.Border).
+		Padding(1)
 
-	left := leftStyle.Render(leftPane)
-	right := rightStyle.Render(rightPane)
-
-	return lipgloss.JoinHorizontal(lipgloss.Top, left, right)
+	return paneStyle.Render(inner)
 }
 
 // renderLoading renders the loading state.
-func (m Model) renderLoading() string {
-	style := lipgloss.NewStyle().
-		Width(m.width).
-		Height(m.height-10).
-		Align(lipgloss.Center, lipgloss.Center)
+func (m Model) renderLoading(height, width int) string {
+	content := styles.IconSpinner + " Starting server...\n\n" +
+		styles.MutedStyle.Render("Waiting for connections")
 
-	return style.Render(
-		styles.IconSpinner + " Starting server...\n\n" +
-			styles.MutedStyle.Render("Waiting for connections"),
-	)
+	return lipgloss.Place(width, height, lipgloss.Center, lipgloss.Center, content)
 }
 
 // renderError renders the error state.
-func (m Model) renderError() string {
-	errorBox := lipgloss.NewStyle().
-		BorderStyle(lipgloss.RoundedBorder()).
-		BorderForeground(styles.Error).
-		Padding(1, 2).
-		Width(m.width - 10)
-
+func (m Model) renderError(height, width int) string {
 	errorContent := styles.IconCross + " Error\n\n" +
 		styles.ErrorStyle.Render(m.err.Error()) + "\n\n" +
 		styles.MutedStyle.Render("Press 'esc' to dismiss")
 
-	return errorBox.Render(errorContent)
+	errorBox := lipgloss.NewStyle().
+		BorderStyle(lipgloss.RoundedBorder()).
+		BorderForeground(styles.Error).
+		Padding(1, 2).
+		Width(minInt(width-10, 60))
+
+	boxed := errorBox.Render(errorContent)
+	return lipgloss.Place(width, height, lipgloss.Center, lipgloss.Center, boxed)
 }
 
-// renderControlPanel renders the control status panel.
+// renderControlPanel renders the control status panel content.
 func (m Model) renderControlPanel() string {
 	var lines []string
-
-	// Title
-	lines = append(lines, styles.TitleStyle.Render(styles.IconMouse+" Control Status"))
-	lines = append(lines, "")
 
 	// Current control state
 	switch {
@@ -177,6 +257,59 @@ func (m Model) renderControlPanel() string {
 	return lipgloss.JoinVertical(lipgloss.Left, lines...)
 }
 
+// overlayToasts overlays toast notifications at the top-right of the content.
+func (m Model) overlayToasts(base string) string {
+	toastView := m.toasts.View()
+	if toastView == "" {
+		return base
+	}
+
+	toastWidth := lipgloss.Width(toastView)
+	toastHeight := lipgloss.Height(toastView)
+
+	// Position: top-right with margin
+	startX := m.width - toastWidth - 2
+	startY := 1
+
+	if startX < 0 {
+		startX = 0
+	}
+
+	// Split base into lines
+	baseLines := strings.Split(base, "\n")
+	toastLines := strings.Split(toastView, "\n")
+
+	// Overlay toast lines onto base
+	for i := 0; i < toastHeight && i < len(toastLines); i++ {
+		lineIdx := startY + i
+		if lineIdx >= 0 && lineIdx < len(baseLines) {
+			baseLines[lineIdx] = overlayStringAt(baseLines[lineIdx], toastLines[i], startX)
+		}
+	}
+
+	return strings.Join(baseLines, "\n")
+}
+
+// overlayStringAt places overlay string on top of base string at position x.
+func overlayStringAt(base, overlay string, x int) string {
+	baseRunes := []rune(base)
+	overlayRunes := []rune(overlay)
+
+	// Ensure base is long enough
+	for len(baseRunes) < x+len(overlayRunes) {
+		baseRunes = append(baseRunes, ' ')
+	}
+
+	// Copy overlay runes at position x
+	for i, r := range overlayRunes {
+		if x+i < len(baseRunes) {
+			baseRunes[x+i] = r
+		}
+	}
+
+	return string(baseRunes)
+}
+
 // formatInt converts an int to string for display.
 func formatInt(n int) string {
 	if n == 0 {
@@ -191,4 +324,12 @@ func formatInt(n int) string {
 		n /= 10
 	}
 	return string(digits)
+}
+
+// minInt returns the minimum of two integers.
+func minInt(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
 }

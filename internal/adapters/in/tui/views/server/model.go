@@ -41,8 +41,7 @@ type Model struct {
 	// Components
 	clientList components.ClientList
 	header     components.Header
-	statusBar  components.StatusBar
-	help       components.Help
+	footer     components.Footer
 	toasts     components.ToastManager
 }
 
@@ -64,8 +63,7 @@ func New(ctx context.Context, useCase in.ServerUseCase) Model {
 		maxLogSize:   50,
 		clientList:   components.NewClientList(),
 		header:       components.ServerHeader(80),
-		statusBar:    components.NewStatusBar(),
-		help:         components.NewHelp().WithBindings(components.ServerBindings()...),
+		footer:       components.ServerFooter(80),
 		toasts:       components.NewToastManager(),
 		width:        80,
 		height:       24,
@@ -159,12 +157,12 @@ func (m Model) updateClientList() Model {
 	m.clientList = m.clientList.
 		WithClients(m.clients).
 		WithActiveID(m.activeClientID).
-		WithWidth(m.width - 4)
+		WithWidth(m.width/2 - 6) // Account for pane borders/padding
 	return m
 }
 
-// updateStatusBar updates the status bar content.
-func (m Model) updateStatusBar() Model {
+// updateFooter updates the footer content.
+func (m Model) updateFooter() Model {
 	var controlValue string
 	if m.controlLocal {
 		controlValue = "Local"
@@ -172,12 +170,13 @@ func (m Model) updateStatusBar() Model {
 		controlValue = m.activeClientID
 	}
 
-	m.statusBar = m.statusBar.
+	m.footer = m.footer.
 		WithWidth(m.width).
-		WithItems(
+		WithStatusItems(
 			components.StatusItem{Label: "Control", Value: controlValue},
 			components.ClientsItem(len(m.clients), ""),
-		)
+		).
+		WithBindings(components.ServerBindings()...)
 	return m
 }
 

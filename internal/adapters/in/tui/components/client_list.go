@@ -111,9 +111,7 @@ func (c ClientList) View() string {
 // renderEmpty renders the empty state.
 func (c ClientList) renderEmpty() string {
 	emptyStyle := styles.MutedStyle.
-		Width(c.width).
-		Align(lipgloss.Center).
-		Padding(2, 0)
+		Padding(1, 0)
 
 	return emptyStyle.Render(
 		styles.IconInfo + " No clients connected\n\n" +
