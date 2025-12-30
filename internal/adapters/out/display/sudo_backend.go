@@ -110,7 +110,9 @@ exit 1
 	if err := os.WriteFile(helperPath, []byte(helperCode), 0600); err != nil {
 		return nil, fmt.Errorf("failed to write helper script: %w", err)
 	}
-	defer os.Remove(helperPath)
+	defer func() {
+		_ = os.Remove(helperPath) // Best effort cleanup of temporary helper script
+	}()
 
 	// Execute the helper as the original user
 	cmd := exec.Command("sudo", "-u", sudoUser, "-i", "/bin/bash", helperPath) //nolint:gosec // sudoUser is from environment, helperPath is validated temp file

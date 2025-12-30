@@ -11,7 +11,7 @@ import (
 )
 
 // TestCaptureImplementsInterface verifies that Capture implements InputCapturePort.
-func TestCaptureImplementsInterface(t *testing.T) {
+func TestCaptureImplementsInterface(_ *testing.T) {
 	var _ out.InputCapturePort = (*Capture)(nil)
 }
 

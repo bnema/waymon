@@ -14,7 +14,7 @@ func (c *CLI) newReleaseCmd() *cobra.Command {
 control back to the local machine (server).
 
 This command is useful for keybindings in window managers like Hyprland.`,
-		RunE: func(cmd *cobra.Command, args []string) error {
+		RunE: func(_ *cobra.Command, _ []string) error {
 			return c.runRelease()
 		},
 	}

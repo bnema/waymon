@@ -14,18 +14,25 @@ import (
 // MessageType represents the type of IPC message.
 type MessageType string
 
+// MessageType constants define the available IPC message types.
 const (
-	// Request types
-	MessageTypeSwitch  MessageType = "switch"
-	MessageTypeStatus  MessageType = "status"
+	// MessageTypeSwitch is a request to switch control.
+	MessageTypeSwitch MessageType = "switch"
+	// MessageTypeStatus is a request for status information.
+	MessageTypeStatus MessageType = "status"
+	// MessageTypeRelease is a request to release control.
 	MessageTypeRelease MessageType = "release"
+	// MessageTypeConnect is a request to connect to a slot.
 	MessageTypeConnect MessageType = "connect"
-	MessageTypeStop    MessageType = "stop"
+	// MessageTypeStop is a request to stop the server.
+	MessageTypeStop MessageType = "stop"
 
-	// Response types
+	// MessageTypeStatusResponse is a response containing status information.
 	MessageTypeStatusResponse MessageType = "status_response"
-	MessageTypeError          MessageType = "error"
-	MessageTypeOK             MessageType = "ok"
+	// MessageTypeError is a response indicating an error.
+	MessageTypeError MessageType = "error"
+	// MessageTypeOK is a response indicating success.
+	MessageTypeOK MessageType = "ok"
 )
 
 // Message is the envelope for all IPC messages.

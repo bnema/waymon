@@ -12,7 +12,7 @@ func (c *CLI) newStopCmd() *cobra.Command {
 		Use:   "stop",
 		Short: "Stop the Waymon server",
 		Long:  `Stop the running Waymon server instance via IPC.`,
-		RunE: func(cmd *cobra.Command, args []string) error {
+		RunE: func(_ *cobra.Command, _ []string) error {
 			return c.runStop()
 		},
 	}

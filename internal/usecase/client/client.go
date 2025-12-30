@@ -189,7 +189,7 @@ func (c *UseCaseImpl) IsConnected() bool {
 }
 
 // GetControlStatus returns the current control status.
-func (c *UseCaseImpl) GetControlStatus(ctx context.Context) domain.ControlStatus {
+func (c *UseCaseImpl) GetControlStatus(_ context.Context) domain.ControlStatus {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 	return c.controlStatus

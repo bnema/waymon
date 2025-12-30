@@ -77,7 +77,7 @@ func (m Model) Init() tea.Cmd {
 	return tea.Batch(
 		m.subscribeToEvents(),
 		m.refreshClients(),
-		tea.Tick(time.Second, func(t time.Time) tea.Msg {
+		tea.Tick(time.Second, func(_ time.Time) tea.Msg {
 			return messages.TickMsg{}
 		}),
 	)
@@ -87,7 +87,7 @@ func (m Model) Init() tea.Cmd {
 func (m Model) subscribeToEvents() tea.Cmd {
 	return func() tea.Msg {
 		// Set up activity callback
-		m.useCase.SetOnActivity(func(level, message string) {
+		m.useCase.SetOnActivity(func(_, _ string) {
 			// This callback is called from the use case
 			// We need to send it as a tea.Msg
 			// Note: In a real implementation, you'd use a channel here
@@ -184,11 +184,12 @@ func (m Model) updateStatusBar() Model {
 // updateHeader updates the header with current status.
 func (m Model) updateHeader() Model {
 	var status string
-	if m.controlLocal {
+	switch {
+	case m.controlLocal:
 		status = "Controlling: Local"
-	} else if m.activeClientID != "" {
+	case m.activeClientID != "":
 		status = fmt.Sprintf("Controlling: %s", m.activeClientID)
-	} else {
+	default:
 		status = "Waiting for clients..."
 	}
 	m.header = m.header.WithWidth(m.width).WithStatus(status)

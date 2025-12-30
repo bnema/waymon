@@ -28,6 +28,7 @@ type IPCClient interface {
 // SwitchAction represents an action for the switch command.
 type SwitchAction int
 
+// SwitchAction constants define the available switch actions.
 const (
 	SwitchActionNext SwitchAction = iota
 	SwitchActionPrevious

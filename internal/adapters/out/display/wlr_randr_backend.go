@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"math"
 	"os"
 	"os/exec"
 	"strings"
@@ -246,8 +247,13 @@ func (w *wlrRandrBackend) getMonitorsText() ([]*domain.Monitor, error) {
 				if part == "Position:" && i+1 < len(parts) {
 					coords := strings.Split(parts[i+1], ",")
 					if len(coords) == 2 {
-						fmt.Sscanf(coords[0], "%d", &currentMonitor.X)
-						fmt.Sscanf(coords[1], "%d", &currentMonitor.Y)
+						var x, y int32
+						if _, err := fmt.Sscanf(coords[0], "%d", &x); err == nil {
+							currentMonitor.X = x
+						}
+						if _, err := fmt.Sscanf(coords[1], "%d", &y); err == nil {
+							currentMonitor.Y = y
+						}
 					}
 				}
 			}
@@ -263,8 +269,13 @@ func (w *wlrRandrBackend) getMonitorsText() ([]*domain.Monitor, error) {
 						var w, h int
 						if _, err := fmt.Sscanf(dims[0], "%d", &w); err == nil {
 							if _, err := fmt.Sscanf(dims[1], "%d", &h); err == nil {
-								currentMonitor.Width = int32(w)
-								currentMonitor.Height = int32(h)
+								// Safe conversion with bounds check to prevent integer overflow
+								if w >= 0 && w <= math.MaxInt32 {
+									currentMonitor.Width = int32(w)
+								}
+								if h >= 0 && h <= math.MaxInt32 {
+									currentMonitor.Height = int32(h)
+								}
 							}
 						}
 					}
@@ -277,7 +288,10 @@ func (w *wlrRandrBackend) getMonitorsText() ([]*domain.Monitor, error) {
 			parts := strings.Fields(line)
 			for i, part := range parts {
 				if part == "Scale:" && i+1 < len(parts) {
-					fmt.Sscanf(parts[i+1], "%f", &currentMonitor.Scale)
+					var scale float64
+					if _, err := fmt.Sscanf(parts[i+1], "%f", &scale); err == nil {
+						currentMonitor.Scale = scale
+					}
 				}
 			}
 		}

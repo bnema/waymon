@@ -9,7 +9,7 @@ import (
 )
 
 // TestWaylandInjectorImplementsInterface verifies that WaylandInjector implements InputInjectionPort.
-func TestWaylandInjectorImplementsInterface(t *testing.T) {
+func TestWaylandInjectorImplementsInterface(_ *testing.T) {
 	var _ out.InputInjectionPort = (*WaylandInjector)(nil)
 }
 

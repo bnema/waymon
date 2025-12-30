@@ -27,7 +27,7 @@ Requirements:
   - Must run as root (for evdev access)
   - SSH host key at ~/.ssh/waymon_host_key (or configured path)
   - Authorized keys for client authentication`,
-		RunE: func(cmd *cobra.Command, args []string) error {
+		RunE: func(cmd *cobra.Command, _ []string) error {
 			if c.serverRunner == nil {
 				return fmt.Errorf("server runner not configured")
 			}

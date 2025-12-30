@@ -1,3 +1,4 @@
+// Package main provides the entry point for waymon.
 package main
 
 import (

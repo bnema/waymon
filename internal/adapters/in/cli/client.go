@@ -24,7 +24,7 @@ The client injects received input events locally using Wayland virtual input pro
 Requirements:
   - Wayland compositor with virtual input support
   - SSH private key for server authentication`,
-		RunE: func(cmd *cobra.Command, args []string) error {
+		RunE: func(cmd *cobra.Command, _ []string) error {
 			if c.clientRunner == nil {
 				return fmt.Errorf("client runner not configured")
 			}

@@ -147,7 +147,11 @@ func TestProtocol_ErrorMessage(t *testing.T) {
 func TestServer_StartStop(t *testing.T) {
 	ctx := testContext(t)
 	socketPath := tempSocketPath(t)
-	defer os.Remove(socketPath)
+	t.Cleanup(func() {
+		if err := os.Remove(socketPath); err != nil && !os.IsNotExist(err) {
+			t.Logf("failed to remove socket %s: %v", socketPath, err)
+		}
+	})
 
 	handler := new(MockIPCHandler)
 	server := NewServerWithPath(handler, socketPath)
@@ -171,7 +175,11 @@ func TestServer_StartStop(t *testing.T) {
 func TestServer_DoubleStart(t *testing.T) {
 	ctx := testContext(t)
 	socketPath := tempSocketPath(t)
-	defer os.Remove(socketPath)
+	t.Cleanup(func() {
+		if err := os.Remove(socketPath); err != nil && !os.IsNotExist(err) {
+			t.Logf("failed to remove socket %s: %v", socketPath, err)
+		}
+	})
 
 	handler := new(MockIPCHandler)
 	server := NewServerWithPath(handler, socketPath)
@@ -186,7 +194,11 @@ func TestServer_DoubleStart(t *testing.T) {
 func TestServer_DoubleStop(t *testing.T) {
 	ctx := testContext(t)
 	socketPath := tempSocketPath(t)
-	defer os.Remove(socketPath)
+	t.Cleanup(func() {
+		if err := os.Remove(socketPath); err != nil && !os.IsNotExist(err) {
+			t.Logf("failed to remove socket %s: %v", socketPath, err)
+		}
+	})
 
 	handler := new(MockIPCHandler)
 	server := NewServerWithPath(handler, socketPath)
@@ -201,7 +213,11 @@ func TestServer_DoubleStop(t *testing.T) {
 func TestClientServer_Status(t *testing.T) {
 	ctx := testContext(t)
 	socketPath := tempSocketPath(t)
-	defer os.Remove(socketPath)
+	t.Cleanup(func() {
+		if err := os.Remove(socketPath); err != nil && !os.IsNotExist(err) {
+			t.Logf("failed to remove socket %s: %v", socketPath, err)
+		}
+	})
 
 	expectedResp := &in.StatusResponse{
 		Active:        true,
@@ -238,7 +254,11 @@ func TestClientServer_Status(t *testing.T) {
 func TestClientServer_Switch(t *testing.T) {
 	ctx := testContext(t)
 	socketPath := tempSocketPath(t)
-	defer os.Remove(socketPath)
+	t.Cleanup(func() {
+		if err := os.Remove(socketPath); err != nil && !os.IsNotExist(err) {
+			t.Logf("failed to remove socket %s: %v", socketPath, err)
+		}
+	})
 
 	expectedResp := &in.StatusResponse{
 		Active:       true,
@@ -267,7 +287,11 @@ func TestClientServer_Switch(t *testing.T) {
 func TestClientServer_Release(t *testing.T) {
 	ctx := testContext(t)
 	socketPath := tempSocketPath(t)
-	defer os.Remove(socketPath)
+	t.Cleanup(func() {
+		if err := os.Remove(socketPath); err != nil && !os.IsNotExist(err) {
+			t.Logf("failed to remove socket %s: %v", socketPath, err)
+		}
+	})
 
 	expectedResp := &in.StatusResponse{
 		Active:       false,
@@ -297,7 +321,11 @@ func TestClientServer_Release(t *testing.T) {
 func TestClientServer_Connect(t *testing.T) {
 	ctx := testContext(t)
 	socketPath := tempSocketPath(t)
-	defer os.Remove(socketPath)
+	t.Cleanup(func() {
+		if err := os.Remove(socketPath); err != nil && !os.IsNotExist(err) {
+			t.Logf("failed to remove socket %s: %v", socketPath, err)
+		}
+	})
 
 	expectedResp := &in.StatusResponse{
 		Active:       true,
@@ -326,7 +354,11 @@ func TestClientServer_Connect(t *testing.T) {
 func TestClientServer_Stop(t *testing.T) {
 	ctx := testContext(t)
 	socketPath := tempSocketPath(t)
-	defer os.Remove(socketPath)
+	t.Cleanup(func() {
+		if err := os.Remove(socketPath); err != nil && !os.IsNotExist(err) {
+			t.Logf("failed to remove socket %s: %v", socketPath, err)
+		}
+	})
 
 	stopCalled := make(chan struct{})
 
@@ -369,7 +401,11 @@ func TestClient_NotRunning(t *testing.T) {
 func TestClient_IsRunning(t *testing.T) {
 	ctx := testContext(t)
 	socketPath := tempSocketPath(t)
-	defer os.Remove(socketPath)
+	t.Cleanup(func() {
+		if err := os.Remove(socketPath); err != nil && !os.IsNotExist(err) {
+			t.Logf("failed to remove socket %s: %v", socketPath, err)
+		}
+	})
 
 	client := NewClientWithPath(socketPath)
 	client.SetTimeout(100 * time.Millisecond)

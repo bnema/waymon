@@ -25,7 +25,7 @@ For example, you can bind:
   Super+2: waymon connect 2
   etc.`,
 		Args: cobra.ExactArgs(1),
-		RunE: func(cmd *cobra.Command, args []string) error {
+		RunE: func(_ *cobra.Command, args []string) error {
 			return c.runConnect(args[0])
 		},
 	}

@@ -239,7 +239,8 @@ func setupServerLogging(ctx context.Context, cfg *domain.Config, levelOverride s
 
 		logPath := filepath.Join(logDir, "waymon-server.log")
 		var err error
-		fileHandle, err = os.OpenFile(logPath, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0640)
+		// Note: logPath is constructed from config/cache dir + fixed filename - this is intentional
+		fileHandle, err = os.OpenFile(logPath, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0640) //nolint:gosec // G304: Log path is safely constructed from config or cache dir
 		if err != nil {
 			return ctx, func() {}, fmt.Errorf("failed to open log file: %w", err)
 		}
@@ -260,7 +261,7 @@ func setupServerLogging(ctx context.Context, cfg *domain.Config, levelOverride s
 
 	cleanup := func() {
 		if fileHandle != nil {
-			fileHandle.Close()
+			_ = fileHandle.Close() // Best effort close of log file
 		}
 	}
 

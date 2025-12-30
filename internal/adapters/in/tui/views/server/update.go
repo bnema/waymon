@@ -88,7 +88,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case messages.TickMsg:
 		// Refresh client list periodically
 		cmds = append(cmds, m.refreshClients())
-		cmds = append(cmds, tea.Tick(time.Second, func(t time.Time) tea.Msg {
+		cmds = append(cmds, tea.Tick(time.Second, func(_ time.Time) tea.Msg {
 			return messages.TickMsg{}
 		}))
 

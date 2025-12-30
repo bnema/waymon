@@ -23,7 +23,7 @@ func NewClient() (*Client, error) {
 	// Check if server socket exists and is connectable
 	conn, err := net.DialTimeout("unix", serverSocketPath, 100*time.Millisecond)
 	if err == nil {
-		conn.Close()
+		_ = conn.Close() // Ignore error on probe connection close
 		return &Client{
 			socketPath: serverSocketPath,
 			timeout:    5 * time.Second,
@@ -188,7 +188,9 @@ func (c *Client) sendMessage(msg *Message) (*Message, error) {
 		}
 		return nil, fmt.Errorf("failed to connect to waymon: %w", err)
 	}
-	defer conn.Close()
+	defer func() {
+		_ = conn.Close() // Best effort close on IPC connection
+	}()
 
 	// Set connection timeout
 	if err := conn.SetDeadline(time.Now().Add(c.timeout)); err != nil {

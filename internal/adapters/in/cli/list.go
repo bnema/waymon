@@ -15,7 +15,7 @@ func (c *CLI) newListCmd() *cobra.Command {
 		Use:   "list",
 		Short: "List connected clients",
 		Long:  `List all connected clients and their slot numbers for use with the connect command.`,
-		RunE: func(cmd *cobra.Command, args []string) error {
+		RunE: func(_ *cobra.Command, _ []string) error {
 			return c.runList()
 		},
 	}
@@ -60,7 +60,8 @@ func (c *CLI) runList() error {
 	// Add client rows
 	for i, name := range status.ComputerNames {
 		activeMarker = ""
-		if status.CurrentIndex == int32(i+1) {
+		// Client index is bounded by slice length which is << MaxInt32
+		if status.CurrentIndex == int32(i+1) { //nolint:gosec // G115: i is bounded by slice length
 			activeMarker = styles.IconChevronL
 		}
 		rows = append(rows, []string{fmt.Sprintf("%d", i+1), name, "-", activeMarker})

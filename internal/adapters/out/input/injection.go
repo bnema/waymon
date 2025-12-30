@@ -280,7 +280,16 @@ func (w *WaylandInjector) InjectMousePosition(ctx context.Context, x, y int32) e
 	}
 
 	// Inject absolute motion
-	if err := w.virtualPtr.MotionAbsolute(time.Now(), uint32(x), uint32(y), w.screenWidth, w.screenHeight); err != nil {
+	// Clamp negative coordinates to 0 to safely convert int32 to uint32
+	ux := uint32(0)
+	uy := uint32(0)
+	if x > 0 {
+		ux = uint32(x)
+	}
+	if y > 0 {
+		uy = uint32(y)
+	}
+	if err := w.virtualPtr.MotionAbsolute(time.Now(), ux, uy, w.screenWidth, w.screenHeight); err != nil {
 		return fmt.Errorf("failed to inject absolute mouse position: %w", err)
 	}
 
@@ -398,7 +407,7 @@ func (w *WaylandInjector) InjectMouseScroll(ctx context.Context, dx, dy float64,
 }
 
 // InjectKeyEvent injects a keyboard key event.
-func (w *WaylandInjector) InjectKeyEvent(ctx context.Context, key uint32, pressed bool, modifiers uint32) error {
+func (w *WaylandInjector) InjectKeyEvent(ctx context.Context, key uint32, pressed bool, _ uint32) error {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 

@@ -72,14 +72,14 @@ func TestUseCaseImpl_Connect(t *testing.T) {
 		},
 		{
 			name: "fails when config load fails",
-			setupMocks: func(ii *mocks.MockInputInjectionPort, nc *mocks.MockNetworkClientPort, dp *mocks.MockDisplayPort, cr *mocks.MockConfigRepository) {
+			setupMocks: func(_ *mocks.MockInputInjectionPort, _ *mocks.MockNetworkClientPort, _ *mocks.MockDisplayPort, cr *mocks.MockConfigRepository) {
 				cr.On("Load", mock.Anything).Return(nil, domain.ErrConfigNotFound)
 			},
 			expectedError: true,
 		},
 		{
 			name: "fails when input injection start fails",
-			setupMocks: func(ii *mocks.MockInputInjectionPort, nc *mocks.MockNetworkClientPort, dp *mocks.MockDisplayPort, cr *mocks.MockConfigRepository) {
+			setupMocks: func(ii *mocks.MockInputInjectionPort, _ *mocks.MockNetworkClientPort, _ *mocks.MockDisplayPort, cr *mocks.MockConfigRepository) {
 				cr.On("Load", mock.Anything).Return(&domain.Config{
 					Client: domain.ClientCfg{ServerAddress: "192.168.1.100:52525"},
 				}, nil)
@@ -89,7 +89,7 @@ func TestUseCaseImpl_Connect(t *testing.T) {
 		},
 		{
 			name: "fails when network connect fails",
-			setupMocks: func(ii *mocks.MockInputInjectionPort, nc *mocks.MockNetworkClientPort, dp *mocks.MockDisplayPort, cr *mocks.MockConfigRepository) {
+			setupMocks: func(ii *mocks.MockInputInjectionPort, nc *mocks.MockNetworkClientPort, _ *mocks.MockDisplayPort, cr *mocks.MockConfigRepository) {
 				cr.On("Load", mock.Anything).Return(&domain.Config{
 					Client: domain.ClientCfg{
 						ServerAddress: "192.168.1.100:52525",
@@ -161,7 +161,7 @@ func TestUseCaseImpl_Disconnect(t *testing.T) {
 			setupState: func(uc *UseCaseImpl) {
 				uc.connected = false
 			},
-			setupMocks: func(ii *mocks.MockInputInjectionPort, nc *mocks.MockNetworkClientPort) {
+			setupMocks: func(_ *mocks.MockInputInjectionPort, _ *mocks.MockNetworkClientPort) {
 				// No calls expected
 			},
 		},
@@ -192,7 +192,7 @@ func TestUseCaseImpl_IsConnected(t *testing.T) {
 	}{
 		{
 			name:       "not connected by default",
-			setupState: func(uc *UseCaseImpl) {},
+			setupState: func(_ *UseCaseImpl) {},
 			want:       false,
 		},
 		{
@@ -224,7 +224,7 @@ func TestUseCaseImpl_GetControlStatus(t *testing.T) {
 	}{
 		{
 			name:       "default status",
-			setupState: func(uc *UseCaseImpl) {},
+			setupState: func(_ *UseCaseImpl) {},
 			want:       domain.ControlStatus{},
 		},
 		{
@@ -339,7 +339,7 @@ func TestUseCaseImpl_handleControlEvent(t *testing.T) {
 			controlEvent: &domain.ControlEvent{
 				Type: domain.ControlServerShutdown,
 			},
-			setupMocks: func(ii *mocks.MockInputInjectionPort) {
+			setupMocks: func(_ *mocks.MockInputInjectionPort) {
 				// No calls expected - just clears state
 			},
 			wantControlled: false,
@@ -428,7 +428,7 @@ func TestUseCaseImpl_injectEvent(t *testing.T) {
 			event: &domain.InputEvent{
 				// No event type set
 			},
-			setupMocks: func(ii *mocks.MockInputInjectionPort) {
+			setupMocks: func(_ *mocks.MockInputInjectionPort) {
 				// No calls expected
 			},
 			wantError: true,
@@ -483,7 +483,7 @@ func TestUseCaseImpl_processInputEvent(t *testing.T) {
 			event: &domain.InputEvent{
 				MouseMove: &domain.MouseMoveEvent{DX: 10, DY: 20},
 			},
-			setupMocks: func(ii *mocks.MockInputInjectionPort) {
+			setupMocks: func(_ *mocks.MockInputInjectionPort) {
 				// No injection calls expected
 			},
 		},

@@ -33,7 +33,7 @@ Example usage in window manager configs:
   Hyprland: bind = $mainMod SHIFT, S, exec, waymon switch
   i3/Sway:  bindsym $mod+Shift+s exec waymon switch
 `,
-		RunE: func(cmd *cobra.Command, args []string) error {
+		RunE: func(_ *cobra.Command, _ []string) error {
 			return c.runSwitch(switchPrevious, switchEnable, switchDisable)
 		},
 	}

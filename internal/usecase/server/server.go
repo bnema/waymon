@@ -152,7 +152,7 @@ func (s *UseCaseImpl) StartNetworking(ctx context.Context) error {
 	log.Debug().Msg("Starting server networking")
 
 	// Set up network callbacks
-	s.network.SetOnClientConnected(func(addr, publicKey string) {
+	s.network.SetOnClientConnected(func(addr, _ string) {
 		s.RegisterClient(ctx, addr, addr, addr)
 	})
 

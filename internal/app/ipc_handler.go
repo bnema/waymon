@@ -61,11 +61,11 @@ func (a *IPCHandlerAdapter) HandleStatus(ctx context.Context) (*in.StatusRespons
 	}
 
 	// Calculate current index (0 = local, 1+ = clients)
-	var currentIndex int32 = 0
+	var currentIndex int32
 	if !isLocal && activeClient != nil {
 		for i, c := range clients {
 			if c.ID == activeClient.ID {
-				currentIndex = int32(i + 1) // 1-based for clients
+				currentIndex = int32(i + 1) //nolint:gosec // i is bounded by slice length
 				break
 			}
 		}
@@ -76,7 +76,7 @@ func (a *IPCHandlerAdapter) HandleStatus(ctx context.Context) (*in.StatusRespons
 		Connected:     len(clients) > 0,
 		ServerHost:    getHostname(),
 		CurrentIndex:  currentIndex,
-		TotalCount:    int32(len(clients) + 1), // +1 for local
+		TotalCount:    int32(len(clients) + 1), //nolint:gosec // client count is bounded
 		ComputerNames: clientNames,
 	}, nil
 }

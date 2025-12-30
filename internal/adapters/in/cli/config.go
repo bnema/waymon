@@ -31,7 +31,7 @@ func (c *CLI) newConfigShowCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "show",
 		Short: "Show current configuration",
-		RunE: func(cmd *cobra.Command, args []string) error {
+		RunE: func(cmd *cobra.Command, _ []string) error {
 			return c.runConfigShow(cmd.Context())
 		},
 	}
@@ -75,11 +75,17 @@ func (c *CLI) runConfigShow(ctx context.Context) error {
 	if len(cfg.Hosts) > 0 {
 		fmt.Println("\n[Hosts]")
 		w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
-		fmt.Fprintln(w, "  Name\tAddress\tPosition")
-		for _, host := range cfg.Hosts {
-			fmt.Fprintf(w, "  %s\t%s\t%s\n", host.Name, host.Address, host.Position)
+		if _, err := fmt.Fprintln(w, "  Name\tAddress\tPosition"); err != nil {
+			return fmt.Errorf("failed to write header: %w", err)
 		}
-		w.Flush()
+		for _, host := range cfg.Hosts {
+			if _, err := fmt.Fprintf(w, "  %s\t%s\t%s\n", host.Name, host.Address, host.Position); err != nil {
+				return fmt.Errorf("failed to write host: %w", err)
+			}
+		}
+		if err := w.Flush(); err != nil {
+			return fmt.Errorf("failed to flush output: %w", err)
+		}
 	}
 
 	return nil
@@ -89,7 +95,7 @@ func (c *CLI) newConfigSaveCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "save",
 		Short: "Save current configuration to file",
-		RunE: func(cmd *cobra.Command, args []string) error {
+		RunE: func(cmd *cobra.Command, _ []string) error {
 			return c.runConfigSave(cmd.Context())
 		},
 	}
@@ -119,7 +125,7 @@ func (c *CLI) newConfigInitCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "init",
 		Short: "Initialize configuration file with defaults",
-		RunE: func(cmd *cobra.Command, args []string) error {
+		RunE: func(cmd *cobra.Command, _ []string) error {
 			return c.runConfigInit(cmd.Context(), force)
 		},
 	}
@@ -278,7 +284,7 @@ func (c *CLI) newConfigHostListCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "list",
 		Short: "List all configured hosts",
-		RunE: func(cmd *cobra.Command, args []string) error {
+		RunE: func(cmd *cobra.Command, _ []string) error {
 			return c.runConfigHostList(cmd.Context())
 		},
 	}
@@ -300,11 +306,17 @@ func (c *CLI) runConfigHostList(ctx context.Context) error {
 	}
 
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
-	fmt.Fprintln(w, "Name\tAddress\tPosition")
-	fmt.Fprintln(w, "----\t-------\t--------")
+	if _, err := fmt.Fprintln(w, "Name\tAddress\tPosition"); err != nil {
+		return fmt.Errorf("failed to write header: %w", err)
+	}
+	if _, err := fmt.Fprintln(w, "----\t-------\t--------"); err != nil {
+		return fmt.Errorf("failed to write separator: %w", err)
+	}
 
 	for _, host := range cfg.Hosts {
-		fmt.Fprintf(w, "%s\t%s\t%s\n", host.Name, host.Address, host.Position)
+		if _, err := fmt.Fprintf(w, "%s\t%s\t%s\n", host.Name, host.Address, host.Position); err != nil {
+			return fmt.Errorf("failed to write host: %w", err)
+		}
 	}
 
 	return w.Flush()
@@ -327,7 +339,7 @@ func (c *CLI) newConfigSSHListCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "list",
 		Short: "List whitelisted SSH keys",
-		RunE: func(cmd *cobra.Command, args []string) error {
+		RunE: func(cmd *cobra.Command, _ []string) error {
 			return c.runConfigSSHList(cmd.Context())
 		},
 	}
@@ -419,7 +431,7 @@ func (c *CLI) newConfigSSHClearCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "clear",
 		Short: "Clear all SSH keys from whitelist",
-		RunE: func(cmd *cobra.Command, args []string) error {
+		RunE: func(cmd *cobra.Command, _ []string) error {
 			return c.runConfigSSHClear(cmd.Context())
 		},
 	}

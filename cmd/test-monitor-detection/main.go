@@ -1,3 +1,4 @@
+// Package main provides a test utility for monitor detection.
 package main
 
 import (
@@ -25,20 +26,30 @@ func main() {
 	fmt.Printf("XDG_RUNTIME_DIR: %s\n", os.Getenv("XDG_RUNTIME_DIR"))
 	fmt.Println()
 
+	log := zerolog.Ctx(ctx)
+
 	// Create display adapter
 	disp, err := display.New(ctx)
 	if err != nil {
 		fmt.Printf("Error creating display adapter: %v\n", err)
 		os.Exit(1)
 	}
-	defer disp.Close()
 
 	// Get monitors
 	monitors, err := disp.GetMonitors(ctx)
 	if err != nil {
 		fmt.Printf("Error getting monitors: %v\n", err)
+		if closeErr := disp.Close(); closeErr != nil {
+			log.Error().Err(closeErr).Msg("Failed to close display adapter")
+		}
 		os.Exit(1)
 	}
+	// Defer close after error checks are done
+	defer func() {
+		if err := disp.Close(); err != nil {
+			log.Error().Err(err).Msg("Failed to close display adapter")
+		}
+	}()
 
 	fmt.Printf("Detected %d monitor(s):\n", len(monitors))
 

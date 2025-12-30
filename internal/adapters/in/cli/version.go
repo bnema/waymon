@@ -11,7 +11,7 @@ func (c *CLI) newVersionCmd() *cobra.Command {
 		Use:   "version",
 		Short: "Print the version number",
 		Long:  `Print the version number of waymon.`,
-		Run: func(cmd *cobra.Command, args []string) {
+		Run: func(_ *cobra.Command, _ []string) {
 			fmt.Printf("waymon version %s\n", Version)
 		},
 	}

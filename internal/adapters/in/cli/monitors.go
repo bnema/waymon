@@ -35,7 +35,7 @@ func (c *CLI) newMonitorsCmd() *cobra.Command {
 		Use:   "monitors",
 		Short: "Show monitor configuration",
 		Long:  `Display information about connected monitors and their configuration.`,
-		RunE: func(cmd *cobra.Command, args []string) error {
+		RunE: func(cmd *cobra.Command, _ []string) error {
 			return c.runMonitors(cmd.Context(), jsonOutput)
 		},
 	}

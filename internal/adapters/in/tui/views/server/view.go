@@ -123,11 +123,12 @@ func (m Model) renderControlPanel() string {
 	lines = append(lines, "")
 
 	// Current control state
-	if m.controlLocal {
+	switch {
+	case m.controlLocal:
 		lines = append(lines, styles.SuccessStyle.Render(styles.IconCheck+" Controlling: Local"))
-	} else if m.activeClientID != "" {
+	case m.activeClientID != "":
 		lines = append(lines, styles.InfoStyle.Render(styles.IconArrowRight+" Controlling: "+m.activeClientID))
-	} else {
+	default:
 		lines = append(lines, styles.MutedStyle.Render(styles.IconCircleEmpty+" No active control"))
 	}
 
@@ -135,11 +136,12 @@ func (m Model) renderControlPanel() string {
 
 	// Client count
 	clientCount := len(m.clients)
-	if clientCount == 0 {
+	switch clientCount {
+	case 0:
 		lines = append(lines, styles.MutedStyle.Render("No clients connected"))
-	} else if clientCount == 1 {
+	case 1:
 		lines = append(lines, styles.InfoStyle.Render("1 client connected"))
-	} else {
+	default:
 		lines = append(lines, styles.InfoStyle.Render(formatInt(clientCount)+" clients connected"))
 	}
 

@@ -70,7 +70,7 @@ func (m Model) Init() tea.Cmd {
 	return tea.Batch(
 		m.subscribeToEvents(),
 		m.checkConnection(),
-		tea.Tick(time.Second, func(t time.Time) tea.Msg {
+		tea.Tick(time.Second, func(_ time.Time) tea.Msg {
 			return messages.TickMsg{}
 		}),
 	)
@@ -80,12 +80,12 @@ func (m Model) Init() tea.Cmd {
 func (m Model) subscribeToEvents() tea.Cmd {
 	return func() tea.Msg {
 		// Set up control change callback
-		m.useCase.SetOnControlChanged(func(status domain.ControlStatus) {
+		m.useCase.SetOnControlChanged(func(_ domain.ControlStatus) {
 			// Note: In a real implementation, send via channel
 		})
 
 		// Set up connection state callback
-		m.useCase.SetOnConnectionStateChanged(func(connected bool, serverName string) {
+		m.useCase.SetOnConnectionStateChanged(func(_ bool, _ string) {
 			// Note: In a real implementation, send via channel
 		})
 

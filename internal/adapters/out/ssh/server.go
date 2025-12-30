@@ -158,10 +158,10 @@ func (s *ServerAdapter) SendEventToClient(ctx context.Context, clientAddr string
 }
 
 // SetMaxClients sets the maximum number of concurrent clients.
-func (s *ServerAdapter) SetMaxClients(max int) {
+func (s *ServerAdapter) SetMaxClients(maxClients int) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	s.maxClients = max
+	s.maxClients = maxClients
 }
 
 // Port returns the port the server is listening on.
@@ -225,7 +225,7 @@ func (s *ServerAdapter) publicKeyAuth(ctx ssh.Context, key ssh.PublicKey) bool {
 
 // sessionHandler handles SSH sessions.
 func (s *ServerAdapter) sessionHandler() wish.Middleware {
-	return func(h ssh.Handler) ssh.Handler {
+	return func(_ ssh.Handler) ssh.Handler {
 		return func(sess ssh.Session) {
 			log := zerolog.Ctx(s.ctx)
 			addr := sess.RemoteAddr().String()

@@ -306,11 +306,12 @@ func (c *Capture) discoverAndStartDevices() error {
 
 			if err := c.addDevice(path); err != nil {
 				c.ignoredDevices[path] = true
-				if strings.Contains(err.Error(), "no relevant input capabilities") {
+				switch {
+				case strings.Contains(err.Error(), "no relevant input capabilities"):
 					log.Debug().Str("path", path).Msg("device not suitable for capture")
-				} else if strings.Contains(err.Error(), "permission denied") {
+				case strings.Contains(err.Error(), "permission denied"):
 					log.Warn().Str("path", path).Msg("permission denied - run as root with: sudo waymon server")
-				} else {
+				default:
 					log.Warn().Err(err).Str("path", path).Msg("failed to add device")
 				}
 			} else {
@@ -618,7 +619,7 @@ func (c *Capture) captureFromDevice(ctx context.Context, handler *deviceHandler)
 }
 
 // handleKeyEvent handles a key event (mouse button or keyboard).
-func (c *Capture) handleKeyEvent(event evdev.InputEvent, handler *deviceHandler) {
+func (c *Capture) handleKeyEvent(event evdev.InputEvent, _ *deviceHandler) {
 	log := zerolog.Ctx(c.ctx)
 
 	// Track Ctrl key state

@@ -262,13 +262,14 @@ func (m MonitorDisplay) drawMonitor(canvas [][]rune, mon domain.Monitor, bounds 
 	// Choose border characters based on highlight state
 	isHighlighted := mon.ID == m.highlightedID || mon.Name == m.highlightedID
 	var hChar, vChar, tlChar, trChar, blChar, brChar rune
-	if isHighlighted {
+	switch {
+	case isHighlighted:
 		hChar, vChar = '=', '\u2551'
 		tlChar, trChar, blChar, brChar = '\u2554', '\u2557', '\u255a', '\u255d'
-	} else if mon.Primary {
+	case mon.Primary:
 		hChar, vChar = '\u2500', '\u2502'
 		tlChar, trChar, blChar, brChar = '\u256d', '\u256e', '\u2570', '\u256f'
-	} else {
+	default:
 		hChar, vChar = '-', '|'
 		tlChar, trChar, blChar, brChar = '+', '+', '+', '+'
 	}
@@ -277,11 +278,12 @@ func (m MonitorDisplay) drawMonitor(canvas [][]rune, mon domain.Monitor, bounds 
 	if y >= 0 && y < maxY {
 		for dx := 0; dx <= w && x+dx < maxX; dx++ {
 			if x+dx >= 0 {
-				if dx == 0 {
+				switch dx {
+				case 0:
 					canvas[y][x+dx] = tlChar
-				} else if dx == w {
+				case w:
 					canvas[y][x+dx] = trChar
-				} else {
+				default:
 					canvas[y][x+dx] = hChar
 				}
 			}
@@ -293,11 +295,12 @@ func (m MonitorDisplay) drawMonitor(canvas [][]rune, mon domain.Monitor, bounds 
 	if bottomY >= 0 && bottomY < maxY {
 		for dx := 0; dx <= w && x+dx < maxX; dx++ {
 			if x+dx >= 0 {
-				if dx == 0 {
+				switch dx {
+				case 0:
 					canvas[bottomY][x+dx] = blChar
-				} else if dx == w {
+				case w:
 					canvas[bottomY][x+dx] = brChar
-				} else {
+				default:
 					canvas[bottomY][x+dx] = hChar
 				}
 			}

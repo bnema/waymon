@@ -25,7 +25,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	// Keyboard input
 	case tea.KeyMsg:
-		cmd := m.handleKeyPress(msg)
+		var cmd tea.Cmd
+		m, cmd = m.handleKeyPress(msg)
 		if cmd != nil {
 			cmds = append(cmds, cmd)
 		}
@@ -33,13 +34,14 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	// Connection events
 	case messages.ConnectionStateMsg:
 		m.connected = msg.Connected
-		if msg.Error != nil {
+		switch {
+		case msg.Error != nil:
 			m.connectError = msg.Error
 			m.toasts = m.toasts.AddError("Connection failed: " + msg.Error.Error())
-		} else if msg.Connected {
+		case msg.Connected:
 			m.toasts = m.toasts.AddSuccess("Connected to server")
 			m.connectError = nil
-		} else {
+		default:
 			m.toasts = m.toasts.AddWarning("Disconnected from server")
 		}
 		m = m.updateStatusBar()
@@ -83,7 +85,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case messages.TickMsg:
 		// Check connection status periodically
 		cmds = append(cmds, m.checkConnection())
-		cmds = append(cmds, tea.Tick(time.Second, func(t time.Time) tea.Msg {
+		cmds = append(cmds, tea.Tick(time.Second, func(_ time.Time) tea.Msg {
 			return messages.TickMsg{}
 		}))
 
@@ -97,11 +99,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 // handleKeyPress handles keyboard input.
-func (m Model) handleKeyPress(msg tea.KeyMsg) tea.Cmd {
+func (m Model) handleKeyPress(msg tea.KeyMsg) (Model, tea.Cmd) {
 	switch msg.String() {
 	case "q", "ctrl+c":
 		m.quitting = true
-		return tea.Sequence(
+		return m, tea.Sequence(
 			m.disconnect(),
 			tea.Quit,
 		)
@@ -109,13 +111,13 @@ func (m Model) handleKeyPress(msg tea.KeyMsg) tea.Cmd {
 	case "r":
 		// Reconnect
 		if !m.connected {
-			return m.connect()
+			return m, m.connect()
 		}
 
 	case "d":
 		// Disconnect
 		if m.connected {
-			return m.disconnect()
+			return m, m.disconnect()
 		}
 
 	case "?":
@@ -127,7 +129,7 @@ func (m Model) handleKeyPress(msg tea.KeyMsg) tea.Cmd {
 		m.connectError = nil
 	}
 
-	return nil
+	return m, nil
 }
 
 // connect initiates connection to server.

@@ -83,7 +83,7 @@ func (s *UseCaseImpl) UnregisterClient(ctx context.Context, id string) {
 }
 
 // GetConnectedClients returns a list of connected clients.
-func (s *UseCaseImpl) GetConnectedClients(ctx context.Context) []domain.Client {
+func (s *UseCaseImpl) GetConnectedClients(_ context.Context) []domain.Client {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
@@ -95,7 +95,7 @@ func (s *UseCaseImpl) GetConnectedClients(ctx context.Context) []domain.Client {
 }
 
 // GetActiveClient returns the currently controlled client.
-func (s *UseCaseImpl) GetActiveClient(ctx context.Context) *domain.Client {
+func (s *UseCaseImpl) GetActiveClient(_ context.Context) *domain.Client {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
@@ -111,7 +111,7 @@ func (s *UseCaseImpl) GetActiveClient(ctx context.Context) *domain.Client {
 }
 
 // IsControllingLocal returns whether the server is controlling the local system.
-func (s *UseCaseImpl) IsControllingLocal(ctx context.Context) bool {
+func (s *UseCaseImpl) IsControllingLocal(_ context.Context) bool {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	return s.controllingLocal

@@ -27,13 +27,21 @@ func main() {
 	if err != nil {
 		log.Fatal().Err(err).Msg("Failed to create display adapter")
 	}
-	defer disp.Close()
 
 	// Show monitors
 	monitors, err := disp.GetMonitors(ctx)
 	if err != nil {
+		if closeErr := disp.Close(); closeErr != nil {
+			log.Error().Err(closeErr).Msg("Failed to close display adapter")
+		}
 		log.Fatal().Err(err).Msg("Failed to get monitors")
 	}
+	// Defer close after error checks are done
+	defer func() {
+		if err := disp.Close(); err != nil {
+			log.Error().Err(err).Msg("Failed to close display adapter")
+		}
+	}()
 
 	fmt.Printf("Detected %d monitor(s):\n\n", len(monitors))
 

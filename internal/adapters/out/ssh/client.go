@@ -43,7 +43,8 @@ func (c *ClientAdapter) Connect(ctx context.Context, addr string, privateKeyPath
 	log.Debug().Str("addr", addr).Msg("connecting to SSH server")
 
 	// Load private key
-	keyData, err := os.ReadFile(privateKeyPath)
+	// Note: privateKeyPath is user-provided via config/CLI - this is intentional
+	keyData, err := os.ReadFile(privateKeyPath) //nolint:gosec // G304: Path is user-configured SSH private key location
 	if err != nil {
 		return fmt.Errorf("failed to read private key: %w", err)
 	}
@@ -59,7 +60,8 @@ func (c *ClientAdapter) Connect(ctx context.Context, addr string, privateKeyPath
 		Auth: []ssh.AuthMethod{
 			ssh.PublicKeys(signer),
 		},
-		HostKeyCallback: ssh.InsecureIgnoreHostKey(), // TODO: Implement proper host key verification
+		//nolint:gosec // G106: TODO - Implement proper host key verification with known_hosts
+		HostKeyCallback: ssh.InsecureIgnoreHostKey(),
 		Timeout:         10 * time.Second,
 	}
 
@@ -72,7 +74,7 @@ func (c *ClientAdapter) Connect(ctx context.Context, addr string, privateKeyPath
 	// SSH handshake
 	sshConn, chans, reqs, err := ssh.NewClientConn(conn, addr, config)
 	if err != nil {
-		conn.Close()
+		_ = conn.Close() // Best effort cleanup on handshake failure
 		return fmt.Errorf("SSH handshake failed: %w", err)
 	}
 
@@ -81,31 +83,31 @@ func (c *ClientAdapter) Connect(ctx context.Context, addr string, privateKeyPath
 	// Open session
 	session, err := client.NewSession()
 	if err != nil {
-		client.Close()
+		_ = client.Close() // Best effort cleanup on session creation failure
 		return fmt.Errorf("failed to create session: %w", err)
 	}
 
 	// Get stdin/stdout pipes
 	stdin, err := session.StdinPipe()
 	if err != nil {
-		session.Close()
-		client.Close()
+		_ = session.Close() // Best effort cleanup
+		_ = client.Close()
 		return fmt.Errorf("failed to get stdin pipe: %w", err)
 	}
 
 	stdout, err := session.StdoutPipe()
 	if err != nil {
-		stdin.Close()
-		session.Close()
-		client.Close()
+		_ = stdin.Close() // Best effort cleanup
+		_ = session.Close()
+		_ = client.Close()
 		return fmt.Errorf("failed to get stdout pipe: %w", err)
 	}
 
 	// Start shell
 	if err := session.Shell(); err != nil {
-		stdin.Close()
-		session.Close()
-		client.Close()
+		_ = stdin.Close() // Best effort cleanup
+		_ = session.Close()
+		_ = client.Close()
 		return fmt.Errorf("failed to start shell: %w", err)
 	}
 
@@ -141,20 +143,22 @@ func (c *ClientAdapter) Disconnect() error {
 		c.cancel()
 	}
 
+	// Close resources in reverse order of acquisition
+	// Errors are intentionally ignored during disconnect cleanup
 	if c.stdin != nil {
-		c.stdin.Close()
+		_ = c.stdin.Close()
 	}
 
 	if c.session != nil {
-		c.session.Close()
+		_ = c.session.Close()
 	}
 
 	if c.sshClient != nil {
-		c.sshClient.Close()
+		_ = c.sshClient.Close()
 	}
 
 	if c.conn != nil {
-		c.conn.Close()
+		_ = c.conn.Close()
 	}
 
 	return nil
@@ -168,7 +172,7 @@ func (c *ClientAdapter) IsConnected() bool {
 }
 
 // SendEvent sends an input event to the server.
-func (c *ClientAdapter) SendEvent(ctx context.Context, event *domain.InputEvent) error {
+func (c *ClientAdapter) SendEvent(_ context.Context, event *domain.InputEvent) error {
 	c.mu.RLock()
 	if !c.connected {
 		c.mu.RUnlock()

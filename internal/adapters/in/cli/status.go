@@ -14,13 +14,13 @@ func (c *CLI) newStatusCmd() *cobra.Command {
 		Use:   "status",
 		Short: "Check the status of the Waymon server",
 		Long:  `Check the status of the running Waymon server including connected clients and current control state.`,
-		RunE: func(cmd *cobra.Command, args []string) error {
-			return c.runStatus(cmd, args)
+		RunE: func(_ *cobra.Command, _ []string) error {
+			return c.runStatus()
 		},
 	}
 }
 
-func (c *CLI) runStatus(cmd *cobra.Command, args []string) error {
+func (c *CLI) runStatus() error {
 	// Check if IPC client is available
 	if c.ipcClient == nil {
 		return fmt.Errorf("IPC client not available - CLI not properly initialized")
@@ -95,7 +95,8 @@ func (c *CLI) runStatus(cmd *cobra.Command, args []string) error {
 			output.WriteString(slotStyle.Render(fmt.Sprintf("[%d]", i+1)))
 			output.WriteString(" ")
 			output.WriteString(nameStyle.Render(name))
-			if status.CurrentIndex == int32(i+1) {
+			// Index is bounded by slice length, safe conversion
+			if status.CurrentIndex == int32(i+1) { //nolint:gosec // i is bounded by slice length
 				output.WriteString(" ")
 				output.WriteString(activeStyle.Render(styles.IconChevronL + " ACTIVE"))
 			}

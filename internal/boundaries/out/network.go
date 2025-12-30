@@ -19,7 +19,7 @@ type NetworkServerPort interface {
 	SendEventToClient(ctx context.Context, clientAddr string, event *domain.InputEvent) error
 
 	// SetMaxClients sets the maximum number of concurrent clients.
-	SetMaxClients(max int)
+	SetMaxClients(maxClients int)
 
 	// Port returns the port the server is listening on.
 	Port() int

@@ -214,7 +214,7 @@ name = "desktop"
 address = "10.0.0.2:52525"
 position = "bottom"
 `
-	err := os.WriteFile(configPath, []byte(tomlContent), 0644)
+	err := os.WriteFile(configPath, []byte(tomlContent), 0600)
 	require.NoError(t, err)
 
 	repo := NewViperRepository()
@@ -249,7 +249,7 @@ func TestViperRepository_LoadInvalidTOML(t *testing.T) {
 	configPath := filepath.Join(tmpDir, "waymon.toml")
 
 	// Write invalid TOML
-	err := os.WriteFile(configPath, []byte("invalid toml content [[["), 0644)
+	err := os.WriteFile(configPath, []byte("invalid toml content [[["), 0600)
 	require.NoError(t, err)
 
 	repo := NewViperRepository()

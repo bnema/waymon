@@ -218,7 +218,8 @@ func (m Model) renderComputerList() string {
 		var statusIcon string
 		var statusStyle lipgloss.Style
 
-		if int32(i) == m.currentIndex && m.active {
+		// i is bounded by slice length, safe conversion
+		if int32(i) == m.currentIndex && m.active { //nolint:gosec // i is bounded by slice length
 			statusIcon = styles.IconMouse
 			statusStyle = styles.SuccessStyleBold
 		} else {
@@ -262,7 +263,8 @@ func (m Model) RenderStatic() string {
 	output += fmt.Sprintf("Computers: %d\n", m.totalCount)
 	for i, name := range m.computerNames {
 		active := ""
-		if int32(i) == m.currentIndex && m.active {
+		// i is bounded by slice length, safe conversion
+		if int32(i) == m.currentIndex && m.active { //nolint:gosec // i is bounded by slice length
 			active = " [active]"
 		}
 		output += fmt.Sprintf("  %d. %s%s\n", i+1, name, active)
