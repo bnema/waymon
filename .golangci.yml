@@ -1,5 +1,5 @@
 # golangci-lint configuration
-version: 2
+version: "2"
 
 run:
   timeout: 5m
@@ -18,26 +18,34 @@ linters:
     - gocritic
     - gosec
     - unconvert
-
-linters-settings:
-  revive:
+  settings:
+    revive:
+      rules:
+        - name: blank-imports
+        - name: error-return
+        - name: error-strings
+        - name: error-naming
+        - name: var-naming
+        - name: receiver-naming
+    govet:
+      disable:
+        - fieldalignment  # Too noisy for this codebase
+        - shadow          # Too strict
+    gocritic:
+      enabled-tags:
+        - diagnostic
+        - performance
+      disabled-checks:
+        - hugeParam           # Too strict for domain types
+        - rangeValCopy        # Often intentional
+        - appendCombine       # Style preference
+        - filepathJoin        # False positives with /tmp
+  exclusions:
+    generated: strict
+    paths:
+      - ".*\\.pb\\.go$"
     rules:
-      - name: blank-imports
-      - name: error-return
-      - name: error-strings
-      - name: error-naming
-      - name: var-naming
-      - name: receiver-naming
-
-  govet:
-    enable-all: true
-
-  gocritic:
-    enabled-tags:
-      - diagnostic
-      - performance
-      - style
-
-issues:
-  exclude-files:
-    - ".*\\.pb\\.go$"
+      # Allow unused helper functions in integration tests (for future Tier 2-4 tests)
+      - linters:
+          - unused
+        path: tests/integration/helpers\.go

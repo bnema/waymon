@@ -27,32 +27,58 @@ test:
 	@echo "Running unit tests..."
 	go test -v ./internal/... ./cmd/...
 
-# Run integration tests
-test-integration: test-capture test-network test-wayland
+# Run CI-friendly integration tests (Tier 1: IPC, SSH, UseCase helpers)
+test-integration:
+	@echo "Running integration tests (Tier 1)..."
+	go test -tags=integration -v ./tests/integration/... \
+		-run 'TestIPC|TestSSH|TestServer'
 
-# Run capture integration test
-test-capture:
-	@echo "Running capture integration test..."
-	@echo "Note: This test requires read/write access to /dev/input devices"
-	@go run tests/integration/capture/main.go -v
+# Run integration tests with race detection
+test-integration-race:
+	@echo "Running integration tests with race detection..."
+	go test -tags=integration -race -v ./tests/integration/... \
+		-run 'TestIPC|TestSSH|TestServer'
 
-# Run interactive capture test
-test-capture-interactive:
-	@echo "Running interactive capture integration test..."
-	@echo "Note: This test requires read/write access to /dev/input devices"
-	@echo "Safety: Devices auto-release after 5 seconds (or press ESC)"
-	@go run tests/integration/capture/main.go -v -i -d 10s
+# Run only IPC integration tests
+test-ipc:
+	@echo "Running IPC integration tests..."
+	go test -tags=integration -v ./tests/integration/... -run TestIPC
 
-# Run network integration test
-test-network:
-	@echo "Running network integration test..."
-	@go run tests/integration/network/main.go
+# Run only SSH integration tests
+test-ssh:
+	@echo "Running SSH integration tests..."
+	go test -tags=integration -v ./tests/integration/... -run TestSSH
 
-# Run Wayland injection test
-test-wayland:
-	@echo "Running Wayland injection test..."
-	@echo "Note: This test requires a running Wayland compositor"
-	@go run tests/integration/wayland/main.go -v
+# Run Wayland-dependent tests (Tier 2, requires WAYLAND_DISPLAY)
+test-integration-wayland:
+	@echo "Running Wayland integration tests..."
+	@if [ -z "$$WAYLAND_DISPLAY" ]; then \
+		echo "Error: WAYLAND_DISPLAY not set"; \
+		exit 1; \
+	fi
+	go test -tags=integration -v ./tests/integration/... \
+		-run 'TestDisplay|TestInjection'
+
+# Run hardware-dependent tests (Tier 3, requires root + devices)
+test-integration-hardware:
+	@echo "Running hardware integration tests..."
+	@if [ "$$(id -u)" != "0" ]; then \
+		echo "Error: Requires root privileges"; \
+		exit 1; \
+	fi
+	go test -tags=integration -v ./tests/integration/... \
+		-run 'TestEvdev'
+
+# Run end-to-end tests (Tier 4, requires full environment)
+test-integration-e2e:
+	@echo "Running end-to-end integration tests..."
+	go test -tags=integration -v ./tests/integration/... \
+		-run 'TestE2E'
+
+# Run all integration tests (requires root + devices + Wayland)
+test-integration-all:
+	@echo "Running all integration tests..."
+	go test -tags=integration -v ./tests/integration/...
 
 # Lint the code
 lint:
@@ -115,19 +141,34 @@ quick-test:
 # Help
 help:
 	@echo "Waymon Makefile targets:"
+	@echo ""
+	@echo "Build:"
 	@echo "  make build                 - Build the binary"
+	@echo "  make dev-build             - Build with race detector"
 	@echo "  make clean                 - Clean build artifacts"
+	@echo ""
+	@echo "Testing:"
 	@echo "  make test                  - Run unit tests"
-	@echo "  make test-capture          - Run basic capture integration test"
-	@echo "  make test-capture-interactive - Run interactive capture test (5s timeout)"
-	@echo "  make test-network          - Run network/SSH transport tests"
-	@echo "  make test-wayland          - Run Wayland injection tests"
+	@echo "  make test-integration      - Run CI-friendly integration tests (Tier 1)"
+	@echo "  make test-integration-race - Run integration tests with race detection"
+	@echo "  make test-ipc              - Run IPC tests only"
+	@echo "  make test-ssh              - Run SSH tests only"
+	@echo "  make test-integration-wayland  - Run Wayland tests (requires WAYLAND_DISPLAY)"
+	@echo "  make test-integration-hardware - Run hardware tests (requires root)"
+	@echo "  make test-integration-all  - Run all integration tests"
+	@echo "  make quick-test            - Run quick adapter tests"
+	@echo ""
+	@echo "Code Quality:"
 	@echo "  make lint                  - Run linter"
 	@echo "  make fmt                   - Format code"
-	@echo "  make deps                  - Install dependencies"
-	@echo "  make run-server            - Run the server"
-	@echo "  make run-client            - Run the client"
-	@echo "  make dev-build             - Build with race detector"
+	@echo ""
+	@echo "Code Generation:"
 	@echo "  make proto                 - Generate protobuf files"
 	@echo "  make mocks                 - Generate mock implementations"
-	@echo "  make quick-test            - Run quick tests"
+	@echo ""
+	@echo "Runtime:"
+	@echo "  make run-server            - Run the server"
+	@echo "  make run-client            - Run the client"
+	@echo ""
+	@echo "Dependencies:"
+	@echo "  make deps                  - Install dependencies"

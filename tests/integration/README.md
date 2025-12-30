@@ -1,57 +1,129 @@
 # Waymon Integration Tests
 
-This directory is reserved for integration tests.
+This directory contains integration tests for Waymon, organized into tiers based on CI feasibility.
 
-## Status
+## Test Tiers
 
-**The integration tests need to be rewritten to work with the new clean architecture.**
+### Tier 1: CI-Friendly Tests (Always Run)
 
-The previous integration tests used the old package structure which has been refactored. The tests should be updated to use:
+These tests run without Wayland or special hardware access:
 
-- `internal/adapters/out/evdev` - For input capture (evdev)
-- `internal/adapters/out/input` - For input injection (Wayland)
-- `internal/adapters/out/ssh` - For network transport (SSH)
-- `internal/usecase/server` - For server business logic
-- `internal/usecase/client` - For client business logic
-- `internal/domain` - For domain types
+- **IPC Tests** (`ipc_test.go`) - Unix socket IPC communication
+- **SSH Tests** (`ssh_test.go`) - SSH transport and event transmission
+- **Use Case Tests** (`usecase_test.go`) - Business logic helper functions
 
-## Running Unit Tests
+### Tier 2: Wayland Environment Tests
 
-Until integration tests are rewritten, use unit tests:
+These tests require Wayland (can run in CI with Weston headless):
+
+- Display detection tests (not yet implemented)
+- Input injection tests (not yet implemented)
+
+### Tier 3: Hardware-Dependent Tests
+
+These tests require root access and physical input devices:
+
+- Evdev capture tests (not yet implemented)
+
+### Tier 4: End-to-End Tests
+
+These tests require the full environment:
+
+- Complete flow tests (not yet implemented)
+
+## Running Tests
+
+### Run All Integration Tests
 
 ```bash
-# Run all unit tests
-make test
-
-# Run quick tests for input adapters
-make quick-test
+make test-integration
 ```
 
-## Future Test Suites
+### Run Specific Test Suites
 
-### 1. Capture Integration Test
+```bash
+# IPC tests only
+go test -tags=integration -v ./tests/integration/... -run TestIPC
 
-Test evdev input capture:
-- Device discovery
-- Mouse/keyboard capture
-- Device grabbing safety
+# SSH tests only
+go test -tags=integration -v ./tests/integration/... -run TestSSH
 
-### 2. Network Integration Test
+# Server helper function tests
+go test -tags=integration -v ./tests/integration/... -run TestServer
+```
 
-Test SSH transport:
-- Connection establishment
-- Event transmission
-- Reconnection logic
+### Run with Race Detection
 
-### 3. Wayland Injection Test
+```bash
+make test-integration-race
+```
 
-Test Wayland virtual input:
-- Virtual device creation
-- Mouse/keyboard injection
+## Test Infrastructure
 
-### 4. End-to-End Test
+### helpers.go
 
-Test complete flow:
-- Server → Network → Client
-- Event routing
-- Control switching
+Common test utilities:
+
+- `testContext(t)` - Creates a context with zerolog test logger
+- `tempSocketPath(t)` - Returns a unique temp socket path
+- `findAvailablePort(t)` - Finds an available TCP port
+- `waitForPort(t, port, timeout)` - Waits for a port to become available
+- `waitForCondition(t, fn, timeout, desc)` - Waits for a condition to be true
+- `generateTempSSHKeyPair(t)` - Generates ephemeral SSH keys for testing
+- `generateTempHostKey(t)` - Generates temp SSH host key
+
+### fixtures.go
+
+Monitor layout fixtures for testing multi-monitor scenarios:
+
+- `SingleMonitor` - Single 1920x1080 monitor
+- `DualHorizontal` - Two monitors side-by-side
+- `DualVertical` - Two monitors stacked
+- `TripleHorizontal` - Three monitors in a row
+- `QuadGrid` - 2x2 monitor grid
+- `MixedScales` - Different DPI scales
+- `OffsetLayout` - Non-aligned monitors
+- `PortraitMode` - Rotated monitors
+- `UltraWide` - 21:9 monitor
+- `Monitor4K` - 4K resolution
+
+### scenarios.go
+
+Multi-client test scenarios:
+
+- `TwoClientsHorizontal` - Two clients left-right
+- `TwoClientsVertical` - Two clients top-bottom
+- `ThreeClientsHorizontal` - Three clients in a row
+- `MixedScalesAndSizes` - Different monitor configurations
+- `ComplexOffice` - Complex multi-monitor setup
+- `MaxClients` - Stress test with max clients
+
+## Test Coverage Summary
+
+| Test Suite | Test Count | Description |
+|------------|------------|-------------|
+| IPC | 11 tests | Unix socket protocol, client-server |
+| SSH | 11 tests | Connection, events, authentication |
+| Server Helpers | 6 tests | Bounds, cursors, monitors |
+| **Total** | **28 tests** | |
+
+## Adding New Tests
+
+1. Use the `integration` build tag:
+   ```go
+   //go:build integration
+   ```
+
+2. Use helper functions from `helpers.go`
+
+3. For hardware-dependent tests, use skip helpers:
+   ```go
+   skipIfNoWayland(t)
+   skipIfNotRoot(t)
+   skipIfNoInputDevices(t)
+   ```
+
+4. Run tests with `-tags=integration`:
+   ```bash
+   go test -tags=integration -v ./tests/integration/...
+   ```
