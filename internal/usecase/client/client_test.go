@@ -10,6 +10,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/bnema/waymon/internal/domain"
+	mocks "github.com/bnema/waymon/internal/mocks/out"
 )
 
 // testCtx returns a context with a nop zerolog logger attached.
@@ -18,150 +19,18 @@ func testCtx(t *testing.T) context.Context {
 	return logger.WithContext(t.Context())
 }
 
-// MockInputInjectionPort is a mock implementation of out.InputInjectionPort
-type MockInputInjectionPort struct {
-	mock.Mock
-}
-
-func (m *MockInputInjectionPort) Start(ctx context.Context) error {
-	args := m.Called(ctx)
-	return args.Error(0)
-}
-
-func (m *MockInputInjectionPort) Stop() error {
-	args := m.Called()
-	return args.Error(0)
-}
-
-func (m *MockInputInjectionPort) InjectMouseMove(ctx context.Context, dx, dy float64) error {
-	args := m.Called(ctx, dx, dy)
-	return args.Error(0)
-}
-
-func (m *MockInputInjectionPort) InjectMousePosition(ctx context.Context, x, y int32) error {
-	args := m.Called(ctx, x, y)
-	return args.Error(0)
-}
-
-func (m *MockInputInjectionPort) InjectMouseButton(ctx context.Context, button uint32, pressed bool) error {
-	args := m.Called(ctx, button, pressed)
-	return args.Error(0)
-}
-
-func (m *MockInputInjectionPort) InjectMouseScroll(ctx context.Context, dx, dy float64, scrollType domain.ScrollType) error {
-	args := m.Called(ctx, dx, dy, scrollType)
-	return args.Error(0)
-}
-
-func (m *MockInputInjectionPort) InjectKeyEvent(ctx context.Context, key uint32, pressed bool, modifiers uint32) error {
-	args := m.Called(ctx, key, pressed, modifiers)
-	return args.Error(0)
-}
-
-func (m *MockInputInjectionPort) SetExclusiveCapture(ctx context.Context, enabled bool) error {
-	args := m.Called(ctx, enabled)
-	return args.Error(0)
-}
-
-// MockNetworkClientPort is a mock implementation of out.NetworkClientPort
-type MockNetworkClientPort struct {
-	mock.Mock
-	onInputEvent   func(event *domain.InputEvent)
-	onDisconnected func(err error)
-}
-
-func (m *MockNetworkClientPort) Connect(ctx context.Context, addr string, privateKeyPath string) error {
-	args := m.Called(ctx, addr, privateKeyPath)
-	return args.Error(0)
-}
-
-func (m *MockNetworkClientPort) Disconnect() error {
-	args := m.Called()
-	return args.Error(0)
-}
-
-func (m *MockNetworkClientPort) IsConnected() bool {
-	args := m.Called()
-	return args.Bool(0)
-}
-
-func (m *MockNetworkClientPort) SendEvent(ctx context.Context, event *domain.InputEvent) error {
-	args := m.Called(ctx, event)
-	return args.Error(0)
-}
-
-func (m *MockNetworkClientPort) SetOnInputEvent(callback func(event *domain.InputEvent)) {
-	m.Called(callback)
-	m.onInputEvent = callback
-}
-
-func (m *MockNetworkClientPort) SetOnDisconnected(callback func(err error)) {
-	m.Called(callback)
-	m.onDisconnected = callback
-}
-
-// MockDisplayPort is a mock implementation of out.DisplayPort
-type MockDisplayPort struct {
-	mock.Mock
-}
-
-func (m *MockDisplayPort) GetMonitors(ctx context.Context) ([]domain.Monitor, error) {
-	args := m.Called(ctx)
-	if args.Get(0) == nil {
-		return nil, args.Error(1)
-	}
-	return args.Get(0).([]domain.Monitor), args.Error(1)
-}
-
-func (m *MockDisplayPort) GetCursorPosition(ctx context.Context) (*domain.CursorPosition, error) {
-	args := m.Called(ctx)
-	if args.Get(0) == nil {
-		return nil, args.Error(1)
-	}
-	return args.Get(0).(*domain.CursorPosition), args.Error(1)
-}
-
-func (m *MockDisplayPort) Close() error {
-	args := m.Called()
-	return args.Error(0)
-}
-
-// MockConfigRepository is a mock implementation of out.ConfigRepository
-type MockConfigRepository struct {
-	mock.Mock
-}
-
-func (m *MockConfigRepository) Load(ctx context.Context) (*domain.Config, error) {
-	args := m.Called(ctx)
-	if args.Get(0) == nil {
-		return nil, args.Error(1)
-	}
-	return args.Get(0).(*domain.Config), args.Error(1)
-}
-
-func (m *MockConfigRepository) Save(ctx context.Context, config *domain.Config) error {
-	args := m.Called(ctx, config)
-	return args.Error(0)
-}
-
-func (m *MockConfigRepository) GetConfigPath() string {
-	args := m.Called()
-	return args.String(0)
-}
-
-func (m *MockConfigRepository) SetConfigPath(path string) {
-	m.Called(path)
-}
-
-// Helper to create a configured UseCaseImpl for tests
-func newTestClientUseCase(t *testing.T) (*UseCaseImpl, *MockInputInjectionPort, *MockNetworkClientPort, *MockDisplayPort, *MockConfigRepository) {
-	inputInjection := new(MockInputInjectionPort)
-	network := new(MockNetworkClientPort)
-	display := new(MockDisplayPort)
-	configRepo := new(MockConfigRepository)
+// Helper to create a configured UseCaseImpl for tests.
+// Returns the concrete type for internal state inspection in tests.
+func newTestClientUseCase(t *testing.T) (*UseCaseImpl, *mocks.MockInputInjectionPort, *mocks.MockNetworkClientPort, *mocks.MockDisplayPort, *mocks.MockConfigRepository) {
+	inputInjection := mocks.NewMockInputInjectionPort(t)
+	network := mocks.NewMockNetworkClientPort(t)
+	display := mocks.NewMockDisplayPort(t)
+	configRepo := mocks.NewMockConfigRepository(t)
 
 	uc := NewClientUseCase(inputInjection, network, display, configRepo)
-	return uc, inputInjection, network, display, configRepo
+	// Type assert to concrete type for test access to internal state
+	impl := uc.(*UseCaseImpl)
+	return impl, inputInjection, network, display, configRepo
 }
 
 func TestNewClientUseCase(t *testing.T) {
@@ -178,12 +47,12 @@ func TestNewClientUseCase(t *testing.T) {
 func TestUseCaseImpl_Connect(t *testing.T) {
 	tests := []struct {
 		name          string
-		setupMocks    func(*MockInputInjectionPort, *MockNetworkClientPort, *MockDisplayPort, *MockConfigRepository)
+		setupMocks    func(*mocks.MockInputInjectionPort, *mocks.MockNetworkClientPort, *mocks.MockDisplayPort, *mocks.MockConfigRepository)
 		expectedError bool
 	}{
 		{
 			name: "successful connection",
-			setupMocks: func(ii *MockInputInjectionPort, nc *MockNetworkClientPort, dp *MockDisplayPort, cr *MockConfigRepository) {
+			setupMocks: func(ii *mocks.MockInputInjectionPort, nc *mocks.MockNetworkClientPort, dp *mocks.MockDisplayPort, cr *mocks.MockConfigRepository) {
 				cr.On("Load", mock.Anything).Return(&domain.Config{
 					Client: domain.ClientCfg{
 						ServerAddress: "192.168.1.100:52525",
@@ -203,14 +72,14 @@ func TestUseCaseImpl_Connect(t *testing.T) {
 		},
 		{
 			name: "fails when config load fails",
-			setupMocks: func(ii *MockInputInjectionPort, nc *MockNetworkClientPort, dp *MockDisplayPort, cr *MockConfigRepository) {
+			setupMocks: func(ii *mocks.MockInputInjectionPort, nc *mocks.MockNetworkClientPort, dp *mocks.MockDisplayPort, cr *mocks.MockConfigRepository) {
 				cr.On("Load", mock.Anything).Return(nil, domain.ErrConfigNotFound)
 			},
 			expectedError: true,
 		},
 		{
 			name: "fails when input injection start fails",
-			setupMocks: func(ii *MockInputInjectionPort, nc *MockNetworkClientPort, dp *MockDisplayPort, cr *MockConfigRepository) {
+			setupMocks: func(ii *mocks.MockInputInjectionPort, nc *mocks.MockNetworkClientPort, dp *mocks.MockDisplayPort, cr *mocks.MockConfigRepository) {
 				cr.On("Load", mock.Anything).Return(&domain.Config{
 					Client: domain.ClientCfg{ServerAddress: "192.168.1.100:52525"},
 				}, nil)
@@ -220,7 +89,7 @@ func TestUseCaseImpl_Connect(t *testing.T) {
 		},
 		{
 			name: "fails when network connect fails",
-			setupMocks: func(ii *MockInputInjectionPort, nc *MockNetworkClientPort, dp *MockDisplayPort, cr *MockConfigRepository) {
+			setupMocks: func(ii *mocks.MockInputInjectionPort, nc *mocks.MockNetworkClientPort, dp *mocks.MockDisplayPort, cr *mocks.MockConfigRepository) {
 				cr.On("Load", mock.Anything).Return(&domain.Config{
 					Client: domain.ClientCfg{
 						ServerAddress: "192.168.1.100:52525",
@@ -252,11 +121,6 @@ func TestUseCaseImpl_Connect(t *testing.T) {
 				assert.True(t, uc.connected)
 				assert.True(t, uc.reconnectEnabled)
 			}
-
-			inputInjection.AssertExpectations(t)
-			network.AssertExpectations(t)
-			display.AssertExpectations(t)
-			configRepo.AssertExpectations(t)
 		})
 	}
 }
@@ -275,7 +139,7 @@ func TestUseCaseImpl_Disconnect(t *testing.T) {
 	tests := []struct {
 		name       string
 		setupState func(*UseCaseImpl)
-		setupMocks func(*MockInputInjectionPort, *MockNetworkClientPort)
+		setupMocks func(*mocks.MockInputInjectionPort, *mocks.MockNetworkClientPort)
 	}{
 		{
 			name: "disconnect when connected",
@@ -287,7 +151,7 @@ func TestUseCaseImpl_Disconnect(t *testing.T) {
 				uc.reconnectCancel = cancel
 				uc.controlStatus = domain.ControlStatus{BeingControlled: true}
 			},
-			setupMocks: func(ii *MockInputInjectionPort, nc *MockNetworkClientPort) {
+			setupMocks: func(ii *mocks.MockInputInjectionPort, nc *mocks.MockNetworkClientPort) {
 				nc.On("Disconnect").Return(nil)
 				ii.On("Stop").Return(nil)
 			},
@@ -297,7 +161,7 @@ func TestUseCaseImpl_Disconnect(t *testing.T) {
 			setupState: func(uc *UseCaseImpl) {
 				uc.connected = false
 			},
-			setupMocks: func(ii *MockInputInjectionPort, nc *MockNetworkClientPort) {
+			setupMocks: func(ii *mocks.MockInputInjectionPort, nc *mocks.MockNetworkClientPort) {
 				// No calls expected
 			},
 		},
@@ -316,9 +180,6 @@ func TestUseCaseImpl_Disconnect(t *testing.T) {
 			assert.False(t, uc.connected)
 			assert.False(t, uc.reconnectEnabled)
 			assert.False(t, uc.controlStatus.BeingControlled)
-
-			inputInjection.AssertExpectations(t)
-			network.AssertExpectations(t)
 		})
 	}
 }
@@ -435,7 +296,7 @@ func TestUseCaseImpl_handleControlEvent(t *testing.T) {
 	tests := []struct {
 		name           string
 		controlEvent   *domain.ControlEvent
-		setupMocks     func(*MockInputInjectionPort)
+		setupMocks     func(*mocks.MockInputInjectionPort)
 		wantControlled bool
 		wantController string
 	}{
@@ -445,7 +306,7 @@ func TestUseCaseImpl_handleControlEvent(t *testing.T) {
 				Type:     domain.ControlRequestControl,
 				TargetID: "server1",
 			},
-			setupMocks: func(ii *MockInputInjectionPort) {
+			setupMocks: func(ii *mocks.MockInputInjectionPort) {
 				ii.On("SetExclusiveCapture", mock.Anything, true).Return(nil)
 			},
 			wantControlled: true,
@@ -456,7 +317,7 @@ func TestUseCaseImpl_handleControlEvent(t *testing.T) {
 			controlEvent: &domain.ControlEvent{
 				Type: domain.ControlReleaseControl,
 			},
-			setupMocks: func(ii *MockInputInjectionPort) {
+			setupMocks: func(ii *mocks.MockInputInjectionPort) {
 				ii.On("SetExclusiveCapture", mock.Anything, false).Return(nil)
 			},
 			wantControlled: false,
@@ -467,7 +328,7 @@ func TestUseCaseImpl_handleControlEvent(t *testing.T) {
 			controlEvent: &domain.ControlEvent{
 				Type: domain.ControlSwitchToLocal,
 			},
-			setupMocks: func(ii *MockInputInjectionPort) {
+			setupMocks: func(ii *mocks.MockInputInjectionPort) {
 				ii.On("SetExclusiveCapture", mock.Anything, false).Return(nil)
 			},
 			wantControlled: false,
@@ -478,7 +339,7 @@ func TestUseCaseImpl_handleControlEvent(t *testing.T) {
 			controlEvent: &domain.ControlEvent{
 				Type: domain.ControlServerShutdown,
 			},
-			setupMocks: func(ii *MockInputInjectionPort) {
+			setupMocks: func(ii *mocks.MockInputInjectionPort) {
 				// No calls expected - just clears state
 			},
 			wantControlled: false,
@@ -501,8 +362,6 @@ func TestUseCaseImpl_handleControlEvent(t *testing.T) {
 
 			assert.Equal(t, tt.wantControlled, uc.controlStatus.BeingControlled)
 			assert.Equal(t, tt.wantController, uc.controlStatus.ControllerName)
-
-			inputInjection.AssertExpectations(t)
 		})
 	}
 }
@@ -511,7 +370,7 @@ func TestUseCaseImpl_injectEvent(t *testing.T) {
 	tests := []struct {
 		name       string
 		event      *domain.InputEvent
-		setupMocks func(*MockInputInjectionPort)
+		setupMocks func(*mocks.MockInputInjectionPort)
 		wantError  bool
 	}{
 		{
@@ -519,7 +378,7 @@ func TestUseCaseImpl_injectEvent(t *testing.T) {
 			event: &domain.InputEvent{
 				MouseMove: &domain.MouseMoveEvent{DX: 10.0, DY: 20.0},
 			},
-			setupMocks: func(ii *MockInputInjectionPort) {
+			setupMocks: func(ii *mocks.MockInputInjectionPort) {
 				ii.On("InjectMouseMove", mock.Anything, 10.0, 20.0).Return(nil)
 			},
 			wantError: false,
@@ -529,7 +388,7 @@ func TestUseCaseImpl_injectEvent(t *testing.T) {
 			event: &domain.InputEvent{
 				MousePosition: &domain.MousePositionEvent{X: 100, Y: 200},
 			},
-			setupMocks: func(ii *MockInputInjectionPort) {
+			setupMocks: func(ii *mocks.MockInputInjectionPort) {
 				ii.On("InjectMousePosition", mock.Anything, int32(100), int32(200)).Return(nil)
 			},
 			wantError: false,
@@ -539,7 +398,7 @@ func TestUseCaseImpl_injectEvent(t *testing.T) {
 			event: &domain.InputEvent{
 				MouseButton: &domain.MouseButtonEvent{Button: 1, Pressed: true},
 			},
-			setupMocks: func(ii *MockInputInjectionPort) {
+			setupMocks: func(ii *mocks.MockInputInjectionPort) {
 				ii.On("InjectMouseButton", mock.Anything, uint32(1), true).Return(nil)
 			},
 			wantError: false,
@@ -549,7 +408,7 @@ func TestUseCaseImpl_injectEvent(t *testing.T) {
 			event: &domain.InputEvent{
 				MouseScroll: &domain.MouseScrollEvent{DX: 0, DY: 5.0, Type: domain.ScrollWheel},
 			},
-			setupMocks: func(ii *MockInputInjectionPort) {
+			setupMocks: func(ii *mocks.MockInputInjectionPort) {
 				ii.On("InjectMouseScroll", mock.Anything, 0.0, 5.0, domain.ScrollWheel).Return(nil)
 			},
 			wantError: false,
@@ -559,7 +418,7 @@ func TestUseCaseImpl_injectEvent(t *testing.T) {
 			event: &domain.InputEvent{
 				Keyboard: &domain.KeyboardEvent{Key: 30, Pressed: true, Modifiers: 0},
 			},
-			setupMocks: func(ii *MockInputInjectionPort) {
+			setupMocks: func(ii *mocks.MockInputInjectionPort) {
 				ii.On("InjectKeyEvent", mock.Anything, uint32(30), true, uint32(0)).Return(nil)
 			},
 			wantError: false,
@@ -569,7 +428,7 @@ func TestUseCaseImpl_injectEvent(t *testing.T) {
 			event: &domain.InputEvent{
 				// No event type set
 			},
-			setupMocks: func(ii *MockInputInjectionPort) {
+			setupMocks: func(ii *mocks.MockInputInjectionPort) {
 				// No calls expected
 			},
 			wantError: true,
@@ -589,8 +448,6 @@ func TestUseCaseImpl_injectEvent(t *testing.T) {
 			} else {
 				assert.NoError(t, err)
 			}
-
-			inputInjection.AssertExpectations(t)
 		})
 	}
 }
@@ -600,7 +457,7 @@ func TestUseCaseImpl_processInputEvent(t *testing.T) {
 		name       string
 		setupState func(*UseCaseImpl)
 		event      *domain.InputEvent
-		setupMocks func(*MockInputInjectionPort)
+		setupMocks func(*mocks.MockInputInjectionPort)
 	}{
 		{
 			name: "control event handled",
@@ -613,7 +470,7 @@ func TestUseCaseImpl_processInputEvent(t *testing.T) {
 					TargetID: "server1",
 				},
 			},
-			setupMocks: func(ii *MockInputInjectionPort) {
+			setupMocks: func(ii *mocks.MockInputInjectionPort) {
 				ii.On("SetExclusiveCapture", mock.Anything, true).Return(nil)
 			},
 		},
@@ -626,7 +483,7 @@ func TestUseCaseImpl_processInputEvent(t *testing.T) {
 			event: &domain.InputEvent{
 				MouseMove: &domain.MouseMoveEvent{DX: 10, DY: 20},
 			},
-			setupMocks: func(ii *MockInputInjectionPort) {
+			setupMocks: func(ii *mocks.MockInputInjectionPort) {
 				// No injection calls expected
 			},
 		},
@@ -639,7 +496,7 @@ func TestUseCaseImpl_processInputEvent(t *testing.T) {
 			event: &domain.InputEvent{
 				MouseMove: &domain.MouseMoveEvent{DX: 10, DY: 20},
 			},
-			setupMocks: func(ii *MockInputInjectionPort) {
+			setupMocks: func(ii *mocks.MockInputInjectionPort) {
 				ii.On("InjectMouseMove", mock.Anything, 10.0, 20.0).Return(nil)
 			},
 		},
@@ -653,8 +510,6 @@ func TestUseCaseImpl_processInputEvent(t *testing.T) {
 
 			ctx := testCtx(t)
 			uc.processInputEvent(ctx, tt.event)
-
-			inputInjection.AssertExpectations(t)
 		})
 	}
 }

@@ -2,84 +2,60 @@
 package main
 
 import (
-	"github.com/bnema/waymon/internal/display"
-	"github.com/bnema/waymon/internal/logger"
+	"context"
+	"fmt"
+	"os"
+
+	"github.com/bnema/waymon/internal/adapters/out/display"
+	"github.com/rs/zerolog"
 )
 
 func main() {
-	logger.Info("Waymon Display Detection Test")
-	logger.Info("=============================")
-	logger.Info("")
+	// Create context with logger
+	ctx := zerolog.New(zerolog.ConsoleWriter{Out: os.Stderr}).
+		With().
+		Timestamp().
+		Logger().
+		WithContext(context.Background())
 
-	// Create display manager
-	disp, err := display.New()
+	log := zerolog.Ctx(ctx)
+	log.Info().Msg("Waymon Display Detection Test")
+	log.Info().Msg("=============================")
+
+	// Create display adapter
+	disp, err := display.New(ctx)
 	if err != nil {
-		logger.Fatal("Failed to create display manager: %v", err)
+		log.Fatal().Err(err).Msg("Failed to create display adapter")
 	}
-	defer func() {
-		if err := disp.Close(); err != nil {
-			logger.Errorf("Failed to close display: %v", err)
-		}
-	}()
+	defer disp.Close()
 
 	// Show monitors
-	monitors := disp.GetMonitors()
-	logger.Infof("Detected %d monitor(s):", len(monitors))
-	logger.Info("")
+	monitors, err := disp.GetMonitors(ctx)
+	if err != nil {
+		log.Fatal().Err(err).Msg("Failed to get monitors")
+	}
+
+	fmt.Printf("Detected %d monitor(s):\n\n", len(monitors))
 
 	for i, mon := range monitors {
-		logger.Infof("Monitor %d: %s", i+1, mon.Name)
-		logger.Infof("  ID:       %s", mon.ID)
-		logger.Infof("  Position: %d,%d", mon.X, mon.Y)
-		logger.Infof("  Size:     %dx%d", mon.Width, mon.Height)
-		logger.Infof("  Primary:  %v", mon.Primary)
+		fmt.Printf("Monitor %d: %s\n", i+1, mon.Name)
+		fmt.Printf("  ID:       %s\n", mon.ID)
+		fmt.Printf("  Position: %d,%d\n", mon.X, mon.Y)
+		fmt.Printf("  Size:     %dx%d\n", mon.Width, mon.Height)
+		fmt.Printf("  Primary:  %v\n", mon.Primary)
 		if mon.Scale != 0 && mon.Scale != 1 {
-			logger.Infof("  Scale:    %.2f", mon.Scale)
+			fmt.Printf("  Scale:    %.2f\n", mon.Scale)
 		}
-		logger.Info("")
+		fmt.Println()
 	}
 
 	// Try to get cursor position
-	x, y, monitor, err := disp.GetCursorPosition()
+	pos, err := disp.GetCursorPosition(ctx)
 	if err != nil {
-		logger.Infof("Cursor position: unavailable (%v)", err)
-		logger.Info("Note: Cursor tracking on Wayland requires special permissions")
-		logger.Info("      We'll track position internally based on movements")
+		fmt.Printf("Cursor position: unavailable (%v)\n", err)
+		fmt.Println("Note: Cursor tracking on Wayland requires special permissions")
+		fmt.Println("      We'll track position internally based on movements")
 	} else {
-		if monitor != nil {
-			logger.Infof("Cursor position: %d,%d (on %s)", x, y, monitor.Name)
-		} else {
-			logger.Infof("Cursor position: %d,%d", x, y)
-		}
-	}
-
-	// Show edge detection zones
-	logger.Info("Edge detection zones:")
-	primary := disp.GetPrimaryMonitor()
-	if primary != nil {
-		x1, y1, x2, y2 := primary.Bounds()
-		threshold := int32(5)
-		logger.Infof("  Left edge:   x < %d", x1+threshold)
-		logger.Infof("  Right edge:  x > %d", x2-threshold)
-		logger.Infof("  Top edge:    y < %d", y1+threshold)
-		logger.Infof("  Bottom edge: y > %d", y2-threshold)
-	}
-
-	// Test arrangement detection
-	logger.Info("Monitor arrangement:")
-	for _, mon := range monitors {
-		x, y := mon.X+mon.Width/2, mon.Y+mon.Height/2
-
-		// Check what's to the right
-		rightMon := disp.GetMonitorAt(x+mon.Width, y)
-		if rightMon != nil && rightMon != mon {
-			logger.Infof("  %s -> %s (right)", mon.Name, rightMon.Name)
-		}
-
-		// Check what's below
-		belowMon := disp.GetMonitorAt(x, y+mon.Height)
-		if belowMon != nil && belowMon != mon {
-			logger.Infof("  %s -> %s (below)", mon.Name, belowMon.Name)
-		}
+		fmt.Printf("Cursor position: %.0f,%.0f\n", pos.X, pos.Y)
 	}
 }

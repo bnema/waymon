@@ -54,4 +54,7 @@ var (
 
 	// ErrInvalidConfig is returned when the configuration is invalid.
 	ErrInvalidConfig = errors.New("invalid configuration")
+
+	// ErrInvalidAction is returned when an invalid action is specified.
+	ErrInvalidAction = errors.New("invalid action")
 )

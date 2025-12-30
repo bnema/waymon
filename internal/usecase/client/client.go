@@ -11,9 +11,13 @@ import (
 
 	"github.com/rs/zerolog"
 
+	"github.com/bnema/waymon/internal/boundaries/in"
 	"github.com/bnema/waymon/internal/boundaries/out"
 	"github.com/bnema/waymon/internal/domain"
 )
+
+// Compile-time interface check
+var _ in.ClientUseCase = (*UseCaseImpl)(nil)
 
 // UseCaseImpl implements the ClientUseCase interface.
 // It manages connection to server and input injection.
@@ -45,12 +49,13 @@ type UseCaseImpl struct {
 }
 
 // NewClientUseCase creates a new client use case with the given dependencies.
+// Returns the ClientUseCase interface to ensure consumers depend on the abstraction.
 func NewClientUseCase(
 	inputInjection out.InputInjectionPort,
 	network out.NetworkClientPort,
 	display out.DisplayPort,
 	configRepo out.ConfigRepository,
-) *UseCaseImpl {
+) in.ClientUseCase {
 	// Get hostname for client ID
 	hostname, err := os.Hostname()
 	if err != nil {

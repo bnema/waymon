@@ -1,16 +1,22 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"os"
 
-	"github.com/bnema/waymon/internal/display"
-	"github.com/bnema/waymon/internal/logger"
+	"github.com/bnema/waymon/internal/adapters/out/display"
+	"github.com/rs/zerolog"
 )
 
 func main() {
-	// Set up logging
-	logger.SetLevel("debug")
+	// Create context with logger
+	ctx := zerolog.New(zerolog.ConsoleWriter{Out: os.Stderr}).
+		Level(zerolog.DebugLevel).
+		With().
+		Timestamp().
+		Logger().
+		WithContext(context.Background())
 
 	fmt.Println("Testing monitor detection...")
 	fmt.Printf("Running as UID: %d\n", os.Geteuid())
@@ -19,20 +25,21 @@ func main() {
 	fmt.Printf("XDG_RUNTIME_DIR: %s\n", os.Getenv("XDG_RUNTIME_DIR"))
 	fmt.Println()
 
-	// Create display manager
-	disp, err := display.New()
+	// Create display adapter
+	disp, err := display.New(ctx)
 	if err != nil {
-		fmt.Printf("Error creating display manager: %v\n", err)
+		fmt.Printf("Error creating display adapter: %v\n", err)
 		os.Exit(1)
 	}
-	defer func() {
-		if err := disp.Close(); err != nil {
-			fmt.Printf("Failed to close display: %v\n", err)
-		}
-	}()
+	defer disp.Close()
 
 	// Get monitors
-	monitors := disp.GetMonitors()
+	monitors, err := disp.GetMonitors(ctx)
+	if err != nil {
+		fmt.Printf("Error getting monitors: %v\n", err)
+		os.Exit(1)
+	}
+
 	fmt.Printf("Detected %d monitor(s):\n", len(monitors))
 
 	for _, mon := range monitors {

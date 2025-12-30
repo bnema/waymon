@@ -11,6 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/bnema/waymon/internal/domain"
+	mocks "github.com/bnema/waymon/internal/mocks/out"
 )
 
 // testCtx returns a context with a nop zerolog logger attached.
@@ -20,141 +21,49 @@ func testCtx(t *testing.T) context.Context {
 	return logger.WithContext(t.Context())
 }
 
-// MockInputCapturePort is a mock implementation of out.InputCapturePort
-type MockInputCapturePort struct {
-	mock.Mock
-	eventCallback func(*domain.InputEvent)
-}
-
-func (m *MockInputCapturePort) Start(ctx context.Context) error {
-	args := m.Called(ctx)
-	return args.Error(0)
-}
-
-func (m *MockInputCapturePort) Stop() error {
-	args := m.Called()
-	return args.Error(0)
-}
-
-func (m *MockInputCapturePort) SetTarget(clientID string) error {
-	args := m.Called(clientID)
-	return args.Error(0)
-}
-
-func (m *MockInputCapturePort) SetEventCallback(callback func(*domain.InputEvent)) {
-	m.Called(callback)
-	m.eventCallback = callback
-}
-
-// MockNetworkServerPort is a mock implementation of out.NetworkServerPort
-type MockNetworkServerPort struct {
-	mock.Mock
-	onClientConnected    func(addr, publicKey string)
-	onClientDisconnected func(addr string)
-	onInputEvent         func(event *domain.InputEvent)
-}
-
-func (m *MockNetworkServerPort) Start(ctx context.Context) error {
-	args := m.Called(ctx)
-	return args.Error(0)
-}
-
-func (m *MockNetworkServerPort) Stop() {
-	m.Called()
-}
-
-func (m *MockNetworkServerPort) SendEventToClient(ctx context.Context, clientAddr string, event *domain.InputEvent) error {
-	args := m.Called(ctx, clientAddr, event)
-	return args.Error(0)
-}
-
-func (m *MockNetworkServerPort) SetMaxClients(max int) {
-	m.Called(max)
-}
-
-func (m *MockNetworkServerPort) Port() int {
-	args := m.Called()
-	return args.Int(0)
-}
-
-func (m *MockNetworkServerPort) SetOnClientConnected(callback func(addr, publicKey string)) {
-	m.Called(callback)
-	m.onClientConnected = callback
-}
-
-func (m *MockNetworkServerPort) SetOnClientDisconnected(callback func(addr string)) {
-	m.Called(callback)
-	m.onClientDisconnected = callback
-}
-
-func (m *MockNetworkServerPort) SetOnAuthRequest(callback func(addr, publicKey, fingerprint string) bool) {
-	m.Called(callback)
-}
-
-func (m *MockNetworkServerPort) SetOnInputEvent(callback func(event *domain.InputEvent)) {
-	m.Called(callback)
-	m.onInputEvent = callback
-}
-
-// MockConfigRepository is a mock implementation of out.ConfigRepository
-type MockConfigRepository struct {
-	mock.Mock
-}
-
-func (m *MockConfigRepository) Load(ctx context.Context) (*domain.Config, error) {
-	args := m.Called(ctx)
-	if args.Get(0) == nil {
-		return nil, args.Error(1)
-	}
-	return args.Get(0).(*domain.Config), args.Error(1)
-}
-
-func (m *MockConfigRepository) Save(ctx context.Context, config *domain.Config) error {
-	args := m.Called(ctx, config)
-	return args.Error(0)
-}
-
-func (m *MockConfigRepository) GetConfigPath() string {
-	args := m.Called()
-	return args.String(0)
-}
-
-func (m *MockConfigRepository) SetConfigPath(path string) {
-	m.Called(path)
-}
-
-// Helper to create a configured UseCaseImpl for tests
-func newTestServerUseCase(t *testing.T) (*UseCaseImpl, *MockInputCapturePort, *MockNetworkServerPort, *MockConfigRepository) {
-	inputCapture := new(MockInputCapturePort)
-	network := new(MockNetworkServerPort)
-	configRepo := new(MockConfigRepository)
+// Helper to create a configured UseCaseImpl for tests.
+// Returns the concrete type for internal state inspection in tests.
+func newTestServerUseCase(t *testing.T) (*UseCaseImpl, *mocks.MockInputCapturePort, *mocks.MockNetworkServerPort, *mocks.MockConfigRepository) {
+	inputCapture := mocks.NewMockInputCapturePort(t)
+	network := mocks.NewMockNetworkServerPort(t)
+	configRepo := mocks.NewMockConfigRepository(t)
 
 	uc := NewServerUseCase(inputCapture, network, configRepo)
-	return uc, inputCapture, network, configRepo
+	// Type assert to concrete type for test access to internal state
+	impl := uc.(*UseCaseImpl)
+	return impl, inputCapture, network, configRepo
 }
 
 func TestNewServerUseCase(t *testing.T) {
-	uc, inputCapture, network, configRepo := newTestServerUseCase(t)
+	inputCapture := mocks.NewMockInputCapturePort(t)
+	network := mocks.NewMockNetworkServerPort(t)
+	configRepo := mocks.NewMockConfigRepository(t)
 
-	assert.NotNil(t, uc)
-	assert.Equal(t, inputCapture, uc.inputCapture)
-	assert.Equal(t, network, uc.network)
-	assert.Equal(t, configRepo, uc.configRepo)
-	assert.True(t, uc.controllingLocal)
-	assert.NotNil(t, uc.clients)
-	assert.NotNil(t, uc.clientCursors)
-	assert.Equal(t, 5*time.Second, uc.emergencyCooldown)
+	uc := NewServerUseCase(inputCapture, network, configRepo)
+	require.NotNil(t, uc)
+
+	// Type assert to concrete type for internal state verification
+	impl, ok := uc.(*UseCaseImpl)
+	require.True(t, ok, "NewServerUseCase should return *UseCaseImpl")
+
+	assert.Equal(t, inputCapture, impl.inputCapture)
+	assert.Equal(t, network, impl.network)
+	assert.Equal(t, configRepo, impl.configRepo)
+	assert.True(t, impl.controllingLocal)
+	assert.NotNil(t, impl.clients)
+	assert.NotNil(t, impl.clientCursors)
+	assert.Equal(t, 5*time.Second, impl.emergencyCooldown)
 }
 
 func TestUseCaseImpl_Start(t *testing.T) {
 	tests := []struct {
 		name          string
-		setupMocks    func(*MockInputCapturePort, *MockNetworkServerPort, *MockConfigRepository)
+		setupMocks    func(*mocks.MockInputCapturePort, *mocks.MockNetworkServerPort, *mocks.MockConfigRepository)
 		expectedError bool
 	}{
 		{
 			name: "successful start with config",
-			setupMocks: func(ic *MockInputCapturePort, ns *MockNetworkServerPort, cr *MockConfigRepository) {
+			setupMocks: func(ic *mocks.MockInputCapturePort, ns *mocks.MockNetworkServerPort, cr *mocks.MockConfigRepository) {
 				cr.On("Load", mock.Anything).Return(&domain.Config{
 					Server: domain.ServerCfg{
 						Port:            52525,
@@ -171,7 +80,7 @@ func TestUseCaseImpl_Start(t *testing.T) {
 		},
 		{
 			name: "start with config load error uses defaults",
-			setupMocks: func(ic *MockInputCapturePort, ns *MockNetworkServerPort, cr *MockConfigRepository) {
+			setupMocks: func(ic *mocks.MockInputCapturePort, ns *mocks.MockNetworkServerPort, cr *mocks.MockConfigRepository) {
 				cr.On("Load", mock.Anything).Return(nil, domain.ErrConfigNotFound)
 				ns.On("SetMaxClients", 5).Return()
 				ic.On("SetEventCallback", mock.Anything).Return()
@@ -181,7 +90,7 @@ func TestUseCaseImpl_Start(t *testing.T) {
 		},
 		{
 			name: "start fails when input capture fails",
-			setupMocks: func(ic *MockInputCapturePort, ns *MockNetworkServerPort, cr *MockConfigRepository) {
+			setupMocks: func(ic *mocks.MockInputCapturePort, ns *mocks.MockNetworkServerPort, cr *mocks.MockConfigRepository) {
 				cr.On("Load", mock.Anything).Return(&domain.Config{
 					Server: domain.ServerCfg{MaxClients: 5},
 				}, nil)
@@ -207,10 +116,6 @@ func TestUseCaseImpl_Start(t *testing.T) {
 				assert.NoError(t, err)
 				assert.True(t, uc.running)
 			}
-
-			inputCapture.AssertExpectations(t)
-			network.AssertExpectations(t)
-			configRepo.AssertExpectations(t)
 		})
 	}
 }
@@ -219,7 +124,7 @@ func TestUseCaseImpl_Stop(t *testing.T) {
 	tests := []struct {
 		name       string
 		setupState func(*UseCaseImpl)
-		setupMocks func(*MockInputCapturePort, *MockNetworkServerPort)
+		setupMocks func(*mocks.MockInputCapturePort, *mocks.MockNetworkServerPort)
 	}{
 		{
 			name: "stop when running",
@@ -230,7 +135,7 @@ func TestUseCaseImpl_Stop(t *testing.T) {
 				uc.activeClientID = "client1"
 				uc.controllingLocal = false
 			},
-			setupMocks: func(ic *MockInputCapturePort, ns *MockNetworkServerPort) {
+			setupMocks: func(ic *mocks.MockInputCapturePort, ns *mocks.MockNetworkServerPort) {
 				ic.On("Stop").Return(nil)
 				ns.On("Stop").Return()
 			},
@@ -240,7 +145,7 @@ func TestUseCaseImpl_Stop(t *testing.T) {
 			setupState: func(uc *UseCaseImpl) {
 				uc.running = false
 			},
-			setupMocks: func(ic *MockInputCapturePort, ns *MockNetworkServerPort) {
+			setupMocks: func(ic *mocks.MockInputCapturePort, ns *mocks.MockNetworkServerPort) {
 				// No calls expected
 			},
 		},
@@ -261,9 +166,6 @@ func TestUseCaseImpl_Stop(t *testing.T) {
 			assert.Empty(t, uc.clientCursors)
 			assert.Empty(t, uc.activeClientID)
 			assert.True(t, uc.controllingLocal)
-
-			inputCapture.AssertExpectations(t)
-			network.AssertExpectations(t)
 		})
 	}
 }
@@ -315,7 +217,7 @@ func TestUseCaseImpl_UnregisterClient(t *testing.T) {
 		name             string
 		setupState       func(*UseCaseImpl)
 		clientID         string
-		setupMocks       func(*MockInputCapturePort, *MockNetworkServerPort)
+		setupMocks       func(*mocks.MockInputCapturePort, *mocks.MockNetworkServerPort)
 		wantClients      int
 		wantLocal        bool
 		wantActiveClient string
@@ -330,7 +232,7 @@ func TestUseCaseImpl_UnregisterClient(t *testing.T) {
 				uc.controllingLocal = false
 			},
 			clientID: "client1",
-			setupMocks: func(ic *MockInputCapturePort, ns *MockNetworkServerPort) {
+			setupMocks: func(ic *mocks.MockInputCapturePort, ns *mocks.MockNetworkServerPort) {
 				// No input release needed for inactive client
 			},
 			wantClients:      1,
@@ -346,7 +248,7 @@ func TestUseCaseImpl_UnregisterClient(t *testing.T) {
 				uc.controllingLocal = false
 			},
 			clientID: "client1",
-			setupMocks: func(ic *MockInputCapturePort, ns *MockNetworkServerPort) {
+			setupMocks: func(ic *mocks.MockInputCapturePort, ns *mocks.MockNetworkServerPort) {
 				ic.On("SetTarget", "").Return(nil)
 			},
 			wantClients:      0,
@@ -359,7 +261,7 @@ func TestUseCaseImpl_UnregisterClient(t *testing.T) {
 				uc.clients["client1"] = &domain.Client{ID: "client1", Name: "Client1"}
 			},
 			clientID: "nonexistent",
-			setupMocks: func(ic *MockInputCapturePort, ns *MockNetworkServerPort) {
+			setupMocks: func(ic *mocks.MockInputCapturePort, ns *mocks.MockNetworkServerPort) {
 				// No calls expected
 			},
 			wantClients:      1,
@@ -380,9 +282,6 @@ func TestUseCaseImpl_UnregisterClient(t *testing.T) {
 			assert.Len(t, uc.clients, tt.wantClients)
 			assert.Equal(t, tt.wantLocal, uc.controllingLocal)
 			assert.Equal(t, tt.wantActiveClient, uc.activeClientID)
-
-			inputCapture.AssertExpectations(t)
-			network.AssertExpectations(t)
 		})
 	}
 }
@@ -516,7 +415,7 @@ func TestUseCaseImpl_SwitchToClient(t *testing.T) {
 		name          string
 		setupState    func(*UseCaseImpl)
 		clientID      string
-		setupMocks    func(*MockInputCapturePort, *MockNetworkServerPort)
+		setupMocks    func(*mocks.MockInputCapturePort, *mocks.MockNetworkServerPort)
 		expectedError error
 		wantActive    string
 		wantLocal     bool
@@ -531,7 +430,7 @@ func TestUseCaseImpl_SwitchToClient(t *testing.T) {
 				}
 			},
 			clientID: "client1",
-			setupMocks: func(ic *MockInputCapturePort, ns *MockNetworkServerPort) {
+			setupMocks: func(ic *mocks.MockInputCapturePort, ns *mocks.MockNetworkServerPort) {
 				ic.On("SetTarget", "client1").Return(nil)
 				ns.On("SendEventToClient", mock.Anything, "192.168.1.100:52525", mock.Anything).Return(nil)
 			},
@@ -545,7 +444,7 @@ func TestUseCaseImpl_SwitchToClient(t *testing.T) {
 				// No clients
 			},
 			clientID: "nonexistent",
-			setupMocks: func(ic *MockInputCapturePort, ns *MockNetworkServerPort) {
+			setupMocks: func(ic *mocks.MockInputCapturePort, ns *mocks.MockNetworkServerPort) {
 				// No calls expected
 			},
 			expectedError: domain.ErrClientNotFound,
@@ -564,7 +463,7 @@ func TestUseCaseImpl_SwitchToClient(t *testing.T) {
 				uc.controllingLocal = false
 			},
 			clientID: "client1",
-			setupMocks: func(ic *MockInputCapturePort, ns *MockNetworkServerPort) {
+			setupMocks: func(ic *mocks.MockInputCapturePort, ns *mocks.MockNetworkServerPort) {
 				// No calls expected - already controlling this client
 			},
 			expectedError: nil,
@@ -589,9 +488,6 @@ func TestUseCaseImpl_SwitchToClient(t *testing.T) {
 			}
 			assert.Equal(t, tt.wantActive, uc.activeClientID)
 			assert.Equal(t, tt.wantLocal, uc.controllingLocal)
-
-			inputCapture.AssertExpectations(t)
-			network.AssertExpectations(t)
 		})
 	}
 }
@@ -600,7 +496,7 @@ func TestUseCaseImpl_SwitchToLocal(t *testing.T) {
 	tests := []struct {
 		name       string
 		setupState func(*UseCaseImpl)
-		setupMocks func(*MockInputCapturePort, *MockNetworkServerPort)
+		setupMocks func(*mocks.MockInputCapturePort, *mocks.MockNetworkServerPort)
 	}{
 		{
 			name: "switch to local from client",
@@ -613,7 +509,7 @@ func TestUseCaseImpl_SwitchToLocal(t *testing.T) {
 				uc.activeClientID = "client1"
 				uc.controllingLocal = false
 			},
-			setupMocks: func(ic *MockInputCapturePort, ns *MockNetworkServerPort) {
+			setupMocks: func(ic *mocks.MockInputCapturePort, ns *mocks.MockNetworkServerPort) {
 				ic.On("SetTarget", "").Return(nil)
 				ns.On("SendEventToClient", mock.Anything, "192.168.1.100:52525", mock.Anything).Return(nil)
 			},
@@ -623,7 +519,7 @@ func TestUseCaseImpl_SwitchToLocal(t *testing.T) {
 			setupState: func(uc *UseCaseImpl) {
 				// Already controlling local
 			},
-			setupMocks: func(ic *MockInputCapturePort, ns *MockNetworkServerPort) {
+			setupMocks: func(ic *mocks.MockInputCapturePort, ns *mocks.MockNetworkServerPort) {
 				// No calls expected
 			},
 		},
@@ -641,9 +537,6 @@ func TestUseCaseImpl_SwitchToLocal(t *testing.T) {
 			assert.NoError(t, err)
 			assert.True(t, uc.controllingLocal)
 			assert.Empty(t, uc.activeClientID)
-
-			inputCapture.AssertExpectations(t)
-			network.AssertExpectations(t)
 		})
 	}
 }
@@ -652,7 +545,7 @@ func TestUseCaseImpl_SwitchToNext(t *testing.T) {
 	tests := []struct {
 		name       string
 		setupState func(*UseCaseImpl)
-		setupMocks func(*MockInputCapturePort, *MockNetworkServerPort)
+		setupMocks func(*mocks.MockInputCapturePort, *mocks.MockNetworkServerPort)
 		wantActive string
 		wantLocal  bool
 	}{
@@ -661,7 +554,7 @@ func TestUseCaseImpl_SwitchToNext(t *testing.T) {
 			setupState: func(uc *UseCaseImpl) {
 				uc.clients["client1"] = &domain.Client{ID: "client1", Name: "C1", Address: "addr1"}
 			},
-			setupMocks: func(ic *MockInputCapturePort, ns *MockNetworkServerPort) {
+			setupMocks: func(ic *mocks.MockInputCapturePort, ns *mocks.MockNetworkServerPort) {
 				ic.On("SetTarget", "client1").Return(nil)
 				ns.On("SendEventToClient", mock.Anything, "addr1", mock.Anything).Return(nil)
 			},
@@ -676,7 +569,7 @@ func TestUseCaseImpl_SwitchToNext(t *testing.T) {
 				uc.activeClientID = "aaa"
 				uc.controllingLocal = false
 			},
-			setupMocks: func(ic *MockInputCapturePort, ns *MockNetworkServerPort) {
+			setupMocks: func(ic *mocks.MockInputCapturePort, ns *mocks.MockNetworkServerPort) {
 				ic.On("SetTarget", "bbb").Return(nil)
 				ns.On("SendEventToClient", mock.Anything, "addr2", mock.Anything).Return(nil)
 			},
@@ -690,7 +583,7 @@ func TestUseCaseImpl_SwitchToNext(t *testing.T) {
 				uc.activeClientID = "client1"
 				uc.controllingLocal = false
 			},
-			setupMocks: func(ic *MockInputCapturePort, ns *MockNetworkServerPort) {
+			setupMocks: func(ic *mocks.MockInputCapturePort, ns *mocks.MockNetworkServerPort) {
 				ic.On("SetTarget", "").Return(nil)
 				ns.On("SendEventToClient", mock.Anything, "addr1", mock.Anything).Return(nil)
 			},
@@ -700,7 +593,7 @@ func TestUseCaseImpl_SwitchToNext(t *testing.T) {
 		{
 			name:       "no clients stays local",
 			setupState: func(uc *UseCaseImpl) {},
-			setupMocks: func(ic *MockInputCapturePort, ns *MockNetworkServerPort) {
+			setupMocks: func(ic *mocks.MockInputCapturePort, ns *mocks.MockNetworkServerPort) {
 				// No calls - already local, no clients
 			},
 			wantActive: "",
@@ -720,9 +613,6 @@ func TestUseCaseImpl_SwitchToNext(t *testing.T) {
 			assert.NoError(t, err)
 			assert.Equal(t, tt.wantActive, uc.activeClientID)
 			assert.Equal(t, tt.wantLocal, uc.controllingLocal)
-
-			inputCapture.AssertExpectations(t)
-			network.AssertExpectations(t)
 		})
 	}
 }
@@ -731,7 +621,7 @@ func TestUseCaseImpl_SwitchToPrevious(t *testing.T) {
 	tests := []struct {
 		name       string
 		setupState func(*UseCaseImpl)
-		setupMocks func(*MockInputCapturePort, *MockNetworkServerPort)
+		setupMocks func(*mocks.MockInputCapturePort, *mocks.MockNetworkServerPort)
 		wantActive string
 		wantLocal  bool
 	}{
@@ -741,7 +631,7 @@ func TestUseCaseImpl_SwitchToPrevious(t *testing.T) {
 				uc.clients["aaa"] = &domain.Client{ID: "aaa", Name: "C1", Address: "addr1"}
 				uc.clients["bbb"] = &domain.Client{ID: "bbb", Name: "C2", Address: "addr2"}
 			},
-			setupMocks: func(ic *MockInputCapturePort, ns *MockNetworkServerPort) {
+			setupMocks: func(ic *mocks.MockInputCapturePort, ns *mocks.MockNetworkServerPort) {
 				ic.On("SetTarget", "bbb").Return(nil)
 				ns.On("SendEventToClient", mock.Anything, "addr2", mock.Anything).Return(nil)
 			},
@@ -756,7 +646,7 @@ func TestUseCaseImpl_SwitchToPrevious(t *testing.T) {
 				uc.activeClientID = "aaa"
 				uc.controllingLocal = false
 			},
-			setupMocks: func(ic *MockInputCapturePort, ns *MockNetworkServerPort) {
+			setupMocks: func(ic *mocks.MockInputCapturePort, ns *mocks.MockNetworkServerPort) {
 				ic.On("SetTarget", "").Return(nil)
 				ns.On("SendEventToClient", mock.Anything, "addr1", mock.Anything).Return(nil)
 			},
@@ -777,9 +667,6 @@ func TestUseCaseImpl_SwitchToPrevious(t *testing.T) {
 			assert.NoError(t, err)
 			assert.Equal(t, tt.wantActive, uc.activeClientID)
 			assert.Equal(t, tt.wantLocal, uc.controllingLocal)
-
-			inputCapture.AssertExpectations(t)
-			network.AssertExpectations(t)
 		})
 	}
 }
@@ -789,7 +676,7 @@ func TestUseCaseImpl_ConnectToSlot(t *testing.T) {
 		name          string
 		setupState    func(*UseCaseImpl)
 		slot          int32
-		setupMocks    func(*MockInputCapturePort, *MockNetworkServerPort)
+		setupMocks    func(*mocks.MockInputCapturePort, *mocks.MockNetworkServerPort)
 		expectedError error
 		wantLocal     bool
 	}{
@@ -801,7 +688,7 @@ func TestUseCaseImpl_ConnectToSlot(t *testing.T) {
 				uc.controllingLocal = false
 			},
 			slot: 0,
-			setupMocks: func(ic *MockInputCapturePort, ns *MockNetworkServerPort) {
+			setupMocks: func(ic *mocks.MockInputCapturePort, ns *mocks.MockNetworkServerPort) {
 				ic.On("SetTarget", "").Return(nil)
 				ns.On("SendEventToClient", mock.Anything, "addr1", mock.Anything).Return(nil)
 			},
@@ -814,7 +701,7 @@ func TestUseCaseImpl_ConnectToSlot(t *testing.T) {
 				uc.clients["client1"] = &domain.Client{ID: "client1", Address: "addr1"}
 			},
 			slot: 1,
-			setupMocks: func(ic *MockInputCapturePort, ns *MockNetworkServerPort) {
+			setupMocks: func(ic *mocks.MockInputCapturePort, ns *mocks.MockNetworkServerPort) {
 				ic.On("SetTarget", "client1").Return(nil)
 				ns.On("SendEventToClient", mock.Anything, "addr1", mock.Anything).Return(nil)
 			},
@@ -825,7 +712,7 @@ func TestUseCaseImpl_ConnectToSlot(t *testing.T) {
 			name:          "invalid slot returns error",
 			setupState:    func(uc *UseCaseImpl) {},
 			slot:          6,
-			setupMocks:    func(ic *MockInputCapturePort, ns *MockNetworkServerPort) {},
+			setupMocks:    func(ic *mocks.MockInputCapturePort, ns *mocks.MockNetworkServerPort) {},
 			expectedError: domain.ErrInvalidSlot,
 			wantLocal:     true,
 		},
@@ -835,7 +722,7 @@ func TestUseCaseImpl_ConnectToSlot(t *testing.T) {
 				uc.clients["client1"] = &domain.Client{ID: "client1", Address: "addr1"}
 			},
 			slot:          3, // No client in slot 3
-			setupMocks:    func(ic *MockInputCapturePort, ns *MockNetworkServerPort) {},
+			setupMocks:    func(ic *mocks.MockInputCapturePort, ns *mocks.MockNetworkServerPort) {},
 			expectedError: domain.ErrClientNotFound,
 			wantLocal:     true,
 		},
@@ -856,9 +743,6 @@ func TestUseCaseImpl_ConnectToSlot(t *testing.T) {
 				assert.NoError(t, err)
 			}
 			assert.Equal(t, tt.wantLocal, uc.controllingLocal)
-
-			inputCapture.AssertExpectations(t)
-			network.AssertExpectations(t)
 		})
 	}
 }

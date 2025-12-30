@@ -10,9 +10,13 @@ import (
 
 	"github.com/rs/zerolog"
 
+	"github.com/bnema/waymon/internal/boundaries/in"
 	"github.com/bnema/waymon/internal/boundaries/out"
 	"github.com/bnema/waymon/internal/domain"
 )
+
+// Compile-time interface check
+var _ in.ServerUseCase = (*UseCaseImpl)(nil)
 
 // UseCaseImpl implements the ServerUseCase interface.
 // It coordinates client management, input capture, and event routing.
@@ -48,11 +52,12 @@ type UseCaseImpl struct {
 }
 
 // NewServerUseCase creates a new server use case with the given dependencies.
+// Returns the ServerUseCase interface to ensure consumers depend on the abstraction.
 func NewServerUseCase(
 	inputCapture out.InputCapturePort,
 	network out.NetworkServerPort,
 	configRepo out.ConfigRepository,
-) *UseCaseImpl {
+) in.ServerUseCase {
 	return &UseCaseImpl{
 		inputCapture:      inputCapture,
 		network:           network,

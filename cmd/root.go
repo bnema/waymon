@@ -1,75 +1,64 @@
+// Package cmd provides the composition root for waymon CLI.
+// It creates dependencies and wires them into the CLI adapter.
 package cmd
 
 import (
+	"context"
 	"os"
 
-	"github.com/bnema/waymon/internal/config"
-	"github.com/bnema/waymon/internal/logger"
-	"github.com/spf13/cobra"
+	"github.com/bnema/waymon/internal/adapters/in/cli"
+	"github.com/bnema/waymon/internal/adapters/in/ipc"
+	"github.com/bnema/waymon/internal/adapters/out/config"
+	"github.com/bnema/waymon/internal/adapters/out/display"
+	"github.com/rs/zerolog"
 )
 
 var (
-	logLevel string
+	// Version is set at build time via ldflags.
+	Version = "dev"
 
-	rootCmd = &cobra.Command{
-		Use:   "waymon",
-		Short: "Waymon - Wayland mouse sharing",
-		Long: `Waymon is a client/server mouse sharing application for Wayland systems.
-It allows seamless mouse movement between two computers on a local network,
-working around Wayland's security restrictions by using the uinput kernel module.`,
-		SilenceUsage: true,
-	}
+	// Commit is the git commit hash set at build time.
+	Commit = "unknown"
+
+	// Date is the build date set at build time.
+	Date = "unknown"
 )
 
-// Execute runs the root command
+// Execute runs the waymon CLI.
+// This is the composition root that creates all dependencies and wires them together.
 func Execute() error {
-	return rootCmd.Execute()
-}
+	// Create context with logger
+	ctx := zerolog.New(zerolog.ConsoleWriter{Out: os.Stderr, TimeFormat: "15:04:05"}).
+		With().
+		Timestamp().
+		Logger().
+		WithContext(context.Background())
 
-func init() {
-	// Initialize configuration
-	cobra.OnInitialize(initConfig)
+	// Set version
+	cli.SetVersion(Version)
 
-	rootCmd.Version = Version
-	rootCmd.SetVersionTemplate(`{{with .Name}}{{printf "%s " .}}{{end}}{{printf "version %s\n" .Version}}`)
-
-	// Add global flags
-	rootCmd.PersistentFlags().String("config", "", "config file (default is $HOME/.config/waymon/waymon.toml)")
-	rootCmd.PersistentFlags().StringVar(&logLevel, "log-level", "", "set log level (debug, info, warn, error, fatal)")
-
-	// Add commands
-	rootCmd.AddCommand(serverCmd)
-	rootCmd.AddCommand(clientCmd)
-	rootCmd.AddCommand(configCmd)
-}
-
-// initConfig reads in config file
-func initConfig() {
-	// Set log level from flag if provided
-	if logLevel != "" {
-		logger.SetLevel(logLevel)
-		logger.Infof("Setting log level to '%s' from command line flag", logLevel)
+	// Create dependencies
+	var ipcClient cli.IPCClient
+	ipcClientRaw, err := ipc.NewClient()
+	if err == nil {
+		ipcClient = cli.NewIPCClientAdapter(ipcClientRaw)
 	}
+	// If IPC client fails, that's ok - it means server isn't running
+	// Commands that need it will handle the nil case
 
-	if err := config.Init(); err != nil {
-		logger.Warnf("Warning: %v", err)
-		return
-	}
+	// Create config repository
+	configRepo := config.NewViperRepository()
 
-	// Apply log level from config file if not overridden by flag
-	if logLevel == "" {
-		cfg := config.Get()
-		if cfg.Logging.LogLevel != "" {
-			logger.SetLevel(cfg.Logging.LogLevel)
-			logger.Infof("Setting log level to '%s' from config file", cfg.Logging.LogLevel)
-		} else {
-			// Check if LOG_LEVEL env var is set
-			envLevel := os.Getenv("LOG_LEVEL")
-			if envLevel != "" {
-				logger.Infof("Using log level '%s' from LOG_LEVEL environment variable", envLevel)
-			} else {
-				logger.Info("Using default log level 'INFO' (no config, flag, or env var specified)")
-			}
-		}
-	}
+	// Create display port (may fail on some systems)
+	displayPort, _ := display.New(ctx)
+	// If display detection fails, that's ok - monitors command will handle it
+
+	// Create CLI with dependencies
+	cliInstance := cli.New(
+		cli.WithIPCClient(ipcClient),
+		cli.WithConfigRepository(configRepo),
+		cli.WithDisplayPort(displayPort),
+	)
+
+	return cliInstance.ExecuteContext(ctx)
 }
