@@ -6,11 +6,13 @@ import (
 	"context"
 	"os"
 
+	"github.com/rs/zerolog"
+
 	"github.com/bnema/waymon/internal/adapters/in/cli"
 	"github.com/bnema/waymon/internal/adapters/in/ipc"
 	"github.com/bnema/waymon/internal/adapters/out/config"
 	"github.com/bnema/waymon/internal/adapters/out/display"
-	"github.com/rs/zerolog"
+	"github.com/bnema/waymon/internal/app"
 )
 
 var (
@@ -53,11 +55,36 @@ func Execute() error {
 	displayPort, _ := display.New(ctx)
 	// If display detection fails, that's ok - monitors command will handle it
 
+	// Create runner functions that bridge CLI options to app layer
+	serverRunner := func(ctx context.Context, opts cli.ServerOptions) error {
+		return app.RunServer(ctx, app.ServerOptions{
+			Port:        opts.Port,
+			BindAddress: opts.BindAddress,
+			NoTUI:       opts.NoTUI,
+			DebugTUI:    opts.DebugTUI,
+			Daemon:      opts.Daemon,
+			ConfigPath:  opts.ConfigPath,
+			LogLevel:    opts.LogLevel,
+		})
+	}
+
+	clientRunner := func(ctx context.Context, opts cli.ClientOptions) error {
+		return app.RunClient(ctx, app.ClientOptions{
+			ServerAddress: opts.ServerAddress,
+			HostName:      opts.HostName,
+			ConfigPath:    opts.ConfigPath,
+			LogLevel:      opts.LogLevel,
+			NoTUI:         opts.NoTUI,
+		})
+	}
+
 	// Create CLI with dependencies
 	cliInstance := cli.New(
 		cli.WithIPCClient(ipcClient),
 		cli.WithConfigRepository(configRepo),
 		cli.WithDisplayPort(displayPort),
+		cli.WithServerRunner(serverRunner),
+		cli.WithClientRunner(clientRunner),
 	)
 
 	return cliInstance.ExecuteContext(ctx)

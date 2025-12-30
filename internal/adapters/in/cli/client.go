@@ -1,9 +1,9 @@
 package cli
 
 import (
-	"github.com/spf13/cobra"
+	"fmt"
 
-	"github.com/bnema/waymon/internal/app"
+	"github.com/spf13/cobra"
 )
 
 func (c *CLI) newClientCmd() *cobra.Command {
@@ -25,7 +25,11 @@ Requirements:
   - Wayland compositor with virtual input support
   - SSH private key for server authentication`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			opts := app.ClientOptions{
+			if c.clientRunner == nil {
+				return fmt.Errorf("client runner not configured")
+			}
+
+			opts := ClientOptions{
 				ServerAddress: serverAddr,
 				HostName:      hostName,
 				ConfigPath:    configPath,
@@ -33,7 +37,7 @@ Requirements:
 				NoTUI:         noTUI,
 			}
 
-			return app.RunClient(cmd.Context(), opts)
+			return c.clientRunner(cmd.Context(), opts)
 		},
 	}
 

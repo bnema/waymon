@@ -45,12 +45,42 @@ type StatusResponse struct {
 	ComputerNames []string
 }
 
+// ServerOptions configures the server application.
+type ServerOptions struct {
+	Port        int
+	BindAddress string
+	NoTUI       bool
+	DebugTUI    bool
+	Daemon      bool
+	ConfigPath  string
+	LogLevel    string
+}
+
+// ClientOptions configures the client application.
+type ClientOptions struct {
+	ServerAddress string
+	HostName      string
+	ConfigPath    string
+	LogLevel      string
+	NoTUI         bool
+}
+
+// ServerRunner is a function that runs the server with the given options.
+type ServerRunner func(ctx context.Context, opts ServerOptions) error
+
+// ClientRunner is a function that runs the client with the given options.
+type ClientRunner func(ctx context.Context, opts ClientOptions) error
+
 // CLI holds the dependencies for CLI commands.
 type CLI struct {
 	// Dependencies injected from app layer
 	ipcClient   IPCClient
 	displayPort out.DisplayPort
 	configRepo  out.ConfigRepository
+
+	// Runners injected from composition root
+	serverRunner ServerRunner
+	clientRunner ClientRunner
 
 	// Flags
 	logLevel   string
@@ -81,6 +111,20 @@ func WithDisplayPort(port out.DisplayPort) Option {
 func WithConfigRepository(repo out.ConfigRepository) Option {
 	return func(c *CLI) {
 		c.configRepo = repo
+	}
+}
+
+// WithServerRunner sets the server runner function.
+func WithServerRunner(runner ServerRunner) Option {
+	return func(c *CLI) {
+		c.serverRunner = runner
+	}
+}
+
+// WithClientRunner sets the client runner function.
+func WithClientRunner(runner ClientRunner) Option {
+	return func(c *CLI) {
+		c.clientRunner = runner
 	}
 }
 

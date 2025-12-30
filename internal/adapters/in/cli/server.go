@@ -1,9 +1,9 @@
 package cli
 
 import (
-	"github.com/spf13/cobra"
+	"fmt"
 
-	"github.com/bnema/waymon/internal/app"
+	"github.com/spf13/cobra"
 )
 
 func (c *CLI) newServerCmd() *cobra.Command {
@@ -28,7 +28,11 @@ Requirements:
   - SSH host key at ~/.ssh/waymon_host_key (or configured path)
   - Authorized keys for client authentication`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			opts := app.ServerOptions{
+			if c.serverRunner == nil {
+				return fmt.Errorf("server runner not configured")
+			}
+
+			opts := ServerOptions{
 				Port:        port,
 				BindAddress: bindAddress,
 				NoTUI:       noTUI,
@@ -38,7 +42,7 @@ Requirements:
 				LogLevel:    logLevel,
 			}
 
-			return app.RunServer(cmd.Context(), opts)
+			return c.serverRunner(cmd.Context(), opts)
 		},
 	}
 
