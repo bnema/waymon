@@ -27,10 +27,8 @@ func (s *UseCaseImpl) HandleInputEvent(ctx context.Context, event *domain.InputE
 		return
 	}
 
-	log.Debug().
-		Int64("timestamp", event.Timestamp).
-		Str("sourceId", event.SourceID).
-		Msg("HandleInputEvent called")
+	// NOTE: Removed per-event debug logging here - it caused severe performance
+	// issues when debug logging is enabled (hundreds of logs per second for mouse events)
 
 	// IMPORTANT: Prevent feedback loop - don't forward events that came from SSH clients
 	if strings.HasPrefix(event.SourceID, "ssh-client-") {
@@ -65,7 +63,7 @@ func (s *UseCaseImpl) HandleInputEvent(ctx context.Context, event *domain.InputE
 		return
 	}
 
-	log.Debug().Str("client", client.Name).Str("address", client.Address).Msg("Routing event to client")
+	// NOTE: Removed per-event "Routing event to client" debug log - it caused performance issues
 
 	// Handle mouse move events with cursor constraints
 	if event.MouseMove != nil {
@@ -141,7 +139,7 @@ func (s *UseCaseImpl) handleMouseMoveWithConstraints(ctx context.Context, event 
 
 	cursor, exists := s.clientCursors[s.activeClientID]
 	if !exists || len(client.Monitors) == 0 {
-		log.Debug().Str("client", client.Name).Msg("No cursor state or monitors, sending raw mouse move")
+		// NOTE: Removed per-event "No cursor state or monitors" debug log - it caused performance issues
 		return event
 	}
 
@@ -196,25 +194,9 @@ func (s *UseCaseImpl) updateCursorFromAbsolutePosition(pos *domain.MousePosition
 }
 
 // logInputActivity logs input activity with throttling to avoid spam.
-func (s *UseCaseImpl) logInputActivity(ctx context.Context, event *domain.InputEvent, client *domain.Client) {
-	log := zerolog.Ctx(ctx)
-
-	// Determine event type for logging
-	eventType := "input"
-	switch {
-	case event.MouseMove != nil:
-		eventType = "mouse movement"
-	case event.MouseButton != nil:
-		eventType = "mouse click"
-	case event.MouseScroll != nil:
-		eventType = "mouse scroll"
-	case event.Keyboard != nil:
-		eventType = "keyboard"
-	}
-
-	message := fmt.Sprintf("Injecting %s input into %s (%s)", eventType, client.Name, client.Address)
-	log.Debug().Msg(message)
-
+// NOTE: Per-event debug logging was removed from this function as it caused severe
+// performance issues when debug logging is enabled (hundreds of logs per second).
+func (s *UseCaseImpl) logInputActivity(_ context.Context, _ *domain.InputEvent, client *domain.Client) {
 	// Send to UI with throttling
 	if s.onActivity != nil {
 		now := time.Now()
@@ -222,13 +204,9 @@ func (s *UseCaseImpl) logInputActivity(ctx context.Context, event *domain.InputE
 
 		// Log activity every 2 seconds or every 50 events
 		if now.Sub(s.lastActivityLog) > 2*time.Second || s.activityCount >= 50 {
-			if s.activityCount > 1 {
-				summary := fmt.Sprintf("Actively controlling %s (%s) - %d input events sent",
-					client.Name, client.Address, s.activityCount)
-				s.onActivity("INFO", summary)
-			} else {
-				s.onActivity("INFO", message)
-			}
+			summary := fmt.Sprintf("Actively controlling %s (%s) - %d input events sent",
+				client.Name, client.Address, s.activityCount)
+			s.onActivity("INFO", summary)
 			s.lastActivityLog = now
 			s.activityCount = 0
 		}

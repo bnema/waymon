@@ -120,7 +120,6 @@ func (s *UseCaseImpl) IsControllingLocal(_ context.Context) bool {
 // SwitchToClient switches input control to the specified client.
 func (s *UseCaseImpl) SwitchToClient(ctx context.Context, clientID string) error {
 	log := zerolog.Ctx(ctx)
-	log.Debug().Str("clientID", clientID).Msg("SwitchToClient called")
 
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -129,6 +128,8 @@ func (s *UseCaseImpl) SwitchToClient(ctx context.Context, clientID string) error
 	if s.activeClientID == clientID && !s.controllingLocal {
 		return nil
 	}
+
+	log.Debug().Str("clientID", clientID).Msg("SwitchToClient called")
 
 	// Check if client exists
 	client, exists := s.clients[clientID]

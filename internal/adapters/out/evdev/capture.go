@@ -804,7 +804,7 @@ func (c *Capture) processEvents() {
 			c.mu.RUnlock()
 
 			if target != "" && callback != nil {
-				log.Debug().Str("target", target).Msg("forwarding event to callback")
+				// NOTE: Removed per-event "forwarding event" debug log - it caused performance issues
 				c.safeCallbackInvoke(callback, event)
 			} else if callback == nil && target != "" {
 				log.Warn().Msg("no callback set for input events")
