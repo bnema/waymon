@@ -23,6 +23,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m = m.updateClientList()
 		m = m.updateFooter()
 		m = m.updateHeader()
+		m = m.updateLogStream()
 
 	// Keyboard input
 	case tea.KeyMsg:
@@ -73,6 +74,29 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	// Activity log
 	case messages.ActivityMsg:
 		m = m.addActivity(msg.Level, msg.Message)
+
+	// Log stream messages
+	case messages.LogMsg:
+		level := components.LogLevelInfo
+		switch msg.Level {
+		case "DBG", "debug":
+			level = components.LogLevelDebug
+		case "INF", "info":
+			level = components.LogLevelInfo
+		case "WRN", "warn", "warning":
+			level = components.LogLevelWarn
+		case "ERR", "error":
+			level = components.LogLevelError
+		}
+		m = m.AddLog(level, msg.Message, msg.Fields)
+
+	// Log stream component updates
+	case components.LogStreamMsg:
+		var cmd tea.Cmd
+		m.logStream, cmd = m.logStream.Update(msg)
+		if cmd != nil {
+			cmds = append(cmds, cmd)
+		}
 
 	// Error handling
 	case messages.ErrorMsg:

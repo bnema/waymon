@@ -75,8 +75,11 @@ func RunServer(ctx context.Context, opts ServerOptions) error {
 		cfg.Server.BindAddress = opts.BindAddress
 	}
 
+	// Determine if TUI will be used (affects console logging)
+	useTUI := !opts.NoTUI && !opts.Daemon
+
 	// Set up logging
-	ctx, logCleanup, err := setupServerLogging(ctx, cfg, opts.LogLevel)
+	ctx, logCleanup, err := setupServerLogging(ctx, cfg, opts.LogLevel, useTUI)
 	if err != nil {
 		return fmt.Errorf("failed to setup logging: %w", err)
 	}
@@ -198,8 +201,9 @@ func RunServer(ctx context.Context, opts ServerOptions) error {
 }
 
 // setupServerLogging configures zerolog with file and console output.
+// When useTUI is true, console output is disabled to prevent logs from interfering with the TUI.
 // Returns a cleanup function to close log files.
-func setupServerLogging(ctx context.Context, cfg *domain.Config, levelOverride string) (context.Context, func(), error) {
+func setupServerLogging(ctx context.Context, cfg *domain.Config, levelOverride string, useTUI bool) (context.Context, func(), error) {
 	// Determine log level
 	level := zerolog.InfoLevel
 	levelStr := cfg.Logging.LogLevel
@@ -214,14 +218,17 @@ func setupServerLogging(ctx context.Context, cfg *domain.Config, levelOverride s
 		}
 	}
 
-	// Create console writer with short time format for readability
-	consoleWriter := zerolog.ConsoleWriter{
-		Out:        os.Stderr,
-		TimeFormat: "15:04:05",
-	}
-
 	var writers []io.Writer
-	writers = append(writers, consoleWriter)
+
+	// Only add console writer if NOT in TUI mode
+	// In TUI mode, console output interferes with the alternate screen buffer
+	if !useTUI {
+		consoleWriter := zerolog.ConsoleWriter{
+			Out:        os.Stderr,
+			TimeFormat: "15:04:05",
+		}
+		writers = append(writers, consoleWriter)
+	}
 
 	// Always set up file logging for session-based logs
 	fileLogger := logging.New(cfg.Logging.LogDir)
@@ -231,7 +238,15 @@ func setupServerLogging(ctx context.Context, cfg *domain.Config, levelOverride s
 		fmt.Fprintf(os.Stderr, "Warning: could not create log file: %v\n", err)
 	} else {
 		writers = append(writers, fileWriter)
-		fmt.Fprintf(os.Stderr, "Logging to: %s\n", fileLogger.GetLogDir())
+		// Only print log path if not in TUI mode
+		if !useTUI {
+			fmt.Fprintf(os.Stderr, "Logging to: %s\n", fileLogger.GetLogDir())
+		}
+	}
+
+	// If no writers (TUI mode with failed file logging), use discard
+	if len(writers) == 0 {
+		writers = append(writers, io.Discard)
 	}
 
 	// Create multi-writer

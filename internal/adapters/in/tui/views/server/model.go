@@ -34,7 +34,7 @@ type Model struct {
 	width  int
 	height int
 
-	// Activity log
+	// Activity log (deprecated, use logStream instead)
 	activityLog []activityEntry
 	maxLogSize  int
 
@@ -43,6 +43,7 @@ type Model struct {
 	header     components.Header
 	footer     components.Footer
 	toasts     components.ToastManager
+	logStream  components.LogStream
 }
 
 // activityEntry is a log entry for activity display.
@@ -65,6 +66,7 @@ func New(ctx context.Context, useCase in.ServerUseCase) Model {
 		header:       components.ServerHeader(80),
 		footer:       components.ServerFooter(80),
 		toasts:       components.NewToastManager(),
+		logStream:    components.NewLogStream(),
 		width:        80,
 		height:       24,
 	}
@@ -192,5 +194,25 @@ func (m Model) updateHeader() Model {
 		status = "Waiting for clients..."
 	}
 	m.header = m.header.WithWidth(m.width).WithStatus(status)
+	return m
+}
+
+// updateLogStream updates the log stream dimensions.
+func (m Model) updateLogStream() Model {
+	// Log stream takes full width, height is calculated in view
+	logHeight := 8 // Fixed height for log pane
+	m.logStream = m.logStream.WithSize(m.width-4, logHeight-2)
+	return m
+}
+
+// AddLog adds a log entry to the log stream.
+func (m Model) AddLog(level components.LogLevel, message string, fields map[string]string) Model {
+	entry := components.LogEntry{
+		Time:    time.Now(),
+		Level:   level,
+		Message: message,
+		Fields:  fields,
+	}
+	m.logStream = m.logStream.AddEntry(entry)
 	return m
 }

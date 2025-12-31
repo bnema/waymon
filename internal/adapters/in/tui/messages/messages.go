@@ -74,6 +74,13 @@ type ActivityMsg struct {
 	Message string
 }
 
+// LogMsg is sent for log stream entries.
+type LogMsg struct {
+	Level   string
+	Message string
+	Fields  map[string]string
+}
+
 // QuitMsg is sent to request the application to quit.
 type QuitMsg struct{}
 

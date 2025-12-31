@@ -15,6 +15,8 @@ const (
 	MinTerminalWidth = 40
 	// MinTerminalHeight is the minimum supported terminal height.
 	MinTerminalHeight = 12
+	// LogPaneHeight is the fixed height for the log stream pane.
+	LogPaneHeight = 10
 )
 
 // View renders the server view.
@@ -69,12 +71,29 @@ func (m Model) renderTooSmall() string {
 }
 
 // renderMainContent renders the main content area with responsive layout.
+// Layout: top section (clients + control) and bottom section (log stream).
 func (m Model) renderMainContent(height, width int) string {
-	// Determine layout mode based on available width
-	if width >= MinPaneWidth*2+4 {
-		return m.renderHorizontalLayout(height, width)
+	// Reserve space for log pane at bottom
+	logHeight := LogPaneHeight
+	topHeight := height - logHeight
+
+	if topHeight < 6 {
+		topHeight = 6
+		logHeight = height - topHeight
 	}
-	return m.renderVerticalLayout(height, width)
+
+	// Render top section (responsive horizontal/vertical)
+	var topSection string
+	if width >= MinPaneWidth*2+4 {
+		topSection = m.renderHorizontalLayout(topHeight, width)
+	} else {
+		topSection = m.renderVerticalLayout(topHeight, width)
+	}
+
+	// Render log stream pane
+	logPane := m.renderLogPane(logHeight, width)
+
+	return lipgloss.JoinVertical(lipgloss.Left, topSection, logPane)
 }
 
 // renderHorizontalLayout renders two panes side by side.
@@ -196,6 +215,54 @@ func (m Model) renderError(height, width int) string {
 
 	boxed := errorBox.Render(errorContent)
 	return lipgloss.Place(width, height, lipgloss.Center, lipgloss.Center, boxed)
+}
+
+// renderLogPane renders the log stream pane at the bottom.
+func (m Model) renderLogPane(height, width int) string {
+	// Title
+	title := styles.TitleStyle.Render(styles.IconInfo + " Logs")
+
+	// Get log stream content
+	logContent := m.logStream.View()
+	if logContent == "" {
+		logContent = styles.MutedStyle.Render("No logs yet...")
+	}
+
+	// Calculate inner dimensions
+	innerWidth := width - 4
+	innerHeight := height - 4
+
+	if innerHeight < 1 {
+		innerHeight = 1
+	}
+
+	// Title height
+	titleHeight := lipgloss.Height(title)
+	contentHeight := innerHeight - titleHeight - 1
+
+	if contentHeight < 1 {
+		contentHeight = 1
+	}
+
+	// Style content
+	contentStyle := lipgloss.NewStyle().
+		Width(innerWidth).
+		Height(contentHeight)
+
+	styledContent := contentStyle.Render(logContent)
+
+	// Combine title and content
+	inner := lipgloss.JoinVertical(lipgloss.Left, title, "", styledContent)
+
+	// Apply pane style
+	paneStyle := lipgloss.NewStyle().
+		Width(width - 2).
+		Height(height - 2).
+		BorderStyle(lipgloss.RoundedBorder()).
+		BorderForeground(styles.Border).
+		Padding(1)
+
+	return paneStyle.Render(inner)
 }
 
 // renderControlPanel renders the control status panel content.
