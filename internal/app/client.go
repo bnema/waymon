@@ -8,7 +8,6 @@ import (
 	"os/signal"
 	"path/filepath"
 	"syscall"
-	"time"
 
 	"github.com/rs/zerolog"
 
@@ -187,10 +186,10 @@ func setupClientLogging(ctx context.Context, cfg *domain.Config, levelOverride s
 		}
 	}
 
-	// Create console writer
+	// Create console writer with short time format for readability
 	consoleWriter := zerolog.ConsoleWriter{
 		Out:        os.Stderr,
-		TimeFormat: time.RFC3339,
+		TimeFormat: "15:04:05",
 	}
 
 	var writers []io.Writer
