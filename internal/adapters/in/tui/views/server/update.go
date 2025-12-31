@@ -1,6 +1,7 @@
 package server
 
 import (
+	"errors"
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -27,25 +28,48 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	// Keyboard input
 	case tea.KeyMsg:
-		cmd := m.handleKeyPress(msg)
+		cmd, clearErr := m.handleKeyPress(msg)
+		if clearErr {
+			m.err = nil
+		}
 		if cmd != nil {
 			cmds = append(cmds, cmd)
 		}
 
 	// Client events
 	case messages.ClientConnectedMsg:
-		m.clients = append(m.clients, msg.Client)
-		m = m.updateClientList()
-		m = m.updateFooter()
-		m.toasts = m.toasts.AddSuccess("Client connected: " + msg.Client.Name)
-		cmds = append(cmds, m.toasts.Init())
+		// Check if client already exists (avoid duplicate toasts from refresh)
+		exists := false
+		for _, c := range m.clients {
+			if c.ID == msg.Client.ID {
+				exists = true
+				break
+			}
+		}
+		if !exists {
+			m.clients = append(m.clients, msg.Client)
+			m = m.updateClientList()
+			m = m.updateFooter()
+			m.toasts = m.toasts.AddSuccess("Client connected: " + msg.Client.Name)
+			cmds = append(cmds, m.toasts.Init())
+		}
 
 	case messages.ClientDisconnectedMsg:
-		m = m.removeClient(msg.ClientID)
-		m = m.updateClientList()
-		m = m.updateFooter()
-		m.toasts = m.toasts.AddWarning("Client disconnected: " + msg.ClientID)
-		cmds = append(cmds, m.toasts.Init())
+		// Check if client exists before showing toast (avoid duplicate toasts)
+		exists := false
+		for _, c := range m.clients {
+			if c.ID == msg.ClientID {
+				exists = true
+				break
+			}
+		}
+		if exists {
+			m = m.removeClient(msg.ClientID)
+			m = m.updateClientList()
+			m = m.updateFooter()
+			m.toasts = m.toasts.AddWarning("Client disconnected: " + msg.ClientID)
+			cmds = append(cmds, m.toasts.Init())
+		}
 
 	case messages.ClientListUpdatedMsg:
 		m.clients = msg.Clients
@@ -59,17 +83,21 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	// Control events
 	case messages.ControlSwitchedMsg:
+		// Only update and show toast if state actually changed
+		stateChanged := m.activeClientID != msg.ActiveClientID || m.controlLocal != msg.IsLocal
 		m.activeClientID = msg.ActiveClientID
 		m.controlLocal = msg.IsLocal
 		m = m.updateClientList()
 		m = m.updateFooter()
 		m = m.updateHeader()
-		if msg.IsLocal {
-			m.toasts = m.toasts.AddMessage("Control switched to local")
-		} else {
+		// Only show toast for explicit control switches, not automatic ones on disconnect
+		// (disconnect already shows its own toast)
+		if stateChanged && !msg.IsLocal {
+			// Only show toast when switching TO a client, not when returning to local
+			// (returning to local on disconnect is handled by disconnect toast)
 			m.toasts = m.toasts.AddMessage("Control switched to: " + msg.ActiveClientID)
+			cmds = append(cmds, m.toasts.Init())
 		}
-		cmds = append(cmds, m.toasts.Init())
 
 	// Activity log
 	case messages.ActivityMsg:
@@ -100,9 +128,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	// Error handling
 	case messages.ErrorMsg:
-		m.err = msg.Err
-		m.toasts = m.toasts.AddError(msg.Err.Error())
-		cmds = append(cmds, m.toasts.Init())
+		// Don't show "client not found" errors as they're expected during disconnects
+		if msg.Err != nil && !errors.Is(msg.Err, domain.ErrClientNotFound) {
+			m.err = msg.Err
+			m.toasts = m.toasts.AddError(msg.Err.Error())
+			cmds = append(cmds, m.toasts.Init())
+		}
 
 	// Toast management
 	case components.ToastDismissMsg:
@@ -126,11 +157,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 // handleKeyPress handles keyboard input.
-func (m Model) handleKeyPress(msg tea.KeyMsg) tea.Cmd {
+// Returns (command, shouldClearError).
+func (m Model) handleKeyPress(msg tea.KeyMsg) (tea.Cmd, bool) {
 	switch msg.String() {
 	case "q", "ctrl+c":
 		m.quitting = true
-		return tea.Quit
+		return tea.Quit, false
 
 	case "j", "down":
 		m.clientList = m.clientList.SelectNext()
@@ -140,21 +172,21 @@ func (m Model) handleKeyPress(msg tea.KeyMsg) tea.Cmd {
 
 	case "enter":
 		if client := m.clientList.SelectedClient(); client != nil {
-			return m.switchToClient(client.ID)
+			return m.switchToClient(client.ID), false
 		}
 
 	case "l":
-		return m.switchToLocal()
+		return m.switchToLocal(), false
 
 	case "n", "tab":
-		return m.switchToNext()
+		return m.switchToNext(), false
 
 	case "p", "shift+tab":
-		return m.switchToPrevious()
+		return m.switchToPrevious(), false
 
 	case "ctrl+r":
 		// Emergency release with cooldown - deliberate key combo
-		return m.emergencyRelease()
+		return m.emergencyRelease(), false
 
 	case "?":
 		// Toggle help - could be handled by expanding help component
@@ -162,13 +194,13 @@ func (m Model) handleKeyPress(msg tea.KeyMsg) tea.Cmd {
 	case "esc":
 		// Clear error if any, or release control if controlling a client
 		if m.err != nil {
-			m.err = nil
+			return nil, true // Signal to clear error
 		} else if !m.controlLocal {
-			return m.switchToLocal()
+			return m.switchToLocal(), false
 		}
 	}
 
-	return nil
+	return nil, false
 }
 
 // switchToClient switches control to a specific client.

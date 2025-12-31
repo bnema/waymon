@@ -1,8 +1,6 @@
 package server
 
 import (
-	"strings"
-
 	"github.com/charmbracelet/lipgloss"
 
 	"github.com/bnema/waymon/internal/adapters/in/tui/styles"
@@ -56,9 +54,19 @@ func (m Model) View() string {
 	// 5. Assemble layout
 	content := lipgloss.JoinVertical(lipgloss.Left, header, mainContent, footer)
 
-	// 6. Handle toast overlay (top-right, absolute positioning)
+	// 6. Handle toast overlay (top-right positioning)
 	if m.toasts.HasToasts() {
-		content = m.overlayToasts(content)
+		toastView := m.toasts.View()
+		// Right-align toast with margin
+		toastStyle := lipgloss.NewStyle().
+			MarginLeft(m.width - lipgloss.Width(toastView) - 2)
+		toastOverlay := toastStyle.Render(toastView)
+
+		// Place toast at the top
+		content = lipgloss.JoinVertical(lipgloss.Left,
+			toastOverlay,
+			content,
+		)
 	}
 
 	return content
@@ -322,59 +330,6 @@ func (m Model) renderControlPanel() string {
 	}
 
 	return lipgloss.JoinVertical(lipgloss.Left, lines...)
-}
-
-// overlayToasts overlays toast notifications at the top-right of the content.
-func (m Model) overlayToasts(base string) string {
-	toastView := m.toasts.View()
-	if toastView == "" {
-		return base
-	}
-
-	toastWidth := lipgloss.Width(toastView)
-	toastHeight := lipgloss.Height(toastView)
-
-	// Position: top-right with margin
-	startX := m.width - toastWidth - 2
-	startY := 1
-
-	if startX < 0 {
-		startX = 0
-	}
-
-	// Split base into lines
-	baseLines := strings.Split(base, "\n")
-	toastLines := strings.Split(toastView, "\n")
-
-	// Overlay toast lines onto base
-	for i := 0; i < toastHeight && i < len(toastLines); i++ {
-		lineIdx := startY + i
-		if lineIdx >= 0 && lineIdx < len(baseLines) {
-			baseLines[lineIdx] = overlayStringAt(baseLines[lineIdx], toastLines[i], startX)
-		}
-	}
-
-	return strings.Join(baseLines, "\n")
-}
-
-// overlayStringAt places overlay string on top of base string at position x.
-func overlayStringAt(base, overlay string, x int) string {
-	baseRunes := []rune(base)
-	overlayRunes := []rune(overlay)
-
-	// Ensure base is long enough
-	for len(baseRunes) < x+len(overlayRunes) {
-		baseRunes = append(baseRunes, ' ')
-	}
-
-	// Copy overlay runes at position x
-	for i, r := range overlayRunes {
-		if x+i < len(baseRunes) {
-			baseRunes[x+i] = r
-		}
-	}
-
-	return string(baseRunes)
 }
 
 // formatInt converts an int to string for display.
