@@ -13,6 +13,7 @@ import (
 )
 
 // TUILogWriter implements io.Writer and sends log entries to a Bubble Tea program.
+// It supports late-binding: the program can be set after creation.
 type TUILogWriter struct {
 	program *tea.Program
 	mu      sync.Mutex
@@ -26,10 +27,28 @@ func NewTUILogWriter(program *tea.Program) *TUILogWriter {
 	}
 }
 
+// NewDeferredTUILogWriter creates a TUILogWriter without a program.
+// Call SetProgram() to connect it later. Writes before SetProgram are discarded.
+func NewDeferredTUILogWriter() *TUILogWriter {
+	return &TUILogWriter{}
+}
+
+// SetProgram sets the tea.Program to send logs to.
+func (w *TUILogWriter) SetProgram(program *tea.Program) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	w.program = program
+}
+
 // Write implements io.Writer. It parses zerolog JSON output and sends LogMsg to the TUI.
 func (w *TUILogWriter) Write(p []byte) (n int, err error) {
 	w.mu.Lock()
 	defer w.mu.Unlock()
+
+	// If no program connected yet, discard
+	if w.program == nil {
+		return len(p), nil
+	}
 
 	// Write to buffer
 	w.buf.Write(p)

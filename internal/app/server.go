@@ -78,8 +78,14 @@ func RunServer(ctx context.Context, opts ServerOptions) error {
 	// Determine if TUI will be used (affects console logging)
 	useTUI := !opts.NoTUI && !opts.Daemon
 
+	// Create deferred TUI log writer (will be connected when TUI starts)
+	var tuiLogWriter *tui.TUILogWriter
+	if useTUI {
+		tuiLogWriter = tui.NewDeferredTUILogWriter()
+	}
+
 	// Set up logging
-	ctx, logCleanup, err := setupServerLogging(ctx, cfg, opts.LogLevel, useTUI)
+	ctx, logCleanup, err := setupServerLogging(ctx, cfg, opts.LogLevel, useTUI, tuiLogWriter)
 	if err != nil {
 		return fmt.Errorf("failed to setup logging: %w", err)
 	}
@@ -172,17 +178,24 @@ func RunServer(ctx context.Context, opts ServerOptions) error {
 		tuiCtx, tuiCancel := context.WithCancel(ctx)
 		defer tuiCancel()
 
+		// Create the TUI program and connect the deferred log writer
+		tuiProgram := tui.ServerProgram(tuiCtx, serverUseCase, tuiOpts)
+		if tuiLogWriter != nil {
+			tuiLogWriter.SetProgram(tuiProgram)
+		}
+
 		// Handle stop command in background
 		go func() {
 			select {
 			case <-stopChan:
 				log.Info().Msg("stopping TUI due to IPC stop command")
 				tuiCancel()
+				tuiProgram.Quit()
 			case <-tuiCtx.Done():
 			}
 		}()
 
-		if err := tui.RunServer(tuiCtx, serverUseCase, tuiOpts); err != nil {
+		if _, err := tuiProgram.Run(); err != nil {
 			// Check if it was a normal exit due to context cancellation
 			if tuiCtx.Err() != nil {
 				log.Debug().Msg("TUI exited due to context cancellation")
@@ -202,8 +215,9 @@ func RunServer(ctx context.Context, opts ServerOptions) error {
 
 // setupServerLogging configures zerolog with file and console output.
 // When useTUI is true, console output is disabled to prevent logs from interfering with the TUI.
+// If tuiWriter is provided, logs will also be sent to the TUI.
 // Returns a cleanup function to close log files.
-func setupServerLogging(ctx context.Context, cfg *domain.Config, levelOverride string, useTUI bool) (context.Context, func(), error) {
+func setupServerLogging(ctx context.Context, cfg *domain.Config, levelOverride string, useTUI bool, tuiWriter io.Writer) (context.Context, func(), error) {
 	// Determine log level
 	level := zerolog.InfoLevel
 	levelStr := cfg.Logging.LogLevel
@@ -244,7 +258,12 @@ func setupServerLogging(ctx context.Context, cfg *domain.Config, levelOverride s
 		}
 	}
 
-	// If no writers (TUI mode with failed file logging), use discard
+	// Add TUI writer if provided
+	if tuiWriter != nil {
+		writers = append(writers, tuiWriter)
+	}
+
+	// If no writers (TUI mode with failed file logging and no TUI writer), use discard
 	if len(writers) == 0 {
 		writers = append(writers, io.Discard)
 	}
