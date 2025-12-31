@@ -110,6 +110,7 @@ func ServerBindings() []Binding {
 func ClientBindings() []Binding {
 	return []Binding{
 		{Key: "q", Desc: "quit"},
+		{Key: "d", Desc: "disconnect"},
 		{Key: "r", Desc: "reconnect"},
 		{Key: "?", Desc: "help"},
 	}
