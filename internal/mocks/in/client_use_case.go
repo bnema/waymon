@@ -314,3 +314,43 @@ func (_c *MockClientUseCase_SetOnControlChanged_Call) RunAndReturn(run func(call
 	_c.Run(run)
 	return _c
 }
+
+// SetServerAddress provides a mock function for the type MockClientUseCase
+func (_mock *MockClientUseCase) SetServerAddress(addr string) {
+	_mock.Called(addr)
+	return
+}
+
+// MockClientUseCase_SetServerAddress_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'SetServerAddress'
+type MockClientUseCase_SetServerAddress_Call struct {
+	*mock.Call
+}
+
+// SetServerAddress is a helper method to define mock.On call
+//   - addr string
+func (_e *MockClientUseCase_Expecter) SetServerAddress(addr interface{}) *MockClientUseCase_SetServerAddress_Call {
+	return &MockClientUseCase_SetServerAddress_Call{Call: _e.mock.On("SetServerAddress", addr)}
+}
+
+func (_c *MockClientUseCase_SetServerAddress_Call) Run(run func(addr string)) *MockClientUseCase_SetServerAddress_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 string
+		if args[0] != nil {
+			arg0 = args[0].(string)
+		}
+		run(
+			arg0,
+		)
+	})
+	return _c
+}
+
+func (_c *MockClientUseCase_SetServerAddress_Call) Return() *MockClientUseCase_SetServerAddress_Call {
+	_c.Call.Return()
+	return _c
+}
+
+func (_c *MockClientUseCase_SetServerAddress_Call) RunAndReturn(run func(addr string)) *MockClientUseCase_SetServerAddress_Call {
+	_c.Run(run)
+	return _c
+}

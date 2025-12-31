@@ -107,6 +107,9 @@ func RunClient(ctx context.Context, opts ClientOptions) error {
 	// Create client use case
 	clientUseCase := clientuc.NewClientUseCase(inputInjection, networkClient, displayAdapter, configRepo)
 
+	// Set server address from CLI/config resolution
+	clientUseCase.SetServerAddress(serverAddress)
+
 	// Connect to server
 	if err := clientUseCase.Connect(ctx); err != nil {
 		return fmt.Errorf("failed to connect to server: %w", err)

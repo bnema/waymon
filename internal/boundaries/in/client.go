@@ -9,6 +9,9 @@ import (
 // ClientUseCase defines the interface for client-side business logic.
 // Implemented by usecase/client and called by adapters/in (CLI, TUI).
 type ClientUseCase interface {
+	// Configuration
+	SetServerAddress(addr string)
+
 	// Lifecycle
 	Connect(ctx context.Context) error
 	Disconnect(ctx context.Context) error

@@ -72,6 +72,14 @@ func NewClientUseCase(
 	}
 }
 
+// SetServerAddress sets the server address to connect to.
+// This overrides any address from the config file.
+func (c *UseCaseImpl) SetServerAddress(addr string) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.serverAddress = addr
+}
+
 // Connect connects to the server and starts receiving input.
 func (c *UseCaseImpl) Connect(ctx context.Context) error {
 	log := zerolog.Ctx(ctx)
@@ -90,7 +98,11 @@ func (c *UseCaseImpl) Connect(ctx context.Context) error {
 		return fmt.Errorf("failed to load config: %w", err)
 	}
 	c.config = config
-	c.serverAddress = config.Client.ServerAddress
+
+	// Use pre-set server address if available, otherwise use config
+	if c.serverAddress == "" {
+		c.serverAddress = config.Client.ServerAddress
+	}
 
 	// Validate configuration before attempting connection
 	if err := c.validateConfig(ctx); err != nil {

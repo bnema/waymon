@@ -433,6 +433,46 @@ func (_c *MockServerUseCase_IsControllingLocal_Call) RunAndReturn(run func(ctx c
 	return _c
 }
 
+// MarkEmergencyRelease provides a mock function for the type MockServerUseCase
+func (_mock *MockServerUseCase) MarkEmergencyRelease(ctx context.Context) {
+	_mock.Called(ctx)
+	return
+}
+
+// MockServerUseCase_MarkEmergencyRelease_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'MarkEmergencyRelease'
+type MockServerUseCase_MarkEmergencyRelease_Call struct {
+	*mock.Call
+}
+
+// MarkEmergencyRelease is a helper method to define mock.On call
+//   - ctx context.Context
+func (_e *MockServerUseCase_Expecter) MarkEmergencyRelease(ctx interface{}) *MockServerUseCase_MarkEmergencyRelease_Call {
+	return &MockServerUseCase_MarkEmergencyRelease_Call{Call: _e.mock.On("MarkEmergencyRelease", ctx)}
+}
+
+func (_c *MockServerUseCase_MarkEmergencyRelease_Call) Run(run func(ctx context.Context)) *MockServerUseCase_MarkEmergencyRelease_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		run(
+			arg0,
+		)
+	})
+	return _c
+}
+
+func (_c *MockServerUseCase_MarkEmergencyRelease_Call) Return() *MockServerUseCase_MarkEmergencyRelease_Call {
+	_c.Call.Return()
+	return _c
+}
+
+func (_c *MockServerUseCase_MarkEmergencyRelease_Call) RunAndReturn(run func(ctx context.Context)) *MockServerUseCase_MarkEmergencyRelease_Call {
+	_c.Run(run)
+	return _c
+}
+
 // NotifyShutdown provides a mock function for the type MockServerUseCase
 func (_mock *MockServerUseCase) NotifyShutdown(ctx context.Context) {
 	_mock.Called(ctx)
