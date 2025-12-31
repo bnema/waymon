@@ -346,7 +346,7 @@ func (c *UseCaseImpl) injectEvent(ctx context.Context, event *domain.InputEvent)
 		// Use semantic character injection if a character is provided
 		if event.Keyboard.Character != nil {
 			log.Debug().
-				Int32("char", int32(*event.Keyboard.Character)).
+				Int32("char", *event.Keyboard.Character).
 				Bool("pressed", event.Keyboard.Pressed).
 				Msg("Injecting keyboard character")
 			return c.inputInjection.InjectCharacter(ctx, *event.Keyboard.Character, event.Keyboard.Pressed)

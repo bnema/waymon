@@ -783,7 +783,9 @@ func (c *Capture) processEvents() {
 
 	defer func() {
 		if r := recover(); r != nil {
-			log.Error().Interface("panic", r).Msg("event processor panic")
+			log.Error().Interface("panic", r).Msg("event processor panic - emergency releasing devices")
+			// Emergency release all grabbed devices on panic to prevent system lockup
+			c.emergencyReleaseOnPanic()
 		}
 	}()
 
@@ -803,7 +805,7 @@ func (c *Capture) processEvents() {
 
 			if target != "" && callback != nil {
 				log.Debug().Str("target", target).Msg("forwarding event to callback")
-				callback(event)
+				c.safeCallbackInvoke(callback, event)
 			} else if callback == nil && target != "" {
 				log.Warn().Msg("no callback set for input events")
 			}
@@ -811,7 +813,85 @@ func (c *Capture) processEvents() {
 	}
 }
 
+// safeCallbackInvoke invokes the callback with panic recovery to prevent
+// callback panics from leaving devices in a grabbed state.
+func (c *Capture) safeCallbackInvoke(callback func(*domain.InputEvent), event *domain.InputEvent) {
+	defer func() {
+		if r := recover(); r != nil {
+			log := zerolog.Ctx(c.ctx)
+			log.Error().Interface("panic", r).Msg("callback panic - emergency releasing devices")
+			c.emergencyReleaseOnPanic()
+		}
+	}()
+	callback(event)
+}
+
+// emergencyReleaseOnPanic releases all grabbed devices when a panic occurs.
+// This prevents system lockup by ensuring input devices are always released.
+func (c *Capture) emergencyReleaseOnPanic() {
+	log := zerolog.Ctx(c.ctx)
+
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	log.Warn().Msg("performing emergency device release due to panic")
+
+	// Cancel any grab timer
+	if c.grabTimer != nil {
+		c.grabTimer.Stop()
+		c.grabTimer = nil
+	}
+
+	// Clear target first
+	c.currentTarget = ""
+
+	// Force release all devices
+	c.forceReleaseDevices()
+
+	// Notify emergency handler if set
+	if c.emergencyHandler != nil {
+		handler := c.emergencyHandler
+		// Must release lock before calling handler to avoid deadlock
+		c.mu.Unlock()
+		log.Warn().Msg("triggering emergency handler after panic recovery")
+		handler()
+		c.mu.Lock() // Re-acquire for deferred unlock
+	}
+}
+
+// ForceRelease is a public method to forcefully release all grabbed devices.
+// This can be called externally (e.g., from a signal handler) to recover from
+// a stuck state where devices are grabbed but unresponsive.
+func (c *Capture) ForceRelease() {
+	log := zerolog.Ctx(c.ctx)
+	log.Warn().Msg("ForceRelease called - releasing all grabbed devices")
+
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	// Cancel any grab timer
+	if c.grabTimer != nil {
+		c.grabTimer.Stop()
+		c.grabTimer = nil
+	}
+
+	// Clear target
+	c.currentTarget = ""
+
+	// Force release
+	c.forceReleaseDevices()
+
+	// Notify emergency handler if set
+	if c.emergencyHandler != nil {
+		handler := c.emergencyHandler
+		c.mu.Unlock()
+		handler()
+		c.mu.Lock()
+	}
+}
+
 // forceReleaseDevices forcefully releases all devices by closing and reopening them.
+// Caller must hold c.mu lock.
 func (c *Capture) forceReleaseDevices() {
 	log := zerolog.Ctx(c.ctx)
 	log.Warn().Msg("force releasing all devices by closing and reopening")
@@ -834,16 +914,41 @@ func (c *Capture) forceReleaseDevices() {
 }
 
 // watchdog monitors device state and ensures recovery from inconsistent states.
+// Uses adaptive timing: faster checks when devices are grabbed, slower when idle.
 func (c *Capture) watchdog() {
 	log := zerolog.Ctx(c.ctx)
 
+	// Start with idle interval
 	ticker := time.NewTicker(5 * time.Second)
 	defer ticker.Stop()
+
+	const (
+		idleInterval   = 5 * time.Second // Normal interval when no devices grabbed
+		activeInterval = 2 * time.Second // Aggressive interval when devices are grabbed
+	)
+
+	currentInterval := idleInterval
 
 	for {
 		select {
 		case <-ticker.C:
 			c.validateAndRecoverState()
+
+			// Adjust interval based on grab state
+			c.mu.RLock()
+			hasTarget := c.currentTarget != ""
+			c.mu.RUnlock()
+
+			newInterval := idleInterval
+			if hasTarget {
+				newInterval = activeInterval
+			}
+
+			if newInterval != currentInterval {
+				currentInterval = newInterval
+				ticker.Reset(currentInterval)
+				log.Debug().Dur("interval", currentInterval).Bool("hasTarget", hasTarget).Msg("watchdog interval adjusted")
+			}
 		case <-c.watchdogStop:
 			log.Info().Msg("watchdog stopped")
 			return

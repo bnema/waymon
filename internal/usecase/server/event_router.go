@@ -3,6 +3,7 @@ package server
 import (
 	"context"
 	"fmt"
+	"math"
 	"strings"
 	"time"
 
@@ -245,6 +246,11 @@ func (s *UseCaseImpl) translateKeyboardEvent(ctx context.Context, event *domain.
 		return event
 	}
 
+	// Skip if client doesn't have capabilities configured
+	if client.Capabilities == nil {
+		return event
+	}
+
 	// Skip if client doesn't have a different layout (no translation needed)
 	// If layouts are the same, just send raw keycodes
 	serverLayout := s.getServerKeyboardLayout()
@@ -258,11 +264,27 @@ func (s *UseCaseImpl) translateKeyboardEvent(ctx context.Context, event *domain.
 		return event
 	}
 
+	// Bounds check for modifiers (uint32 -> uint8)
+	if kbd.Modifiers > math.MaxUint8 {
+		log.Warn().
+			Uint32("modifiers", kbd.Modifiers).
+			Msg("Keyboard modifiers value exceeds uint8 range, skipping translation")
+		return event
+	}
+
+	// Bounds check for key (uint32 -> uint16)
+	if kbd.Key > math.MaxUint16 {
+		log.Warn().
+			Uint32("key", kbd.Key).
+			Msg("Keyboard key value exceeds uint16 range, skipping translation")
+		return event
+	}
+
 	// Calculate current modifiers from the key being processed
-	modifiers := domain.KeyModifier(kbd.Modifiers)
+	modifiers := domain.KeyModifier(kbd.Modifiers) //nolint:gosec // bounds checked above
 
 	// Translate keycode to character using server's layout
-	charPtr := s.keyboardLayout.KeycodeToChar(ctx, uint16(kbd.Key), modifiers, serverLayout)
+	charPtr := s.keyboardLayout.KeycodeToChar(ctx, uint16(kbd.Key), modifiers, serverLayout) //nolint:gosec // bounds checked above
 	if charPtr == nil {
 		// Keycode doesn't produce a printable character (modifier/function key)
 		// Just send the raw keycode

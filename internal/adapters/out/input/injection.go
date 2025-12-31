@@ -603,7 +603,7 @@ func (w *WaylandInjector) InjectCharacter(ctx context.Context, char rune, presse
 	}
 
 	log.Debug().
-		Int32("char", int32(char)).
+		Int32("char", char).
 		Str("layout", string(layout)).
 		Bool("pressed", pressed).
 		Int("sequences", len(sequences)).

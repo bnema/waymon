@@ -161,6 +161,18 @@ func RunServer(ctx context.Context, opts ServerOptions) error {
 
 	log.Info().Str("socket", ipcServer.SocketPath()).Msg("IPC server started")
 
+	// Set up SIGUSR1 handler for emergency device release
+	// This allows users to recover from a stuck state by running: kill -USR1 <pid>
+	sigusr1Chan := make(chan os.Signal, 1)
+	signal.Notify(sigusr1Chan, syscall.SIGUSR1)
+	go func() {
+		for range sigusr1Chan {
+			log.Warn().Msg("SIGUSR1 received - performing emergency device release")
+			inputCapture.ForceRelease()
+		}
+	}()
+	defer signal.Stop(sigusr1Chan)
+
 	// Run TUI or wait for signals
 	if opts.Daemon || opts.NoTUI {
 		// Daemon mode: wait for stop signal or context cancellation
