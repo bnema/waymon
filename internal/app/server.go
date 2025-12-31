@@ -16,6 +16,7 @@ import (
 	"github.com/bnema/waymon/internal/adapters/in/tui"
 	"github.com/bnema/waymon/internal/adapters/out/config"
 	"github.com/bnema/waymon/internal/adapters/out/evdev"
+	"github.com/bnema/waymon/internal/adapters/out/keyboard"
 	"github.com/bnema/waymon/internal/adapters/out/logging"
 	"github.com/bnema/waymon/internal/adapters/out/ssh"
 	"github.com/bnema/waymon/internal/domain"
@@ -111,8 +112,11 @@ func RunServer(ctx context.Context, opts ServerOptions) error {
 	}
 	networkServer := ssh.NewServerAdapter(sshConfig)
 
+	// Create keyboard layout adapter for cross-layout translation
+	keyboardLayoutAdapter := keyboard.NewAdapter()
+
 	// Create server use case
-	serverUseCase := serveruc.NewServerUseCase(inputCapture, networkServer, configRepo)
+	serverUseCase := serveruc.NewServerUseCase(inputCapture, networkServer, configRepo, keyboardLayoutAdapter)
 
 	// Start the server use case (initializes input capture)
 	if err := serverUseCase.Start(ctx); err != nil {

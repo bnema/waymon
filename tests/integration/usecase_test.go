@@ -375,8 +375,8 @@ func TestServer_FullLifecycle(t *testing.T) {
 	mockInputCapture.EXPECT().Stop().Return(nil)
 	mockNetwork.EXPECT().Stop().Return()
 
-	// Create server use case
-	server := serveruc.NewServerUseCase(mockInputCapture, mockNetwork, mockConfig)
+	// Create server use case (with nil keyboard layout for this test)
+	server := serveruc.NewServerUseCase(mockInputCapture, mockNetwork, mockConfig, nil)
 
 	// Test lifecycle
 	t.Run("start", func(t *testing.T) {
@@ -749,6 +749,7 @@ func TestClient_ConnectDisconnect(t *testing.T) {
 	mockNetwork := mocks.NewMockNetworkClientPort(t)
 	mockDisplay := mocks.NewMockDisplayPort(t)
 	mockConfig := mocks.NewMockConfigRepository(t)
+	mockKeyboard := mocks.NewMockKeyboardLayoutPort(t)
 
 	t.Run("successful_connection", func(t *testing.T) {
 		// Setup expectations
@@ -759,13 +760,15 @@ func TestClient_ConnectDisconnect(t *testing.T) {
 			},
 		}, nil).Once()
 		mockInjection.EXPECT().Start(mock.Anything).Return(nil).Once()
+		mockInjection.EXPECT().SetKeyboardLayout(mock.Anything).Return(nil).Once()
+		mockKeyboard.EXPECT().DetectLayout(mock.Anything).Return(domain.LayoutUS).Once()
 		mockNetwork.EXPECT().SetOnInputEvent(mock.Anything).Return().Once()
 		mockNetwork.EXPECT().SetOnDisconnected(mock.Anything).Return().Once()
 		mockNetwork.EXPECT().Connect(mock.Anything, "192.168.1.100:52525", "/tmp/test_key").Return(nil).Once()
 		mockDisplay.EXPECT().GetMonitors(mock.Anything).Return(CreateTestMonitors(SingleMonitor), nil).Once()
 		mockNetwork.EXPECT().SendEvent(mock.Anything, mock.Anything).Return(nil).Once()
 
-		client := clientuc.NewClientUseCase(mockInjection, mockNetwork, mockDisplay, mockConfig)
+		client := clientuc.NewClientUseCase(mockInjection, mockNetwork, mockDisplay, mockConfig, mockKeyboard)
 
 		err := client.Connect(ctx)
 		require.NoError(t, err)
@@ -781,6 +784,7 @@ func TestClient_ConnectAlreadyConnected(t *testing.T) {
 	mockNetwork := mocks.NewMockNetworkClientPort(t)
 	mockDisplay := mocks.NewMockDisplayPort(t)
 	mockConfig := mocks.NewMockConfigRepository(t)
+	mockKeyboard := mocks.NewMockKeyboardLayoutPort(t)
 
 	// Setup for first connection
 	mockConfig.EXPECT().Load(mock.Anything).Return(&domain.Config{
@@ -790,13 +794,15 @@ func TestClient_ConnectAlreadyConnected(t *testing.T) {
 		},
 	}, nil).Once()
 	mockInjection.EXPECT().Start(mock.Anything).Return(nil).Once()
+	mockInjection.EXPECT().SetKeyboardLayout(mock.Anything).Return(nil).Once()
+	mockKeyboard.EXPECT().DetectLayout(mock.Anything).Return(domain.LayoutUS).Once()
 	mockNetwork.EXPECT().SetOnInputEvent(mock.Anything).Return().Once()
 	mockNetwork.EXPECT().SetOnDisconnected(mock.Anything).Return().Once()
 	mockNetwork.EXPECT().Connect(mock.Anything, "192.168.1.100:52525", "/tmp/test_key").Return(nil).Once()
 	mockDisplay.EXPECT().GetMonitors(mock.Anything).Return(CreateTestMonitors(SingleMonitor), nil).Once()
 	mockNetwork.EXPECT().SendEvent(mock.Anything, mock.Anything).Return(nil).Once()
 
-	client := clientuc.NewClientUseCase(mockInjection, mockNetwork, mockDisplay, mockConfig)
+	client := clientuc.NewClientUseCase(mockInjection, mockNetwork, mockDisplay, mockConfig, mockKeyboard)
 
 	// First connect
 	err := client.Connect(ctx)
@@ -815,6 +821,7 @@ func TestClient_DisconnectCycle(t *testing.T) {
 	mockNetwork := mocks.NewMockNetworkClientPort(t)
 	mockDisplay := mocks.NewMockDisplayPort(t)
 	mockConfig := mocks.NewMockConfigRepository(t)
+	mockKeyboard := mocks.NewMockKeyboardLayoutPort(t)
 
 	// Setup for connection
 	mockConfig.EXPECT().Load(mock.Anything).Return(&domain.Config{
@@ -824,6 +831,8 @@ func TestClient_DisconnectCycle(t *testing.T) {
 		},
 	}, nil).Once()
 	mockInjection.EXPECT().Start(mock.Anything).Return(nil).Once()
+	mockInjection.EXPECT().SetKeyboardLayout(mock.Anything).Return(nil).Once()
+	mockKeyboard.EXPECT().DetectLayout(mock.Anything).Return(domain.LayoutUS).Once()
 	mockNetwork.EXPECT().SetOnInputEvent(mock.Anything).Return().Once()
 	mockNetwork.EXPECT().SetOnDisconnected(mock.Anything).Return().Once()
 	mockNetwork.EXPECT().Connect(mock.Anything, "192.168.1.100:52525", "/tmp/test_key").Return(nil).Once()
@@ -834,7 +843,7 @@ func TestClient_DisconnectCycle(t *testing.T) {
 	mockNetwork.EXPECT().Disconnect().Return(nil).Once()
 	mockInjection.EXPECT().Stop().Return(nil).Once()
 
-	client := clientuc.NewClientUseCase(mockInjection, mockNetwork, mockDisplay, mockConfig)
+	client := clientuc.NewClientUseCase(mockInjection, mockNetwork, mockDisplay, mockConfig, mockKeyboard)
 
 	// Connect
 	err := client.Connect(ctx)
@@ -855,8 +864,9 @@ func TestClient_DisconnectWhenNotConnected(t *testing.T) {
 	mockNetwork := mocks.NewMockNetworkClientPort(t)
 	mockDisplay := mocks.NewMockDisplayPort(t)
 	mockConfig := mocks.NewMockConfigRepository(t)
+	mockKeyboard := mocks.NewMockKeyboardLayoutPort(t)
 
-	client := clientuc.NewClientUseCase(mockInjection, mockNetwork, mockDisplay, mockConfig)
+	client := clientuc.NewClientUseCase(mockInjection, mockNetwork, mockDisplay, mockConfig, mockKeyboard)
 
 	// Should not error when not connected
 	err := client.Disconnect(ctx)
@@ -872,8 +882,9 @@ func TestClient_ControlStatus(t *testing.T) {
 	mockNetwork := mocks.NewMockNetworkClientPort(t)
 	mockDisplay := mocks.NewMockDisplayPort(t)
 	mockConfig := mocks.NewMockConfigRepository(t)
+	mockKeyboard := mocks.NewMockKeyboardLayoutPort(t)
 
-	client := clientuc.NewClientUseCase(mockInjection, mockNetwork, mockDisplay, mockConfig)
+	client := clientuc.NewClientUseCase(mockInjection, mockNetwork, mockDisplay, mockConfig, mockKeyboard)
 
 	t.Run("initial_status", func(t *testing.T) {
 		status := client.GetControlStatus(ctx)
@@ -911,11 +922,12 @@ func TestClient_ConnectionFailed(t *testing.T) {
 	mockNetwork := mocks.NewMockNetworkClientPort(t)
 	mockDisplay := mocks.NewMockDisplayPort(t)
 	mockConfig := mocks.NewMockConfigRepository(t)
+	mockKeyboard := mocks.NewMockKeyboardLayoutPort(t)
 
 	t.Run("config_load_fails", func(t *testing.T) {
 		mockConfig.EXPECT().Load(mock.Anything).Return(nil, fmt.Errorf("config not found")).Once()
 
-		client := clientuc.NewClientUseCase(mockInjection, mockNetwork, mockDisplay, mockConfig)
+		client := clientuc.NewClientUseCase(mockInjection, mockNetwork, mockDisplay, mockConfig, mockKeyboard)
 
 		err := client.Connect(ctx)
 		assert.Error(t, err)
@@ -932,7 +944,7 @@ func TestClient_ConnectionFailed(t *testing.T) {
 		}, nil).Once()
 		mockInjection.EXPECT().Start(mock.Anything).Return(fmt.Errorf("uinput not available")).Once()
 
-		client := clientuc.NewClientUseCase(mockInjection, mockNetwork, mockDisplay, mockConfig)
+		client := clientuc.NewClientUseCase(mockInjection, mockNetwork, mockDisplay, mockConfig, mockKeyboard)
 
 		err := client.Connect(ctx)
 		assert.Error(t, err)
@@ -953,7 +965,7 @@ func TestClient_ConnectionFailed(t *testing.T) {
 		mockNetwork.EXPECT().Connect(mock.Anything, "192.168.1.100:52525", "/tmp/test_key").Return(fmt.Errorf("connection refused")).Once()
 		mockInjection.EXPECT().Stop().Return(nil).Once()
 
-		client := clientuc.NewClientUseCase(mockInjection, mockNetwork, mockDisplay, mockConfig)
+		client := clientuc.NewClientUseCase(mockInjection, mockNetwork, mockDisplay, mockConfig, mockKeyboard)
 
 		err := client.Connect(ctx)
 		assert.Error(t, err)

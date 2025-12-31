@@ -79,6 +79,11 @@ func (s *UseCaseImpl) HandleInputEvent(ctx context.Context, event *domain.InputE
 		s.updateCursorFromAbsolutePosition(event.MousePosition)
 	}
 
+	// Translate keyboard events to characters for cross-layout support
+	if event.Keyboard != nil {
+		event = s.translateKeyboardEvent(ctx, event, client)
+	}
+
 	// Send input event to the client via network
 	if s.network != nil {
 		if err := s.network.SendEventToClient(ctx, client.Address, event); err != nil {
@@ -227,4 +232,80 @@ func (s *UseCaseImpl) logInputActivity(ctx context.Context, event *domain.InputE
 			s.activityCount = 0
 		}
 	}
+}
+
+// translateKeyboardEvent translates a raw keycode to a character using the server's
+// keyboard layout. This enables semantic keyboard translation between systems with
+// different keyboard layouts (e.g., AZERTY server to QWERTY client).
+func (s *UseCaseImpl) translateKeyboardEvent(ctx context.Context, event *domain.InputEvent, client *domain.Client) *domain.InputEvent {
+	log := zerolog.Ctx(ctx)
+
+	// Skip if no keyboard layout port available
+	if s.keyboardLayout == nil {
+		return event
+	}
+
+	// Skip if client doesn't have a different layout (no translation needed)
+	// If layouts are the same, just send raw keycodes
+	serverLayout := s.getServerKeyboardLayout()
+	clientLayout := client.Capabilities.KeyboardLayout
+	if clientLayout == "" || clientLayout == serverLayout {
+		return event
+	}
+
+	kbd := event.Keyboard
+	if kbd == nil {
+		return event
+	}
+
+	// Calculate current modifiers from the key being processed
+	modifiers := domain.KeyModifier(kbd.Modifiers)
+
+	// Translate keycode to character using server's layout
+	charPtr := s.keyboardLayout.KeycodeToChar(ctx, uint16(kbd.Key), modifiers, serverLayout)
+	if charPtr == nil {
+		// Keycode doesn't produce a printable character (modifier/function key)
+		// Just send the raw keycode
+		return event
+	}
+
+	char := *charPtr
+
+	// If translation produced a character, add it to the event
+	log.Debug().
+		Uint32("keycode", kbd.Key).
+		Str("char", string(char)).
+		Str("serverLayout", string(serverLayout)).
+		Str("clientLayout", string(clientLayout)).
+		Msg("Translated keycode to character for cross-layout support")
+
+	// Create a new event with the character field populated
+	return &domain.InputEvent{
+		Timestamp: event.Timestamp,
+		SourceID:  event.SourceID,
+		Keyboard: &domain.KeyboardEvent{
+			Key:       kbd.Key,
+			Pressed:   kbd.Pressed,
+			Modifiers: kbd.Modifiers,
+			Character: &char,
+		},
+	}
+}
+
+// getServerKeyboardLayout returns the server's configured keyboard layout.
+// Falls back to auto-detection if not configured.
+func (s *UseCaseImpl) getServerKeyboardLayout() domain.KeyboardLayout {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	if s.config != nil && s.config.Server.KeyboardLayout != "" {
+		return s.config.Server.KeyboardLayout
+	}
+
+	// Fall back to auto-detection
+	if s.keyboardLayout != nil {
+		return s.keyboardLayout.DetectLayout(context.Background())
+	}
+
+	return domain.LayoutUS
 }

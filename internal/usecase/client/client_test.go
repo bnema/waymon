@@ -94,6 +94,7 @@ func TestUseCaseImpl_Connect(t *testing.T) {
 					},
 				}, nil)
 				ii.On("Start", mock.Anything).Return(nil)
+				ii.On("SetKeyboardLayout", mock.Anything).Return(nil)
 				nc.On("SetOnInputEvent", mock.Anything).Return()
 				nc.On("SetOnDisconnected", mock.Anything).Return()
 				nc.On("Connect", mock.Anything, "192.168.1.100:52525", keyPath).Return(nil)
@@ -232,7 +233,7 @@ func TestUseCaseImpl_Disconnect(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			uc, inputInjection, network, _, _ := newTestClientUseCase(t)
+			uc, inputInjection, network, _, _, _ := newTestClientUseCase(t)
 			tt.setupState(uc)
 			tt.setupMocks(inputInjection, network)
 
@@ -412,7 +413,7 @@ func TestUseCaseImpl_handleControlEvent(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			uc, inputInjection, _, _, _ := newTestClientUseCase(t)
+			uc, inputInjection, _, _, _, _ := newTestClientUseCase(t)
 			tt.setupMocks(inputInjection)
 
 			// Set initial state for release/switch tests
@@ -500,7 +501,7 @@ func TestUseCaseImpl_injectEvent(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			uc, inputInjection, _, _, _ := newTestClientUseCase(t)
+			uc, inputInjection, _, _, _, _ := newTestClientUseCase(t)
 			tt.setupMocks(inputInjection)
 
 			ctx := testCtx(t)
@@ -567,7 +568,7 @@ func TestUseCaseImpl_processInputEvent(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			uc, inputInjection, _, _, _ := newTestClientUseCase(t)
+			uc, inputInjection, _, _, _, _ := newTestClientUseCase(t)
 			tt.setupState(uc)
 			tt.setupMocks(inputInjection)
 

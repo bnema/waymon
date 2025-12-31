@@ -23,23 +23,25 @@ func testCtx(t *testing.T) context.Context {
 
 // Helper to create a configured UseCaseImpl for tests.
 // Returns the concrete type for internal state inspection in tests.
-func newTestServerUseCase(t *testing.T) (*UseCaseImpl, *mocks.MockInputCapturePort, *mocks.MockNetworkServerPort, *mocks.MockConfigRepository) {
+func newTestServerUseCase(t *testing.T) (*UseCaseImpl, *mocks.MockInputCapturePort, *mocks.MockNetworkServerPort, *mocks.MockConfigRepository, *mocks.MockKeyboardLayoutPort) {
 	inputCapture := mocks.NewMockInputCapturePort(t)
 	network := mocks.NewMockNetworkServerPort(t)
 	configRepo := mocks.NewMockConfigRepository(t)
+	keyboardLayout := mocks.NewMockKeyboardLayoutPort(t)
 
-	uc := NewServerUseCase(inputCapture, network, configRepo)
+	uc := NewServerUseCase(inputCapture, network, configRepo, keyboardLayout)
 	// Type assert to concrete type for test access to internal state
 	impl := uc.(*UseCaseImpl)
-	return impl, inputCapture, network, configRepo
+	return impl, inputCapture, network, configRepo, keyboardLayout
 }
 
 func TestNewServerUseCase(t *testing.T) {
 	inputCapture := mocks.NewMockInputCapturePort(t)
 	network := mocks.NewMockNetworkServerPort(t)
 	configRepo := mocks.NewMockConfigRepository(t)
+	keyboardLayout := mocks.NewMockKeyboardLayoutPort(t)
 
-	uc := NewServerUseCase(inputCapture, network, configRepo)
+	uc := NewServerUseCase(inputCapture, network, configRepo, keyboardLayout)
 	require.NotNil(t, uc)
 
 	// Type assert to concrete type for internal state verification
@@ -49,6 +51,7 @@ func TestNewServerUseCase(t *testing.T) {
 	assert.Equal(t, inputCapture, impl.inputCapture)
 	assert.Equal(t, network, impl.network)
 	assert.Equal(t, configRepo, impl.configRepo)
+	assert.Equal(t, keyboardLayout, impl.keyboardLayout)
 	assert.True(t, impl.controllingLocal)
 	assert.NotNil(t, impl.clients)
 	assert.NotNil(t, impl.clientCursors)
@@ -104,7 +107,7 @@ func TestUseCaseImpl_Start(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			uc, inputCapture, network, configRepo := newTestServerUseCase(t)
+			uc, inputCapture, network, configRepo, _ := newTestServerUseCase(t)
 			tt.setupMocks(inputCapture, network, configRepo)
 
 			ctx := testCtx(t)
@@ -153,7 +156,7 @@ func TestUseCaseImpl_Stop(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			uc, inputCapture, network, _ := newTestServerUseCase(t)
+			uc, inputCapture, network, _, _ := newTestServerUseCase(t)
 			tt.setupState(uc)
 			tt.setupMocks(inputCapture, network)
 
@@ -196,7 +199,7 @@ func TestUseCaseImpl_RegisterClient(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			uc, _, _, _ := newTestServerUseCase(t)
+			uc, _, _, _, _ := newTestServerUseCase(t)
 			ctx := testCtx(t)
 
 			uc.RegisterClient(ctx, tt.id, tt.clientName, tt.address)
@@ -272,7 +275,7 @@ func TestUseCaseImpl_UnregisterClient(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			uc, inputCapture, network, _ := newTestServerUseCase(t)
+			uc, inputCapture, network, _, _ := newTestServerUseCase(t)
 			tt.setupState(uc)
 			tt.setupMocks(inputCapture, network)
 
@@ -317,7 +320,7 @@ func TestUseCaseImpl_GetConnectedClients(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			uc, _, _, _ := newTestServerUseCase(t)
+			uc, _, _, _, _ := newTestServerUseCase(t)
 			tt.setupState(uc)
 
 			ctx := testCtx(t)
@@ -360,7 +363,7 @@ func TestUseCaseImpl_GetActiveClient(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			uc, _, _, _ := newTestServerUseCase(t)
+			uc, _, _, _, _ := newTestServerUseCase(t)
 			tt.setupState(uc)
 
 			ctx := testCtx(t)
@@ -399,7 +402,7 @@ func TestUseCaseImpl_IsControllingLocal(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			uc, _, _, _ := newTestServerUseCase(t)
+			uc, _, _, _, _ := newTestServerUseCase(t)
 			tt.setupState(uc)
 
 			ctx := testCtx(t)
@@ -474,7 +477,7 @@ func TestUseCaseImpl_SwitchToClient(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			uc, inputCapture, network, _ := newTestServerUseCase(t)
+			uc, inputCapture, network, _, _ := newTestServerUseCase(t)
 			tt.setupState(uc)
 			tt.setupMocks(inputCapture, network)
 
@@ -527,7 +530,7 @@ func TestUseCaseImpl_SwitchToLocal(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			uc, inputCapture, network, _ := newTestServerUseCase(t)
+			uc, inputCapture, network, _, _ := newTestServerUseCase(t)
 			tt.setupState(uc)
 			tt.setupMocks(inputCapture, network)
 
@@ -603,7 +606,7 @@ func TestUseCaseImpl_SwitchToNext(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			uc, inputCapture, network, _ := newTestServerUseCase(t)
+			uc, inputCapture, network, _, _ := newTestServerUseCase(t)
 			tt.setupState(uc)
 			tt.setupMocks(inputCapture, network)
 
@@ -657,7 +660,7 @@ func TestUseCaseImpl_SwitchToPrevious(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			uc, inputCapture, network, _ := newTestServerUseCase(t)
+			uc, inputCapture, network, _, _ := newTestServerUseCase(t)
 			tt.setupState(uc)
 			tt.setupMocks(inputCapture, network)
 
@@ -730,7 +733,7 @@ func TestUseCaseImpl_ConnectToSlot(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			uc, inputCapture, network, _ := newTestServerUseCase(t)
+			uc, inputCapture, network, _, _ := newTestServerUseCase(t)
 			tt.setupState(uc)
 			tt.setupMocks(inputCapture, network)
 
@@ -798,7 +801,7 @@ func TestUseCaseImpl_UpdateClientConfiguration(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			uc, _, _, _ := newTestServerUseCase(t)
+			uc, _, _, _, _ := newTestServerUseCase(t)
 			tt.setupState(uc)
 
 			ctx := testCtx(t)
@@ -818,7 +821,7 @@ func TestUseCaseImpl_UpdateClientConfiguration(t *testing.T) {
 }
 
 func TestUseCaseImpl_SetOnActivity(t *testing.T) {
-	uc, _, _, _ := newTestServerUseCase(t)
+	uc, _, _, _, _ := newTestServerUseCase(t)
 
 	var receivedLevel, receivedMessage string
 	callback := func(level, message string) {
@@ -834,7 +837,7 @@ func TestUseCaseImpl_SetOnActivity(t *testing.T) {
 }
 
 func TestUseCaseImpl_GetSSHPaths(t *testing.T) {
-	uc, _, _, _ := newTestServerUseCase(t)
+	uc, _, _, _, _ := newTestServerUseCase(t)
 	uc.sshHostKeyPath = "/path/to/host/key"
 	uc.sshAuthKeyPath = "/path/to/auth/keys"
 
@@ -843,7 +846,7 @@ func TestUseCaseImpl_GetSSHPaths(t *testing.T) {
 }
 
 func TestUseCaseImpl_MarkEmergencyRelease(t *testing.T) {
-	uc, _, _, _ := newTestServerUseCase(t)
+	uc, _, _, _, _ := newTestServerUseCase(t)
 
 	before := time.Now()
 	ctx := testCtx(t)

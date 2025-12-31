@@ -24,6 +24,7 @@ type ServerCfg struct {
 	SSHAuthKeysPath  string
 	SSHWhitelist     []string
 	SSHWhitelistOnly bool
+	KeyboardLayout   KeyboardLayout // Layout for translating keycodes to characters
 }
 
 // ClientCfg contains client-specific settings.

@@ -22,9 +22,10 @@ var _ in.ServerUseCase = (*UseCaseImpl)(nil)
 // It coordinates client management, input capture, and event routing.
 type UseCaseImpl struct {
 	// Dependencies (output ports)
-	inputCapture out.InputCapturePort
-	network      out.NetworkServerPort
-	configRepo   out.ConfigRepository
+	inputCapture   out.InputCapturePort
+	network        out.NetworkServerPort
+	configRepo     out.ConfigRepository
+	keyboardLayout out.KeyboardLayoutPort
 
 	// Configuration
 	config         *domain.Config
@@ -57,11 +58,13 @@ func NewServerUseCase(
 	inputCapture out.InputCapturePort,
 	network out.NetworkServerPort,
 	configRepo out.ConfigRepository,
+	keyboardLayout out.KeyboardLayoutPort,
 ) in.ServerUseCase {
 	return &UseCaseImpl{
 		inputCapture:      inputCapture,
 		network:           network,
 		configRepo:        configRepo,
+		keyboardLayout:    keyboardLayout,
 		clients:           make(map[string]*domain.Client),
 		clientCursors:     make(map[string]*domain.CursorState),
 		controllingLocal:  true,
