@@ -104,6 +104,16 @@ func (m Model) checkConnection() tea.Cmd {
 	}
 }
 
+// checkControlStatus checks the current control status.
+func (m Model) checkControlStatus() tea.Cmd {
+	return func() tea.Msg {
+		status := m.useCase.GetControlStatus(m.ctx)
+		return messages.ControlStatusChangedMsg{
+			Status: status,
+		}
+	}
+}
+
 // GetControlStatus returns the current control status.
 func (m Model) GetControlStatus() domain.ControlStatus {
 	return m.controlStatus

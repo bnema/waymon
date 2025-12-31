@@ -33,32 +33,40 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	// Connection events
 	case messages.ConnectionStateMsg:
+		wasConnected := m.connected
 		m.connected = msg.Connected
 		switch {
 		case msg.Error != nil:
 			m.connectError = msg.Error
 			m.toasts = m.toasts.AddError("Connection failed: " + msg.Error.Error())
-		case msg.Connected:
+			cmds = append(cmds, m.toasts.Init())
+		case msg.Connected && !wasConnected:
+			// Only show toast when transitioning from disconnected to connected
 			m.toasts = m.toasts.AddSuccess("Connected to server")
 			m.connectError = nil
-		default:
+			cmds = append(cmds, m.toasts.Init())
+		case !msg.Connected && wasConnected:
+			// Only show toast when transitioning from connected to disconnected
 			m.toasts = m.toasts.AddWarning("Disconnected from server")
+			cmds = append(cmds, m.toasts.Init())
 		}
 		m = m.updateStatusBar()
 		m = m.updateHeader()
 		m.ready = true
-		cmds = append(cmds, m.toasts.Init())
 
 	// Control status events
 	case messages.ControlStatusChangedMsg:
+		wasControlled := m.controlStatus.BeingControlled
 		m.controlStatus = msg.Status
 		m = m.updateStatusBar()
-		if msg.Status.BeingControlled {
+		// Only show toast when status actually changes
+		if msg.Status.BeingControlled && !wasControlled {
 			m.toasts = m.toasts.AddMessage("Control acquired by " + msg.Status.ControllerName)
-		} else {
+			cmds = append(cmds, m.toasts.Init())
+		} else if !msg.Status.BeingControlled && wasControlled {
 			m.toasts = m.toasts.AddMessage("Control released")
+			cmds = append(cmds, m.toasts.Init())
 		}
-		cmds = append(cmds, m.toasts.Init())
 
 	// Server info
 	case messages.ServerInfoReceivedMsg:
@@ -83,8 +91,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	// Periodic tick
 	case messages.TickMsg:
-		// Check connection status periodically
+		// Check connection and control status periodically
 		cmds = append(cmds, m.checkConnection())
+		cmds = append(cmds, m.checkControlStatus())
 		cmds = append(cmds, tea.Tick(time.Second, func(_ time.Time) tea.Msg {
 			return messages.TickMsg{}
 		}))
