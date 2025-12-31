@@ -2,7 +2,7 @@
 // versions:
 // 	protoc-gen-go v1.36.11
 // 	protoc        v6.33.1
-// source: internal/adapters/out/ssh/proto/events.proto
+// source: events.proto
 
 package proto
 
@@ -54,11 +54,11 @@ func (x ScrollType) String() string {
 }
 
 func (ScrollType) Descriptor() protoreflect.EnumDescriptor {
-	return file_internal_adapters_out_ssh_proto_events_proto_enumTypes[0].Descriptor()
+	return file_events_proto_enumTypes[0].Descriptor()
 }
 
 func (ScrollType) Type() protoreflect.EnumType {
-	return &file_internal_adapters_out_ssh_proto_events_proto_enumTypes[0]
+	return &file_events_proto_enumTypes[0]
 }
 
 func (x ScrollType) Number() protoreflect.EnumNumber {
@@ -67,7 +67,7 @@ func (x ScrollType) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use ScrollType.Descriptor instead.
 func (ScrollType) EnumDescriptor() ([]byte, []int) {
-	return file_internal_adapters_out_ssh_proto_events_proto_rawDescGZIP(), []int{0}
+	return file_events_proto_rawDescGZIP(), []int{0}
 }
 
 type ClientStatus int32
@@ -103,11 +103,11 @@ func (x ClientStatus) String() string {
 }
 
 func (ClientStatus) Descriptor() protoreflect.EnumDescriptor {
-	return file_internal_adapters_out_ssh_proto_events_proto_enumTypes[1].Descriptor()
+	return file_events_proto_enumTypes[1].Descriptor()
 }
 
 func (ClientStatus) Type() protoreflect.EnumType {
-	return &file_internal_adapters_out_ssh_proto_events_proto_enumTypes[1]
+	return &file_events_proto_enumTypes[1]
 }
 
 func (x ClientStatus) Number() protoreflect.EnumNumber {
@@ -116,7 +116,7 @@ func (x ClientStatus) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use ClientStatus.Descriptor instead.
 func (ClientStatus) EnumDescriptor() ([]byte, []int) {
-	return file_internal_adapters_out_ssh_proto_events_proto_rawDescGZIP(), []int{1}
+	return file_events_proto_rawDescGZIP(), []int{1}
 }
 
 type ControlEvent_Type int32
@@ -173,11 +173,11 @@ func (x ControlEvent_Type) String() string {
 }
 
 func (ControlEvent_Type) Descriptor() protoreflect.EnumDescriptor {
-	return file_internal_adapters_out_ssh_proto_events_proto_enumTypes[2].Descriptor()
+	return file_events_proto_enumTypes[2].Descriptor()
 }
 
 func (ControlEvent_Type) Type() protoreflect.EnumType {
-	return &file_internal_adapters_out_ssh_proto_events_proto_enumTypes[2]
+	return &file_events_proto_enumTypes[2]
 }
 
 func (x ControlEvent_Type) Number() protoreflect.EnumNumber {
@@ -186,7 +186,7 @@ func (x ControlEvent_Type) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use ControlEvent_Type.Descriptor instead.
 func (ControlEvent_Type) EnumDescriptor() ([]byte, []int) {
-	return file_internal_adapters_out_ssh_proto_events_proto_rawDescGZIP(), []int{6, 0}
+	return file_events_proto_rawDescGZIP(), []int{6, 0}
 }
 
 type LogEvent_LogLevel int32
@@ -225,11 +225,11 @@ func (x LogEvent_LogLevel) String() string {
 }
 
 func (LogEvent_LogLevel) Descriptor() protoreflect.EnumDescriptor {
-	return file_internal_adapters_out_ssh_proto_events_proto_enumTypes[3].Descriptor()
+	return file_events_proto_enumTypes[3].Descriptor()
 }
 
 func (LogEvent_LogLevel) Type() protoreflect.EnumType {
-	return &file_internal_adapters_out_ssh_proto_events_proto_enumTypes[3]
+	return &file_events_proto_enumTypes[3]
 }
 
 func (x LogEvent_LogLevel) Number() protoreflect.EnumNumber {
@@ -238,7 +238,7 @@ func (x LogEvent_LogLevel) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use LogEvent_LogLevel.Descriptor instead.
 func (LogEvent_LogLevel) EnumDescriptor() ([]byte, []int) {
-	return file_internal_adapters_out_ssh_proto_events_proto_rawDescGZIP(), []int{13, 0}
+	return file_events_proto_rawDescGZIP(), []int{13, 0}
 }
 
 // InputEvent is the main event message sent between server and clients
@@ -262,7 +262,7 @@ type InputEvent struct {
 
 func (x *InputEvent) Reset() {
 	*x = InputEvent{}
-	mi := &file_internal_adapters_out_ssh_proto_events_proto_msgTypes[0]
+	mi := &file_events_proto_msgTypes[0]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -274,7 +274,7 @@ func (x *InputEvent) String() string {
 func (*InputEvent) ProtoMessage() {}
 
 func (x *InputEvent) ProtoReflect() protoreflect.Message {
-	mi := &file_internal_adapters_out_ssh_proto_events_proto_msgTypes[0]
+	mi := &file_events_proto_msgTypes[0]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -287,7 +287,7 @@ func (x *InputEvent) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use InputEvent.ProtoReflect.Descriptor instead.
 func (*InputEvent) Descriptor() ([]byte, []int) {
-	return file_internal_adapters_out_ssh_proto_events_proto_rawDescGZIP(), []int{0}
+	return file_events_proto_rawDescGZIP(), []int{0}
 }
 
 func (x *InputEvent) GetEvent() isInputEvent_Event {
@@ -431,7 +431,7 @@ type MouseMoveEvent struct {
 
 func (x *MouseMoveEvent) Reset() {
 	*x = MouseMoveEvent{}
-	mi := &file_internal_adapters_out_ssh_proto_events_proto_msgTypes[1]
+	mi := &file_events_proto_msgTypes[1]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -443,7 +443,7 @@ func (x *MouseMoveEvent) String() string {
 func (*MouseMoveEvent) ProtoMessage() {}
 
 func (x *MouseMoveEvent) ProtoReflect() protoreflect.Message {
-	mi := &file_internal_adapters_out_ssh_proto_events_proto_msgTypes[1]
+	mi := &file_events_proto_msgTypes[1]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -456,7 +456,7 @@ func (x *MouseMoveEvent) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use MouseMoveEvent.ProtoReflect.Descriptor instead.
 func (*MouseMoveEvent) Descriptor() ([]byte, []int) {
-	return file_internal_adapters_out_ssh_proto_events_proto_rawDescGZIP(), []int{1}
+	return file_events_proto_rawDescGZIP(), []int{1}
 }
 
 func (x *MouseMoveEvent) GetDx() float64 {
@@ -484,7 +484,7 @@ type MousePositionEvent struct {
 
 func (x *MousePositionEvent) Reset() {
 	*x = MousePositionEvent{}
-	mi := &file_internal_adapters_out_ssh_proto_events_proto_msgTypes[2]
+	mi := &file_events_proto_msgTypes[2]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -496,7 +496,7 @@ func (x *MousePositionEvent) String() string {
 func (*MousePositionEvent) ProtoMessage() {}
 
 func (x *MousePositionEvent) ProtoReflect() protoreflect.Message {
-	mi := &file_internal_adapters_out_ssh_proto_events_proto_msgTypes[2]
+	mi := &file_events_proto_msgTypes[2]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -509,7 +509,7 @@ func (x *MousePositionEvent) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use MousePositionEvent.ProtoReflect.Descriptor instead.
 func (*MousePositionEvent) Descriptor() ([]byte, []int) {
-	return file_internal_adapters_out_ssh_proto_events_proto_rawDescGZIP(), []int{2}
+	return file_events_proto_rawDescGZIP(), []int{2}
 }
 
 func (x *MousePositionEvent) GetX() int32 {
@@ -537,7 +537,7 @@ type MouseButtonEvent struct {
 
 func (x *MouseButtonEvent) Reset() {
 	*x = MouseButtonEvent{}
-	mi := &file_internal_adapters_out_ssh_proto_events_proto_msgTypes[3]
+	mi := &file_events_proto_msgTypes[3]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -549,7 +549,7 @@ func (x *MouseButtonEvent) String() string {
 func (*MouseButtonEvent) ProtoMessage() {}
 
 func (x *MouseButtonEvent) ProtoReflect() protoreflect.Message {
-	mi := &file_internal_adapters_out_ssh_proto_events_proto_msgTypes[3]
+	mi := &file_events_proto_msgTypes[3]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -562,7 +562,7 @@ func (x *MouseButtonEvent) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use MouseButtonEvent.ProtoReflect.Descriptor instead.
 func (*MouseButtonEvent) Descriptor() ([]byte, []int) {
-	return file_internal_adapters_out_ssh_proto_events_proto_rawDescGZIP(), []int{3}
+	return file_events_proto_rawDescGZIP(), []int{3}
 }
 
 func (x *MouseButtonEvent) GetButton() uint32 {
@@ -591,7 +591,7 @@ type MouseScrollEvent struct {
 
 func (x *MouseScrollEvent) Reset() {
 	*x = MouseScrollEvent{}
-	mi := &file_internal_adapters_out_ssh_proto_events_proto_msgTypes[4]
+	mi := &file_events_proto_msgTypes[4]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -603,7 +603,7 @@ func (x *MouseScrollEvent) String() string {
 func (*MouseScrollEvent) ProtoMessage() {}
 
 func (x *MouseScrollEvent) ProtoReflect() protoreflect.Message {
-	mi := &file_internal_adapters_out_ssh_proto_events_proto_msgTypes[4]
+	mi := &file_events_proto_msgTypes[4]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -616,7 +616,7 @@ func (x *MouseScrollEvent) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use MouseScrollEvent.ProtoReflect.Descriptor instead.
 func (*MouseScrollEvent) Descriptor() ([]byte, []int) {
-	return file_internal_adapters_out_ssh_proto_events_proto_rawDescGZIP(), []int{4}
+	return file_events_proto_rawDescGZIP(), []int{4}
 }
 
 func (x *MouseScrollEvent) GetDx() float64 {
@@ -642,17 +642,21 @@ func (x *MouseScrollEvent) GetType() ScrollType {
 
 // Keyboard key press/release
 type KeyboardEvent struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Key           uint32                 `protobuf:"varint,1,opt,name=key,proto3" json:"key,omitempty"`             // Key code
-	Pressed       bool                   `protobuf:"varint,2,opt,name=pressed,proto3" json:"pressed,omitempty"`     // true=press, false=release
-	Modifiers     uint32                 `protobuf:"varint,3,opt,name=modifiers,proto3" json:"modifiers,omitempty"` // Modifier mask (Ctrl, Alt, Shift, etc.)
+	state     protoimpl.MessageState `protogen:"open.v1"`
+	Key       uint32                 `protobuf:"varint,1,opt,name=key,proto3" json:"key,omitempty"`             // Key code (used for raw keycode mode)
+	Pressed   bool                   `protobuf:"varint,2,opt,name=pressed,proto3" json:"pressed,omitempty"`     // true=press, false=release
+	Modifiers uint32                 `protobuf:"varint,3,opt,name=modifiers,proto3" json:"modifiers,omitempty"` // Modifier mask (Ctrl, Alt, Shift, etc.)
+	// For semantic keyboard mode: the Unicode character to type
+	// When set, the receiver should translate this to appropriate keycodes
+	// for their keyboard layout instead of using the raw key field.
+	Character     string `protobuf:"bytes,4,opt,name=character,proto3" json:"character,omitempty"` // Unicode character (e.g., "é", "q", "Q")
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *KeyboardEvent) Reset() {
 	*x = KeyboardEvent{}
-	mi := &file_internal_adapters_out_ssh_proto_events_proto_msgTypes[5]
+	mi := &file_events_proto_msgTypes[5]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -664,7 +668,7 @@ func (x *KeyboardEvent) String() string {
 func (*KeyboardEvent) ProtoMessage() {}
 
 func (x *KeyboardEvent) ProtoReflect() protoreflect.Message {
-	mi := &file_internal_adapters_out_ssh_proto_events_proto_msgTypes[5]
+	mi := &file_events_proto_msgTypes[5]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -677,7 +681,7 @@ func (x *KeyboardEvent) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use KeyboardEvent.ProtoReflect.Descriptor instead.
 func (*KeyboardEvent) Descriptor() ([]byte, []int) {
-	return file_internal_adapters_out_ssh_proto_events_proto_rawDescGZIP(), []int{5}
+	return file_events_proto_rawDescGZIP(), []int{5}
 }
 
 func (x *KeyboardEvent) GetKey() uint32 {
@@ -701,6 +705,13 @@ func (x *KeyboardEvent) GetModifiers() uint32 {
 	return 0
 }
 
+func (x *KeyboardEvent) GetCharacter() string {
+	if x != nil {
+		return x.Character
+	}
+	return ""
+}
+
 // Control messages for switching targets, etc.
 type ControlEvent struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
@@ -713,7 +724,7 @@ type ControlEvent struct {
 
 func (x *ControlEvent) Reset() {
 	*x = ControlEvent{}
-	mi := &file_internal_adapters_out_ssh_proto_events_proto_msgTypes[6]
+	mi := &file_events_proto_msgTypes[6]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -725,7 +736,7 @@ func (x *ControlEvent) String() string {
 func (*ControlEvent) ProtoMessage() {}
 
 func (x *ControlEvent) ProtoReflect() protoreflect.Message {
-	mi := &file_internal_adapters_out_ssh_proto_events_proto_msgTypes[6]
+	mi := &file_events_proto_msgTypes[6]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -738,7 +749,7 @@ func (x *ControlEvent) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ControlEvent.ProtoReflect.Descriptor instead.
 func (*ControlEvent) Descriptor() ([]byte, []int) {
-	return file_internal_adapters_out_ssh_proto_events_proto_rawDescGZIP(), []int{6}
+	return file_events_proto_rawDescGZIP(), []int{6}
 }
 
 func (x *ControlEvent) GetType() ControlEvent_Type {
@@ -776,7 +787,7 @@ type ClientInfo struct {
 
 func (x *ClientInfo) Reset() {
 	*x = ClientInfo{}
-	mi := &file_internal_adapters_out_ssh_proto_events_proto_msgTypes[7]
+	mi := &file_events_proto_msgTypes[7]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -788,7 +799,7 @@ func (x *ClientInfo) String() string {
 func (*ClientInfo) ProtoMessage() {}
 
 func (x *ClientInfo) ProtoReflect() protoreflect.Message {
-	mi := &file_internal_adapters_out_ssh_proto_events_proto_msgTypes[7]
+	mi := &file_events_proto_msgTypes[7]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -801,7 +812,7 @@ func (x *ClientInfo) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ClientInfo.ProtoReflect.Descriptor instead.
 func (*ClientInfo) Descriptor() ([]byte, []int) {
-	return file_internal_adapters_out_ssh_proto_events_proto_rawDescGZIP(), []int{7}
+	return file_events_proto_rawDescGZIP(), []int{7}
 }
 
 func (x *ClientInfo) GetId() string {
@@ -853,7 +864,7 @@ type ServerInfo struct {
 
 func (x *ServerInfo) Reset() {
 	*x = ServerInfo{}
-	mi := &file_internal_adapters_out_ssh_proto_events_proto_msgTypes[8]
+	mi := &file_events_proto_msgTypes[8]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -865,7 +876,7 @@ func (x *ServerInfo) String() string {
 func (*ServerInfo) ProtoMessage() {}
 
 func (x *ServerInfo) ProtoReflect() protoreflect.Message {
-	mi := &file_internal_adapters_out_ssh_proto_events_proto_msgTypes[8]
+	mi := &file_events_proto_msgTypes[8]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -878,7 +889,7 @@ func (x *ServerInfo) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ServerInfo.ProtoReflect.Descriptor instead.
 func (*ServerInfo) Descriptor() ([]byte, []int) {
-	return file_internal_adapters_out_ssh_proto_events_proto_rawDescGZIP(), []int{8}
+	return file_events_proto_rawDescGZIP(), []int{8}
 }
 
 func (x *ServerInfo) GetId() string {
@@ -928,7 +939,7 @@ type ServerCapabilities struct {
 
 func (x *ServerCapabilities) Reset() {
 	*x = ServerCapabilities{}
-	mi := &file_internal_adapters_out_ssh_proto_events_proto_msgTypes[9]
+	mi := &file_events_proto_msgTypes[9]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -940,7 +951,7 @@ func (x *ServerCapabilities) String() string {
 func (*ServerCapabilities) ProtoMessage() {}
 
 func (x *ServerCapabilities) ProtoReflect() protoreflect.Message {
-	mi := &file_internal_adapters_out_ssh_proto_events_proto_msgTypes[9]
+	mi := &file_events_proto_msgTypes[9]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -953,7 +964,7 @@ func (x *ServerCapabilities) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ServerCapabilities.ProtoReflect.Descriptor instead.
 func (*ServerCapabilities) Descriptor() ([]byte, []int) {
-	return file_internal_adapters_out_ssh_proto_events_proto_rawDescGZIP(), []int{9}
+	return file_events_proto_rawDescGZIP(), []int{9}
 }
 
 func (x *ServerCapabilities) GetSupportsKeyboard() bool {
@@ -997,7 +1008,7 @@ type ClientConfig struct {
 
 func (x *ClientConfig) Reset() {
 	*x = ClientConfig{}
-	mi := &file_internal_adapters_out_ssh_proto_events_proto_msgTypes[10]
+	mi := &file_events_proto_msgTypes[10]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1009,7 +1020,7 @@ func (x *ClientConfig) String() string {
 func (*ClientConfig) ProtoMessage() {}
 
 func (x *ClientConfig) ProtoReflect() protoreflect.Message {
-	mi := &file_internal_adapters_out_ssh_proto_events_proto_msgTypes[10]
+	mi := &file_events_proto_msgTypes[10]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1022,7 +1033,7 @@ func (x *ClientConfig) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ClientConfig.ProtoReflect.Descriptor instead.
 func (*ClientConfig) Descriptor() ([]byte, []int) {
-	return file_internal_adapters_out_ssh_proto_events_proto_rawDescGZIP(), []int{10}
+	return file_events_proto_rawDescGZIP(), []int{10}
 }
 
 func (x *ClientConfig) GetClientId() string {
@@ -1070,7 +1081,7 @@ type Monitor struct {
 
 func (x *Monitor) Reset() {
 	*x = Monitor{}
-	mi := &file_internal_adapters_out_ssh_proto_events_proto_msgTypes[11]
+	mi := &file_events_proto_msgTypes[11]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1082,7 +1093,7 @@ func (x *Monitor) String() string {
 func (*Monitor) ProtoMessage() {}
 
 func (x *Monitor) ProtoReflect() protoreflect.Message {
-	mi := &file_internal_adapters_out_ssh_proto_events_proto_msgTypes[11]
+	mi := &file_events_proto_msgTypes[11]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1095,7 +1106,7 @@ func (x *Monitor) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Monitor.ProtoReflect.Descriptor instead.
 func (*Monitor) Descriptor() ([]byte, []int) {
-	return file_internal_adapters_out_ssh_proto_events_proto_rawDescGZIP(), []int{11}
+	return file_events_proto_rawDescGZIP(), []int{11}
 }
 
 func (x *Monitor) GetName() string {
@@ -1162,13 +1173,14 @@ type ClientCapabilities struct {
 	CanReceiveScroll   bool                   `protobuf:"varint,3,opt,name=can_receive_scroll,json=canReceiveScroll,proto3" json:"can_receive_scroll,omitempty"`
 	WaylandCompositor  string                 `protobuf:"bytes,4,opt,name=wayland_compositor,json=waylandCompositor,proto3" json:"wayland_compositor,omitempty"` // Wayland compositor type
 	UinputVersion      string                 `protobuf:"bytes,5,opt,name=uinput_version,json=uinputVersion,proto3" json:"uinput_version,omitempty"`             // uinput library version
+	KeyboardLayout     string                 `protobuf:"bytes,6,opt,name=keyboard_layout,json=keyboardLayout,proto3" json:"keyboard_layout,omitempty"`          // Client's keyboard layout (e.g., "us", "fr")
 	unknownFields      protoimpl.UnknownFields
 	sizeCache          protoimpl.SizeCache
 }
 
 func (x *ClientCapabilities) Reset() {
 	*x = ClientCapabilities{}
-	mi := &file_internal_adapters_out_ssh_proto_events_proto_msgTypes[12]
+	mi := &file_events_proto_msgTypes[12]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1180,7 +1192,7 @@ func (x *ClientCapabilities) String() string {
 func (*ClientCapabilities) ProtoMessage() {}
 
 func (x *ClientCapabilities) ProtoReflect() protoreflect.Message {
-	mi := &file_internal_adapters_out_ssh_proto_events_proto_msgTypes[12]
+	mi := &file_events_proto_msgTypes[12]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1193,7 +1205,7 @@ func (x *ClientCapabilities) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ClientCapabilities.ProtoReflect.Descriptor instead.
 func (*ClientCapabilities) Descriptor() ([]byte, []int) {
-	return file_internal_adapters_out_ssh_proto_events_proto_rawDescGZIP(), []int{12}
+	return file_events_proto_rawDescGZIP(), []int{12}
 }
 
 func (x *ClientCapabilities) GetCanReceiveKeyboard() bool {
@@ -1231,6 +1243,13 @@ func (x *ClientCapabilities) GetUinputVersion() string {
 	return ""
 }
 
+func (x *ClientCapabilities) GetKeyboardLayout() string {
+	if x != nil {
+		return x.KeyboardLayout
+	}
+	return ""
+}
+
 // LogEvent for forwarding client logs to server
 type LogEvent struct {
 	state          protoimpl.MessageState `protogen:"open.v1"`
@@ -1245,7 +1264,7 @@ type LogEvent struct {
 
 func (x *LogEvent) Reset() {
 	*x = LogEvent{}
-	mi := &file_internal_adapters_out_ssh_proto_events_proto_msgTypes[13]
+	mi := &file_events_proto_msgTypes[13]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1257,7 +1276,7 @@ func (x *LogEvent) String() string {
 func (*LogEvent) ProtoMessage() {}
 
 func (x *LogEvent) ProtoReflect() protoreflect.Message {
-	mi := &file_internal_adapters_out_ssh_proto_events_proto_msgTypes[13]
+	mi := &file_events_proto_msgTypes[13]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1270,7 +1289,7 @@ func (x *LogEvent) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use LogEvent.ProtoReflect.Descriptor instead.
 func (*LogEvent) Descriptor() ([]byte, []int) {
-	return file_internal_adapters_out_ssh_proto_events_proto_rawDescGZIP(), []int{13}
+	return file_events_proto_rawDescGZIP(), []int{13}
 }
 
 func (x *LogEvent) GetLevel() LogEvent_LogLevel {
@@ -1308,11 +1327,11 @@ func (x *LogEvent) GetTimestampMs() int64 {
 	return 0
 }
 
-var File_internal_adapters_out_ssh_proto_events_proto protoreflect.FileDescriptor
+var File_events_proto protoreflect.FileDescriptor
 
-const file_internal_adapters_out_ssh_proto_events_proto_rawDesc = "" +
+const file_events_proto_rawDesc = "" +
 	"\n" +
-	",internal/adapters/out/ssh/proto/events.proto\x12\x0fwaymon.protocol\"\x98\x04\n" +
+	"\fevents.proto\x12\x0fwaymon.protocol\"\x98\x04\n" +
 	"\n" +
 	"InputEvent\x12@\n" +
 	"\n" +
@@ -1338,11 +1357,12 @@ const file_internal_adapters_out_ssh_proto_events_proto_rawDesc = "" +
 	"\x10MouseScrollEvent\x12\x0e\n" +
 	"\x02dx\x18\x01 \x01(\x01R\x02dx\x12\x0e\n" +
 	"\x02dy\x18\x02 \x01(\x01R\x02dy\x12/\n" +
-	"\x04type\x18\x03 \x01(\x0e2\x1b.waymon.protocol.ScrollTypeR\x04type\"Y\n" +
+	"\x04type\x18\x03 \x01(\x0e2\x1b.waymon.protocol.ScrollTypeR\x04type\"w\n" +
 	"\rKeyboardEvent\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\rR\x03key\x12\x18\n" +
 	"\apressed\x18\x02 \x01(\bR\apressed\x12\x1c\n" +
-	"\tmodifiers\x18\x03 \x01(\rR\tmodifiers\"\xf4\x02\n" +
+	"\tmodifiers\x18\x03 \x01(\rR\tmodifiers\x12\x1c\n" +
+	"\tcharacter\x18\x04 \x01(\tR\tcharacter\"\xf4\x02\n" +
 	"\fControlEvent\x126\n" +
 	"\x04type\x18\x01 \x01(\x0e2\".waymon.protocol.ControlEvent.TypeR\x04type\x12\x1b\n" +
 	"\ttarget_id\x18\x02 \x01(\tR\btargetId\x12B\n" +
@@ -1391,13 +1411,14 @@ const file_internal_adapters_out_ssh_proto_events_proto_rawDesc = "" +
 	"\x06height\x18\x05 \x01(\x05R\x06height\x12\x18\n" +
 	"\aprimary\x18\x06 \x01(\bR\aprimary\x12\x14\n" +
 	"\x05scale\x18\a \x01(\x01R\x05scale\x12!\n" +
-	"\frefresh_rate\x18\b \x01(\x05R\vrefreshRate\"\xf6\x01\n" +
+	"\frefresh_rate\x18\b \x01(\x05R\vrefreshRate\"\x9f\x02\n" +
 	"\x12ClientCapabilities\x120\n" +
 	"\x14can_receive_keyboard\x18\x01 \x01(\bR\x12canReceiveKeyboard\x12*\n" +
 	"\x11can_receive_mouse\x18\x02 \x01(\bR\x0fcanReceiveMouse\x12,\n" +
 	"\x12can_receive_scroll\x18\x03 \x01(\bR\x10canReceiveScroll\x12-\n" +
 	"\x12wayland_compositor\x18\x04 \x01(\tR\x11waylandCompositor\x12%\n" +
-	"\x0euinput_version\x18\x05 \x01(\tR\ruinputVersion\"\x81\x02\n" +
+	"\x0euinput_version\x18\x05 \x01(\tR\ruinputVersion\x12'\n" +
+	"\x0fkeyboard_layout\x18\x06 \x01(\tR\x0ekeyboardLayout\"\x81\x02\n" +
 	"\bLogEvent\x128\n" +
 	"\x05level\x18\x01 \x01(\x0e2\".waymon.protocol.LogEvent.LogLevelR\x05level\x12\x18\n" +
 	"\amessage\x18\x02 \x01(\tR\amessage\x12\x1f\n" +
@@ -1421,20 +1442,20 @@ const file_internal_adapters_out_ssh_proto_events_proto_rawDesc = "" +
 	"\x13CLIENT_DISCONNECTED\x10\x02B9Z7github.com/bnema/waymon/internal/adapters/out/ssh/protob\x06proto3"
 
 var (
-	file_internal_adapters_out_ssh_proto_events_proto_rawDescOnce sync.Once
-	file_internal_adapters_out_ssh_proto_events_proto_rawDescData []byte
+	file_events_proto_rawDescOnce sync.Once
+	file_events_proto_rawDescData []byte
 )
 
-func file_internal_adapters_out_ssh_proto_events_proto_rawDescGZIP() []byte {
-	file_internal_adapters_out_ssh_proto_events_proto_rawDescOnce.Do(func() {
-		file_internal_adapters_out_ssh_proto_events_proto_rawDescData = protoimpl.X.CompressGZIP(unsafe.Slice(unsafe.StringData(file_internal_adapters_out_ssh_proto_events_proto_rawDesc), len(file_internal_adapters_out_ssh_proto_events_proto_rawDesc)))
+func file_events_proto_rawDescGZIP() []byte {
+	file_events_proto_rawDescOnce.Do(func() {
+		file_events_proto_rawDescData = protoimpl.X.CompressGZIP(unsafe.Slice(unsafe.StringData(file_events_proto_rawDesc), len(file_events_proto_rawDesc)))
 	})
-	return file_internal_adapters_out_ssh_proto_events_proto_rawDescData
+	return file_events_proto_rawDescData
 }
 
-var file_internal_adapters_out_ssh_proto_events_proto_enumTypes = make([]protoimpl.EnumInfo, 4)
-var file_internal_adapters_out_ssh_proto_events_proto_msgTypes = make([]protoimpl.MessageInfo, 14)
-var file_internal_adapters_out_ssh_proto_events_proto_goTypes = []any{
+var file_events_proto_enumTypes = make([]protoimpl.EnumInfo, 4)
+var file_events_proto_msgTypes = make([]protoimpl.MessageInfo, 14)
+var file_events_proto_goTypes = []any{
 	(ScrollType)(0),            // 0: waymon.protocol.ScrollType
 	(ClientStatus)(0),          // 1: waymon.protocol.ClientStatus
 	(ControlEvent_Type)(0),     // 2: waymon.protocol.ControlEvent.Type
@@ -1454,7 +1475,7 @@ var file_internal_adapters_out_ssh_proto_events_proto_goTypes = []any{
 	(*ClientCapabilities)(nil), // 16: waymon.protocol.ClientCapabilities
 	(*LogEvent)(nil),           // 17: waymon.protocol.LogEvent
 }
-var file_internal_adapters_out_ssh_proto_events_proto_depIdxs = []int32{
+var file_events_proto_depIdxs = []int32{
 	5,  // 0: waymon.protocol.InputEvent.mouse_move:type_name -> waymon.protocol.MouseMoveEvent
 	7,  // 1: waymon.protocol.InputEvent.mouse_button:type_name -> waymon.protocol.MouseButtonEvent
 	8,  // 2: waymon.protocol.InputEvent.mouse_scroll:type_name -> waymon.protocol.MouseScrollEvent
@@ -1478,12 +1499,12 @@ var file_internal_adapters_out_ssh_proto_events_proto_depIdxs = []int32{
 	0,  // [0:16] is the sub-list for field type_name
 }
 
-func init() { file_internal_adapters_out_ssh_proto_events_proto_init() }
-func file_internal_adapters_out_ssh_proto_events_proto_init() {
-	if File_internal_adapters_out_ssh_proto_events_proto != nil {
+func init() { file_events_proto_init() }
+func file_events_proto_init() {
+	if File_events_proto != nil {
 		return
 	}
-	file_internal_adapters_out_ssh_proto_events_proto_msgTypes[0].OneofWrappers = []any{
+	file_events_proto_msgTypes[0].OneofWrappers = []any{
 		(*InputEvent_MouseMove)(nil),
 		(*InputEvent_MouseButton)(nil),
 		(*InputEvent_MouseScroll)(nil),
@@ -1496,18 +1517,18 @@ func file_internal_adapters_out_ssh_proto_events_proto_init() {
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
-			RawDescriptor: unsafe.Slice(unsafe.StringData(file_internal_adapters_out_ssh_proto_events_proto_rawDesc), len(file_internal_adapters_out_ssh_proto_events_proto_rawDesc)),
+			RawDescriptor: unsafe.Slice(unsafe.StringData(file_events_proto_rawDesc), len(file_events_proto_rawDesc)),
 			NumEnums:      4,
 			NumMessages:   14,
 			NumExtensions: 0,
 			NumServices:   0,
 		},
-		GoTypes:           file_internal_adapters_out_ssh_proto_events_proto_goTypes,
-		DependencyIndexes: file_internal_adapters_out_ssh_proto_events_proto_depIdxs,
-		EnumInfos:         file_internal_adapters_out_ssh_proto_events_proto_enumTypes,
-		MessageInfos:      file_internal_adapters_out_ssh_proto_events_proto_msgTypes,
+		GoTypes:           file_events_proto_goTypes,
+		DependencyIndexes: file_events_proto_depIdxs,
+		EnumInfos:         file_events_proto_enumTypes,
+		MessageInfos:      file_events_proto_msgTypes,
 	}.Build()
-	File_internal_adapters_out_ssh_proto_events_proto = out.File
-	file_internal_adapters_out_ssh_proto_events_proto_goTypes = nil
-	file_internal_adapters_out_ssh_proto_events_proto_depIdxs = nil
+	File_events_proto = out.File
+	file_events_proto_goTypes = nil
+	file_events_proto_depIdxs = nil
 }

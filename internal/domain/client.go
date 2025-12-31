@@ -35,6 +35,7 @@ type ClientCapabilities struct {
 	CanReceiveScroll   bool
 	WaylandCompositor  string
 	UInputVersion      string
+	KeyboardLayout     KeyboardLayout // Client's keyboard layout (e.g., "us", "fr")
 }
 
 // Client represents a connected client in the server's perspective.

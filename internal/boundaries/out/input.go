@@ -44,8 +44,21 @@ type InputInjectionPort interface {
 	// InjectMouseScroll injects a scroll event.
 	InjectMouseScroll(ctx context.Context, dx, dy float64, scrollType domain.ScrollType) error
 
-	// InjectKeyEvent injects a keyboard key event.
+	// InjectKeyEvent injects a keyboard key event using raw keycodes.
 	InjectKeyEvent(ctx context.Context, key uint32, pressed bool, modifiers uint32) error
+
+	// InjectCharacter injects a Unicode character using the appropriate keycode
+	// sequence for the configured keyboard layout. This handles dead key sequences
+	// (like ^ + o for ô) automatically.
+	// The pressed parameter indicates if this is a key press (true) or release (false).
+	InjectCharacter(ctx context.Context, char rune, pressed bool) error
+
+	// SetKeyboardLayout sets the target keyboard layout for character injection.
+	// This determines how characters are translated to keycodes.
+	SetKeyboardLayout(layout domain.KeyboardLayout) error
+
+	// GetKeyboardLayout returns the currently configured keyboard layout.
+	GetKeyboardLayout() domain.KeyboardLayout
 
 	// SetExclusiveCapture enables or disables exclusive input capture.
 	SetExclusiveCapture(ctx context.Context, enabled bool) error

@@ -147,12 +147,17 @@ func DomainToProto(event *domain.InputEvent) *proto.InputEvent {
 			},
 		}
 	case event.Keyboard != nil:
+		kbdProto := &proto.KeyboardEvent{
+			Key:       event.Keyboard.Key,
+			Pressed:   event.Keyboard.Pressed,
+			Modifiers: event.Keyboard.Modifiers,
+		}
+		// Include character for semantic keyboard mode
+		if event.Keyboard.Character != nil {
+			kbdProto.Character = string(*event.Keyboard.Character)
+		}
 		protoEvent.Event = &proto.InputEvent_Keyboard{
-			Keyboard: &proto.KeyboardEvent{
-				Key:       event.Keyboard.Key,
-				Pressed:   event.Keyboard.Pressed,
-				Modifiers: event.Keyboard.Modifiers,
-			},
+			Keyboard: kbdProto,
 		}
 	case event.MousePosition != nil:
 		protoEvent.Event = &proto.InputEvent_MousePosition{
@@ -245,11 +250,19 @@ func ProtoToDomain(protoEvent *proto.InputEvent) *domain.InputEvent {
 			Type: scrollType,
 		}
 	case *proto.InputEvent_Keyboard:
-		event.Keyboard = &domain.KeyboardEvent{
+		kbd := &domain.KeyboardEvent{
 			Key:       e.Keyboard.Key,
 			Pressed:   e.Keyboard.Pressed,
 			Modifiers: e.Keyboard.Modifiers,
 		}
+		// Handle semantic keyboard character
+		if e.Keyboard.Character != "" {
+			chars := []rune(e.Keyboard.Character)
+			if len(chars) > 0 {
+				kbd.Character = &chars[0]
+			}
+		}
+		event.Keyboard = kbd
 	case *proto.InputEvent_MousePosition:
 		event.MousePosition = &domain.MousePositionEvent{
 			X: e.MousePosition.X,

@@ -25,6 +25,9 @@ var _ interface {
 	InjectMouseButton(ctx context.Context, button uint32, pressed bool) error
 	InjectMouseScroll(ctx context.Context, dx, dy float64, scrollType domain.ScrollType) error
 	InjectKeyEvent(ctx context.Context, key uint32, pressed bool, modifiers uint32) error
+	InjectCharacter(ctx context.Context, char rune, pressed bool) error
+	SetKeyboardLayout(layout domain.KeyboardLayout) error
+	GetKeyboardLayout() domain.KeyboardLayout
 	SetExclusiveCapture(ctx context.Context, enabled bool) error
 } = (*WaylandInjector)(nil)
 
@@ -55,6 +58,10 @@ type WaylandInjector struct {
 	shortcutsInhibitorMgr keyboard_shortcuts_inhibitor.KeyboardShortcutsInhibitorManager
 	shortcutsInhibitor    keyboard_shortcuts_inhibitor.KeyboardShortcutsInhibitor
 
+	// Keyboard layout support
+	keyboardLayout     domain.KeyboardLayout
+	keyboardLayoutPort keyboardLayoutPort
+
 	// State
 	ctx       context.Context
 	cancel    context.CancelFunc
@@ -64,6 +71,12 @@ type WaylandInjector struct {
 	// Screen dimensions for absolute positioning (TODO: get from display)
 	screenWidth  uint32
 	screenHeight uint32
+}
+
+// keyboardLayoutPort is a local interface to avoid circular imports.
+// It matches the KeyboardLayoutPort interface in boundaries/out.
+type keyboardLayoutPort interface {
+	CharToKeySequence(ctx context.Context, char rune, layout domain.KeyboardLayout) ([]domain.KeySequence, error)
 }
 
 // New creates a new WaylandInjector instance.
@@ -528,6 +541,141 @@ func (w *WaylandInjector) SetScreenDimensions(width, height uint32) {
 	w.screenWidth = width
 	w.screenHeight = height
 }
+
+// SetKeyboardLayoutPort sets the keyboard layout port for character injection.
+// This must be called before using InjectCharacter.
+func (w *WaylandInjector) SetKeyboardLayoutPort(port keyboardLayoutPort) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	w.keyboardLayoutPort = port
+}
+
+// SetKeyboardLayout sets the target keyboard layout for character injection.
+func (w *WaylandInjector) SetKeyboardLayout(layout domain.KeyboardLayout) error {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	w.keyboardLayout = layout
+	return nil
+}
+
+// GetKeyboardLayout returns the currently configured keyboard layout.
+func (w *WaylandInjector) GetKeyboardLayout() domain.KeyboardLayout {
+	w.mu.RLock()
+	defer w.mu.RUnlock()
+	if w.keyboardLayout == "" {
+		return domain.LayoutUS // Default
+	}
+	return w.keyboardLayout
+}
+
+// InjectCharacter injects a Unicode character using the appropriate keycode
+// sequence for the configured keyboard layout.
+func (w *WaylandInjector) InjectCharacter(ctx context.Context, char rune, pressed bool) error {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+
+	log := zerolog.Ctx(ctx)
+
+	if !w.running || w.virtualKbd == nil {
+		return fmt.Errorf("virtual keyboard not available")
+	}
+
+	if w.keyboardLayoutPort == nil {
+		return fmt.Errorf("keyboard layout port not configured")
+	}
+
+	layout := w.keyboardLayout
+	if layout == "" {
+		layout = domain.LayoutUS
+	}
+
+	// Get the key sequence for this character
+	sequences, err := w.keyboardLayoutPort.CharToKeySequence(ctx, char, layout)
+	if err != nil {
+		return fmt.Errorf("failed to translate character %q: %w", char, err)
+	}
+
+	// Inject each keystroke in the sequence
+	for _, seq := range sequences {
+		if err := w.injectKeySequence(ctx, seq, pressed); err != nil {
+			return err
+		}
+	}
+
+	log.Debug().
+		Int32("char", int32(char)).
+		Str("layout", string(layout)).
+		Bool("pressed", pressed).
+		Int("sequences", len(sequences)).
+		Msg("injected character")
+
+	return nil
+}
+
+// injectKeySequence injects a single key sequence with modifiers.
+// Must be called with lock held.
+func (w *WaylandInjector) injectKeySequence(ctx context.Context, seq domain.KeySequence, pressed bool) error {
+	log := zerolog.Ctx(ctx)
+	now := time.Now()
+
+	// Determine which modifier keys need to be pressed
+	needShift := seq.Modifier.HasShift()
+	needAltGr := seq.Modifier.HasAltGr()
+
+	// Press modifier keys if needed
+	if pressed {
+		if needShift {
+			if err := w.virtualKbd.Key(now, KeyLeftShift, virtual_keyboard.KeyStatePressed); err != nil {
+				return fmt.Errorf("failed to press shift: %w", err)
+			}
+		}
+		if needAltGr {
+			if err := w.virtualKbd.Key(now, KeyRightAlt, virtual_keyboard.KeyStatePressed); err != nil {
+				return fmt.Errorf("failed to press altgr: %w", err)
+			}
+		}
+	}
+
+	// Press/release the main key
+	var state virtual_keyboard.KeyState
+	if pressed {
+		state = virtual_keyboard.KeyStatePressed
+	} else {
+		state = virtual_keyboard.KeyStateReleased
+	}
+
+	if err := w.virtualKbd.Key(now, uint32(seq.Keycode), state); err != nil {
+		return fmt.Errorf("failed to inject key: %w", err)
+	}
+
+	// Release modifier keys if we pressed them (only on key release or after press)
+	if pressed {
+		// For a character press, we need to also release the key and modifiers
+		// Actually, for proper typing we should: press modifiers, press key, release key, release modifiers
+		if err := w.virtualKbd.Key(now, uint32(seq.Keycode), virtual_keyboard.KeyStateReleased); err != nil {
+			log.Warn().Err(err).Msg("failed to release key after press")
+		}
+
+		if needAltGr {
+			if err := w.virtualKbd.Key(now, KeyRightAlt, virtual_keyboard.KeyStateReleased); err != nil {
+				log.Warn().Err(err).Msg("failed to release altgr")
+			}
+		}
+		if needShift {
+			if err := w.virtualKbd.Key(now, KeyLeftShift, virtual_keyboard.KeyStateReleased); err != nil {
+				log.Warn().Err(err).Msg("failed to release shift")
+			}
+		}
+	}
+
+	return nil
+}
+
+// Key codes for modifier keys (from evdev)
+const (
+	KeyLeftShift uint32 = 42
+	KeyRightAlt  uint32 = 100 // AltGr
+)
 
 // getKeyName returns a human-readable name for common key codes.
 func getKeyName(key uint32) string {

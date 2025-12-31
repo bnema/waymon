@@ -140,6 +140,11 @@ type KeyboardEvent struct {
 	Key       uint32
 	Pressed   bool
 	Modifiers uint32
+	// Character is the Unicode character for semantic keyboard events.
+	// When set, the receiver should use this character (translated to appropriate
+	// keycodes for the target layout) instead of the raw Key value.
+	// This enables proper character transmission across different keyboard layouts.
+	Character *rune
 }
 
 // LogEvent represents a log message forwarded from client to server.

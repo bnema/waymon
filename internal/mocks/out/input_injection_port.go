@@ -38,6 +38,113 @@ func (_m *MockInputInjectionPort) EXPECT() *MockInputInjectionPort_Expecter {
 	return &MockInputInjectionPort_Expecter{mock: &_m.Mock}
 }
 
+// GetKeyboardLayout provides a mock function for the type MockInputInjectionPort
+func (_mock *MockInputInjectionPort) GetKeyboardLayout() domain.KeyboardLayout {
+	ret := _mock.Called()
+
+	if len(ret) == 0 {
+		panic("no return value specified for GetKeyboardLayout")
+	}
+
+	var r0 domain.KeyboardLayout
+	if returnFunc, ok := ret.Get(0).(func() domain.KeyboardLayout); ok {
+		r0 = returnFunc()
+	} else {
+		r0 = ret.Get(0).(domain.KeyboardLayout)
+	}
+	return r0
+}
+
+// MockInputInjectionPort_GetKeyboardLayout_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'GetKeyboardLayout'
+type MockInputInjectionPort_GetKeyboardLayout_Call struct {
+	*mock.Call
+}
+
+// GetKeyboardLayout is a helper method to define mock.On call
+func (_e *MockInputInjectionPort_Expecter) GetKeyboardLayout() *MockInputInjectionPort_GetKeyboardLayout_Call {
+	return &MockInputInjectionPort_GetKeyboardLayout_Call{Call: _e.mock.On("GetKeyboardLayout")}
+}
+
+func (_c *MockInputInjectionPort_GetKeyboardLayout_Call) Run(run func()) *MockInputInjectionPort_GetKeyboardLayout_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run()
+	})
+	return _c
+}
+
+func (_c *MockInputInjectionPort_GetKeyboardLayout_Call) Return(keyboardLayout domain.KeyboardLayout) *MockInputInjectionPort_GetKeyboardLayout_Call {
+	_c.Call.Return(keyboardLayout)
+	return _c
+}
+
+func (_c *MockInputInjectionPort_GetKeyboardLayout_Call) RunAndReturn(run func() domain.KeyboardLayout) *MockInputInjectionPort_GetKeyboardLayout_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
+// InjectCharacter provides a mock function for the type MockInputInjectionPort
+func (_mock *MockInputInjectionPort) InjectCharacter(ctx context.Context, char rune, pressed bool) error {
+	ret := _mock.Called(ctx, char, pressed)
+
+	if len(ret) == 0 {
+		panic("no return value specified for InjectCharacter")
+	}
+
+	var r0 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context, rune, bool) error); ok {
+		r0 = returnFunc(ctx, char, pressed)
+	} else {
+		r0 = ret.Error(0)
+	}
+	return r0
+}
+
+// MockInputInjectionPort_InjectCharacter_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'InjectCharacter'
+type MockInputInjectionPort_InjectCharacter_Call struct {
+	*mock.Call
+}
+
+// InjectCharacter is a helper method to define mock.On call
+//   - ctx context.Context
+//   - char rune
+//   - pressed bool
+func (_e *MockInputInjectionPort_Expecter) InjectCharacter(ctx interface{}, char interface{}, pressed interface{}) *MockInputInjectionPort_InjectCharacter_Call {
+	return &MockInputInjectionPort_InjectCharacter_Call{Call: _e.mock.On("InjectCharacter", ctx, char, pressed)}
+}
+
+func (_c *MockInputInjectionPort_InjectCharacter_Call) Run(run func(ctx context.Context, char rune, pressed bool)) *MockInputInjectionPort_InjectCharacter_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 rune
+		if args[1] != nil {
+			arg1 = args[1].(rune)
+		}
+		var arg2 bool
+		if args[2] != nil {
+			arg2 = args[2].(bool)
+		}
+		run(
+			arg0,
+			arg1,
+			arg2,
+		)
+	})
+	return _c
+}
+
+func (_c *MockInputInjectionPort_InjectCharacter_Call) Return(err error) *MockInputInjectionPort_InjectCharacter_Call {
+	_c.Call.Return(err)
+	return _c
+}
+
+func (_c *MockInputInjectionPort_InjectCharacter_Call) RunAndReturn(run func(ctx context.Context, char rune, pressed bool) error) *MockInputInjectionPort_InjectCharacter_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // InjectKeyEvent provides a mock function for the type MockInputInjectionPort
 func (_mock *MockInputInjectionPort) InjectKeyEvent(ctx context.Context, key uint32, pressed bool, modifiers uint32) error {
 	ret := _mock.Called(ctx, key, pressed, modifiers)
@@ -418,6 +525,57 @@ func (_c *MockInputInjectionPort_SetExclusiveCapture_Call) Return(err error) *Mo
 }
 
 func (_c *MockInputInjectionPort_SetExclusiveCapture_Call) RunAndReturn(run func(ctx context.Context, enabled bool) error) *MockInputInjectionPort_SetExclusiveCapture_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
+// SetKeyboardLayout provides a mock function for the type MockInputInjectionPort
+func (_mock *MockInputInjectionPort) SetKeyboardLayout(layout domain.KeyboardLayout) error {
+	ret := _mock.Called(layout)
+
+	if len(ret) == 0 {
+		panic("no return value specified for SetKeyboardLayout")
+	}
+
+	var r0 error
+	if returnFunc, ok := ret.Get(0).(func(domain.KeyboardLayout) error); ok {
+		r0 = returnFunc(layout)
+	} else {
+		r0 = ret.Error(0)
+	}
+	return r0
+}
+
+// MockInputInjectionPort_SetKeyboardLayout_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'SetKeyboardLayout'
+type MockInputInjectionPort_SetKeyboardLayout_Call struct {
+	*mock.Call
+}
+
+// SetKeyboardLayout is a helper method to define mock.On call
+//   - layout domain.KeyboardLayout
+func (_e *MockInputInjectionPort_Expecter) SetKeyboardLayout(layout interface{}) *MockInputInjectionPort_SetKeyboardLayout_Call {
+	return &MockInputInjectionPort_SetKeyboardLayout_Call{Call: _e.mock.On("SetKeyboardLayout", layout)}
+}
+
+func (_c *MockInputInjectionPort_SetKeyboardLayout_Call) Run(run func(layout domain.KeyboardLayout)) *MockInputInjectionPort_SetKeyboardLayout_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 domain.KeyboardLayout
+		if args[0] != nil {
+			arg0 = args[0].(domain.KeyboardLayout)
+		}
+		run(
+			arg0,
+		)
+	})
+	return _c
+}
+
+func (_c *MockInputInjectionPort_SetKeyboardLayout_Call) Return(err error) *MockInputInjectionPort_SetKeyboardLayout_Call {
+	_c.Call.Return(err)
+	return _c
+}
+
+func (_c *MockInputInjectionPort_SetKeyboardLayout_Call) RunAndReturn(run func(layout domain.KeyboardLayout) error) *MockInputInjectionPort_SetKeyboardLayout_Call {
 	_c.Call.Return(run)
 	return _c
 }

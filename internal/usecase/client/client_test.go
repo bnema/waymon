@@ -51,20 +51,21 @@ func createTestSSHKey(t *testing.T) string {
 
 // Helper to create a configured UseCaseImpl for tests.
 // Returns the concrete type for internal state inspection in tests.
-func newTestClientUseCase(t *testing.T) (*UseCaseImpl, *mocks.MockInputInjectionPort, *mocks.MockNetworkClientPort, *mocks.MockDisplayPort, *mocks.MockConfigRepository) {
+func newTestClientUseCase(t *testing.T) (*UseCaseImpl, *mocks.MockInputInjectionPort, *mocks.MockNetworkClientPort, *mocks.MockDisplayPort, *mocks.MockConfigRepository, *mocks.MockKeyboardLayoutPort) {
 	inputInjection := mocks.NewMockInputInjectionPort(t)
 	network := mocks.NewMockNetworkClientPort(t)
 	display := mocks.NewMockDisplayPort(t)
 	configRepo := mocks.NewMockConfigRepository(t)
+	keyboardLayout := mocks.NewMockKeyboardLayoutPort(t)
 
-	uc := NewClientUseCase(inputInjection, network, display, configRepo)
+	uc := NewClientUseCase(inputInjection, network, display, configRepo, keyboardLayout)
 	// Type assert to concrete type for test access to internal state
 	impl := uc.(*UseCaseImpl)
-	return impl, inputInjection, network, display, configRepo
+	return impl, inputInjection, network, display, configRepo, keyboardLayout
 }
 
 func TestNewClientUseCase(t *testing.T) {
-	uc, inputInjection, network, display, configRepo := newTestClientUseCase(t)
+	uc, inputInjection, network, display, configRepo, _ := newTestClientUseCase(t)
 
 	assert.NotNil(t, uc)
 	assert.Equal(t, inputInjection, uc.inputInjection)
@@ -168,7 +169,9 @@ func TestUseCaseImpl_Connect(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			uc, inputInjection, network, display, configRepo := newTestClientUseCase(t)
+			uc, inputInjection, network, display, configRepo, keyboardLayout := newTestClientUseCase(t)
+			// Set up default keyboard layout detection
+			keyboardLayout.On("DetectLayout", mock.Anything).Return(domain.LayoutUS).Maybe()
 			tt.setupMocks(inputInjection, network, display, configRepo, testKeyPath)
 
 			ctx := testCtx(t)
@@ -186,7 +189,7 @@ func TestUseCaseImpl_Connect(t *testing.T) {
 }
 
 func TestUseCaseImpl_Connect_AlreadyConnected(t *testing.T) {
-	uc, _, _, _, _ := newTestClientUseCase(t)
+	uc, _, _, _, _, _ := newTestClientUseCase(t)
 	uc.connected = true
 
 	ctx := testCtx(t)
@@ -266,7 +269,7 @@ func TestUseCaseImpl_IsConnected(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			uc, _, _, _, _ := newTestClientUseCase(t)
+			uc, _, _, _, _, _ := newTestClientUseCase(t)
 			tt.setupState(uc)
 
 			got := uc.IsConnected()
@@ -304,7 +307,7 @@ func TestUseCaseImpl_GetControlStatus(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			uc, _, _, _, _ := newTestClientUseCase(t)
+			uc, _, _, _, _, _ := newTestClientUseCase(t)
 			tt.setupState(uc)
 
 			ctx := testCtx(t)
@@ -316,7 +319,7 @@ func TestUseCaseImpl_GetControlStatus(t *testing.T) {
 }
 
 func TestUseCaseImpl_SetOnControlChanged(t *testing.T) {
-	uc, _, _, _, _ := newTestClientUseCase(t)
+	uc, _, _, _, _, _ := newTestClientUseCase(t)
 
 	var receivedStatus domain.ControlStatus
 	callback := func(status domain.ControlStatus) {
@@ -333,7 +336,7 @@ func TestUseCaseImpl_SetOnControlChanged(t *testing.T) {
 }
 
 func TestUseCaseImpl_SetOnConnectionStateChanged(t *testing.T) {
-	uc, _, _, _, _ := newTestClientUseCase(t)
+	uc, _, _, _, _, _ := newTestClientUseCase(t)
 
 	var receivedConnected bool
 	var receivedServerName string

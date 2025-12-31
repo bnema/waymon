@@ -25,6 +25,7 @@ packages:
       DisplayPort:
       InputCapturePort:
       InputInjectionPort:
+      KeyboardLayoutPort:
       NetworkServerPort:
       NetworkClientPort:
 

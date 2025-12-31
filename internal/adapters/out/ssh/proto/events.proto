@@ -52,9 +52,13 @@ enum ScrollType {
 
 // Keyboard key press/release
 message KeyboardEvent {
-  uint32 key = 1;        // Key code
+  uint32 key = 1;        // Key code (used for raw keycode mode)
   bool pressed = 2;      // true=press, false=release
   uint32 modifiers = 3;  // Modifier mask (Ctrl, Alt, Shift, etc.)
+  // For semantic keyboard mode: the Unicode character to type
+  // When set, the receiver should translate this to appropriate keycodes
+  // for their keyboard layout instead of using the raw key field.
+  string character = 4;  // Unicode character (e.g., "é", "q", "Q")
 }
 
 // Control messages for switching targets, etc.
@@ -135,6 +139,7 @@ message ClientCapabilities {
   bool can_receive_scroll = 3;
   string wayland_compositor = 4; // Wayland compositor type
   string uinput_version = 5;     // uinput library version
+  string keyboard_layout = 6;    // Client's keyboard layout (e.g., "us", "fr")
 }
 
 // LogEvent for forwarding client logs to server

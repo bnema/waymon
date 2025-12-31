@@ -14,6 +14,7 @@ import (
 	"github.com/bnema/waymon/internal/adapters/out/config"
 	"github.com/bnema/waymon/internal/adapters/out/display"
 	"github.com/bnema/waymon/internal/adapters/out/input"
+	"github.com/bnema/waymon/internal/adapters/out/keyboard"
 	"github.com/bnema/waymon/internal/adapters/out/logging"
 	"github.com/bnema/waymon/internal/adapters/out/ssh"
 	"github.com/bnema/waymon/internal/domain"
@@ -106,8 +107,14 @@ func RunClient(ctx context.Context, opts ClientOptions) error {
 	// Create SSH client adapter
 	networkClient := ssh.NewClientAdapter()
 
+	// Create keyboard layout adapter
+	keyboardAdapter := keyboard.NewAdapter()
+
+	// Set keyboard layout port on input injector for character translation
+	inputInjection.SetKeyboardLayoutPort(keyboardAdapter)
+
 	// Create client use case
-	clientUseCase := clientuc.NewClientUseCase(inputInjection, networkClient, displayAdapter, configRepo)
+	clientUseCase := clientuc.NewClientUseCase(inputInjection, networkClient, displayAdapter, configRepo, keyboardAdapter)
 
 	// Set server address from CLI/config resolution
 	clientUseCase.SetServerAddress(serverAddress)

@@ -28,6 +28,7 @@ type UseCaseImpl struct {
 	network        out.NetworkClientPort
 	display        out.DisplayPort
 	configRepo     out.ConfigRepository
+	keyboardLayout out.KeyboardLayoutPort
 
 	// Configuration
 	config        *domain.Config
@@ -56,6 +57,7 @@ func NewClientUseCase(
 	network out.NetworkClientPort,
 	display out.DisplayPort,
 	configRepo out.ConfigRepository,
+	keyboardLayout out.KeyboardLayoutPort,
 ) in.ClientUseCase {
 	// Get hostname for client ID
 	hostname, err := os.Hostname()
@@ -68,6 +70,7 @@ func NewClientUseCase(
 		network:        network,
 		display:        display,
 		configRepo:     configRepo,
+		keyboardLayout: keyboardLayout,
 		clientID:       hostname,
 	}
 }
@@ -340,6 +343,15 @@ func (c *UseCaseImpl) injectEvent(ctx context.Context, event *domain.InputEvent)
 		return c.inputInjection.InjectMouseScroll(ctx, event.MouseScroll.DX, event.MouseScroll.DY, event.MouseScroll.Type)
 
 	case event.Keyboard != nil:
+		// Use semantic character injection if a character is provided
+		if event.Keyboard.Character != nil {
+			log.Debug().
+				Int32("char", int32(*event.Keyboard.Character)).
+				Bool("pressed", event.Keyboard.Pressed).
+				Msg("Injecting keyboard character")
+			return c.inputInjection.InjectCharacter(ctx, *event.Keyboard.Character, event.Keyboard.Pressed)
+		}
+		// Fall back to raw keycode injection
 		log.Debug().Uint32("key", event.Keyboard.Key).Bool("pressed", event.Keyboard.Pressed).Msg("Injecting keyboard event")
 		return c.inputInjection.InjectKeyEvent(ctx, event.Keyboard.Key, event.Keyboard.Pressed, event.Keyboard.Modifiers)
 
@@ -358,6 +370,16 @@ func (c *UseCaseImpl) sendClientConfiguration(ctx context.Context) error {
 		return fmt.Errorf("failed to get monitors: %w", err)
 	}
 
+	// Detect keyboard layout
+	detectedLayout := domain.LayoutUS // Default
+	if c.keyboardLayout != nil {
+		detectedLayout = c.keyboardLayout.DetectLayout(ctx)
+		// Set the layout on the input injection port
+		if err := c.inputInjection.SetKeyboardLayout(detectedLayout); err != nil {
+			log.Warn().Err(err).Msg("failed to set keyboard layout on injector")
+		}
+	}
+
 	// Create client capabilities
 	capabilities := &domain.ClientCapabilities{
 		CanReceiveKeyboard: true,
@@ -365,6 +387,7 @@ func (c *UseCaseImpl) sendClientConfiguration(ctx context.Context) error {
 		CanReceiveScroll:   true,
 		WaylandCompositor:  getWaylandCompositor(),
 		UInputVersion:      "wayland-virtual-input",
+		KeyboardLayout:     detectedLayout,
 	}
 
 	// Create client configuration
