@@ -6,7 +6,6 @@ import (
 	"io"
 	"os"
 	"os/signal"
-	"path/filepath"
 	"syscall"
 
 	"github.com/rs/zerolog"
@@ -15,6 +14,7 @@ import (
 	"github.com/bnema/waymon/internal/adapters/out/config"
 	"github.com/bnema/waymon/internal/adapters/out/display"
 	"github.com/bnema/waymon/internal/adapters/out/input"
+	"github.com/bnema/waymon/internal/adapters/out/logging"
 	"github.com/bnema/waymon/internal/adapters/out/ssh"
 	"github.com/bnema/waymon/internal/domain"
 	clientuc "github.com/bnema/waymon/internal/usecase/client"
@@ -148,11 +148,12 @@ func RunClient(ctx context.Context, opts ClientOptions) error {
 func resolveServerAddress(cfg *domain.Config, opts ClientOptions) string {
 	var addr string
 
-	// Priority 1: Command line --host flag
-	if opts.ServerAddress != "" {
+	// Priority order: CLI flag > named host > config default
+	switch {
+	case opts.ServerAddress != "":
 		addr = opts.ServerAddress
-	} else if opts.HostName != "" {
-		// Priority 2: Named host from config
+	case opts.HostName != "":
+		// Named host from config
 		for _, host := range cfg.Hosts {
 			if host.Name == opts.HostName {
 				addr = host.Address
@@ -160,8 +161,8 @@ func resolveServerAddress(cfg *domain.Config, opts ClientOptions) string {
 			}
 		}
 		// Host name specified but not found - addr remains empty
-	} else {
-		// Priority 3: Default server address from config
+	default:
+		// Default server address from config
 		addr = cfg.Client.ServerAddress
 	}
 
@@ -195,33 +196,15 @@ func setupClientLogging(ctx context.Context, cfg *domain.Config, levelOverride s
 	var writers []io.Writer
 	writers = append(writers, consoleWriter)
 
-	var fileHandle *os.File
-
-	// Set up file logging if enabled
-	if cfg.Logging.FileLogging {
-		logDir := cfg.Logging.LogDir
-		if logDir == "" {
-			// For client, use user's cache directory
-			cacheDir, err := os.UserCacheDir()
-			if err != nil {
-				cacheDir = "/tmp"
-			}
-			logDir = filepath.Join(cacheDir, "waymon")
-		}
-
-		// Create log directory if it doesn't exist
-		if err := os.MkdirAll(logDir, 0750); err != nil {
-			return ctx, func() {}, fmt.Errorf("failed to create log directory: %w", err)
-		}
-
-		logPath := filepath.Join(logDir, "waymon-client.log")
-		var err error
-		// Note: logPath is constructed from user cache dir + fixed filename - this is intentional
-		fileHandle, err = os.OpenFile(logPath, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0640) //nolint:gosec // G304: Log path is safely constructed from cache dir
-		if err != nil {
-			return ctx, func() {}, fmt.Errorf("failed to open log file: %w", err)
-		}
-		writers = append(writers, fileHandle)
+	// Always set up file logging for session-based logs
+	fileLogger := logging.New(cfg.Logging.LogDir)
+	fileWriter, fileCleanup, err := fileLogger.NewSession(ctx, "client")
+	if err != nil {
+		// Log warning but continue without file logging
+		fmt.Fprintf(os.Stderr, "Warning: could not create log file: %v\n", err)
+	} else {
+		writers = append(writers, fileWriter)
+		fmt.Fprintf(os.Stderr, "Logging to: %s\n", fileLogger.GetLogDir())
 	}
 
 	// Create multi-writer
@@ -237,22 +220,10 @@ func setupClientLogging(ctx context.Context, cfg *domain.Config, levelOverride s
 	ctx = logger.WithContext(ctx)
 
 	cleanup := func() {
-		if fileHandle != nil {
-			_ = fileHandle.Close() // Best effort close of log file
+		if fileCleanup != nil {
+			fileCleanup()
 		}
 	}
 
 	return ctx, cleanup, nil
-}
-
-// defaultClientConfig returns a default client configuration.
-func defaultClientConfig() *domain.Config {
-	return &domain.Config{
-		Client: domain.ClientCfg{
-			ReconnectDelay: 5,
-		},
-		Logging: domain.LoggingConfig{
-			LogLevel: "info",
-		},
-	}
 }

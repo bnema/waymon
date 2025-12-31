@@ -8,7 +8,6 @@ import (
 	"io"
 	"os"
 	"os/signal"
-	"path/filepath"
 	"syscall"
 
 	"github.com/rs/zerolog"
@@ -17,6 +16,7 @@ import (
 	"github.com/bnema/waymon/internal/adapters/in/tui"
 	"github.com/bnema/waymon/internal/adapters/out/config"
 	"github.com/bnema/waymon/internal/adapters/out/evdev"
+	"github.com/bnema/waymon/internal/adapters/out/logging"
 	"github.com/bnema/waymon/internal/adapters/out/ssh"
 	"github.com/bnema/waymon/internal/domain"
 	serveruc "github.com/bnema/waymon/internal/usecase/server"
@@ -223,35 +223,15 @@ func setupServerLogging(ctx context.Context, cfg *domain.Config, levelOverride s
 	var writers []io.Writer
 	writers = append(writers, consoleWriter)
 
-	var fileHandle *os.File
-
-	// Set up file logging if enabled
-	if cfg.Logging.FileLogging {
-		logDir := cfg.Logging.LogDir
-		if logDir == "" {
-			// Use /var/log/waymon for root, user cache dir otherwise
-			if os.Getuid() == 0 {
-				logDir = "/var/log/waymon"
-			} else if cacheDir, err := os.UserCacheDir(); err == nil {
-				logDir = filepath.Join(cacheDir, "waymon")
-			} else {
-				logDir = filepath.Join(os.TempDir(), "waymon")
-			}
-		}
-
-		// Create log directory if it doesn't exist
-		if err := os.MkdirAll(logDir, 0750); err != nil {
-			return ctx, func() {}, fmt.Errorf("failed to create log directory: %w", err)
-		}
-
-		logPath := filepath.Join(logDir, "waymon-server.log")
-		var err error
-		// Note: logPath is constructed from config/cache dir + fixed filename - this is intentional
-		fileHandle, err = os.OpenFile(logPath, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0640) //nolint:gosec // G304: Log path is safely constructed from config or cache dir
-		if err != nil {
-			return ctx, func() {}, fmt.Errorf("failed to open log file: %w", err)
-		}
-		writers = append(writers, fileHandle)
+	// Always set up file logging for session-based logs
+	fileLogger := logging.New(cfg.Logging.LogDir)
+	fileWriter, fileCleanup, err := fileLogger.NewSession(ctx, "server")
+	if err != nil {
+		// Log warning but continue without file logging
+		fmt.Fprintf(os.Stderr, "Warning: could not create log file: %v\n", err)
+	} else {
+		writers = append(writers, fileWriter)
+		fmt.Fprintf(os.Stderr, "Logging to: %s\n", fileLogger.GetLogDir())
 	}
 
 	// Create multi-writer
@@ -267,23 +247,10 @@ func setupServerLogging(ctx context.Context, cfg *domain.Config, levelOverride s
 	ctx = logger.WithContext(ctx)
 
 	cleanup := func() {
-		if fileHandle != nil {
-			_ = fileHandle.Close() // Best effort close of log file
+		if fileCleanup != nil {
+			fileCleanup()
 		}
 	}
 
 	return ctx, cleanup, nil
-}
-
-// defaultServerConfig returns a default server configuration.
-func defaultServerConfig() *domain.Config {
-	return &domain.Config{
-		Server: domain.ServerCfg{
-			Port:       52525,
-			MaxClients: 5,
-		},
-		Logging: domain.LoggingConfig{
-			LogLevel: "info",
-		},
-	}
 }
