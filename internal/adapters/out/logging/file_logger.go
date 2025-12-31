@@ -30,8 +30,9 @@ func New(logDir string) *FileLogger {
 
 // NewSession creates a new logging session with a timestamped log file.
 func (f *FileLogger) NewSession(ctx context.Context, component string) (io.Writer, func(), error) {
-	// Ensure log directory exists
-	if err := os.MkdirAll(f.logDir, 0750); err != nil {
+	// Ensure log directory exists with world-readable permissions
+	// This allows non-root users to read logs created by the root-run server
+	if err := os.MkdirAll(f.logDir, 0755); err != nil { //nolint:gosec // G301: Intentionally world-readable for user log access
 		return nil, nil, fmt.Errorf("failed to create log directory %s: %w", f.logDir, err)
 	}
 
@@ -40,9 +41,10 @@ func (f *FileLogger) NewSession(ctx context.Context, component string) (io.Write
 	filename := fmt.Sprintf("waymon-%s-%s.log", component, timestamp)
 	logPath := filepath.Join(f.logDir, filename)
 
-	// Open file for writing
+	// Open file for writing with world-readable permissions
+	// Logs are not sensitive and should be readable by any user for debugging
 	// Note: logPath is safely constructed from logDir + timestamp - this is intentional
-	file, err := os.OpenFile(logPath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0640) //nolint:gosec // G304: Log path is safely constructed
+	file, err := os.OpenFile(logPath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0644) //nolint:gosec // G304: Log path is safely constructed
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to create log file %s: %w", logPath, err)
 	}
