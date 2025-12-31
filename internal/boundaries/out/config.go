@@ -22,4 +22,7 @@ type ConfigRepository interface {
 
 	// SetConfigPath sets the path to the configuration file.
 	SetConfigPath(path string)
+
+	// Exists returns true if the configuration file exists on disk.
+	Exists() bool
 }

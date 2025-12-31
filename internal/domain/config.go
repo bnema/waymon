@@ -1,5 +1,10 @@
 package domain
 
+const (
+	// DefaultServerPort is the default port for waymon server connections.
+	DefaultServerPort = 52525
+)
+
 // Config represents the complete application configuration.
 // This is a pure domain type with no serialization tags.
 type Config struct {

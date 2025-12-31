@@ -38,6 +38,50 @@ func (_m *MockConfigRepository) EXPECT() *MockConfigRepository_Expecter {
 	return &MockConfigRepository_Expecter{mock: &_m.Mock}
 }
 
+// Exists provides a mock function for the type MockConfigRepository
+func (_mock *MockConfigRepository) Exists() bool {
+	ret := _mock.Called()
+
+	if len(ret) == 0 {
+		panic("no return value specified for Exists")
+	}
+
+	var r0 bool
+	if returnFunc, ok := ret.Get(0).(func() bool); ok {
+		r0 = returnFunc()
+	} else {
+		r0 = ret.Get(0).(bool)
+	}
+	return r0
+}
+
+// MockConfigRepository_Exists_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'Exists'
+type MockConfigRepository_Exists_Call struct {
+	*mock.Call
+}
+
+// Exists is a helper method to define mock.On call
+func (_e *MockConfigRepository_Expecter) Exists() *MockConfigRepository_Exists_Call {
+	return &MockConfigRepository_Exists_Call{Call: _e.mock.On("Exists")}
+}
+
+func (_c *MockConfigRepository_Exists_Call) Run(run func()) *MockConfigRepository_Exists_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run()
+	})
+	return _c
+}
+
+func (_c *MockConfigRepository_Exists_Call) Return(b bool) *MockConfigRepository_Exists_Call {
+	_c.Call.Return(b)
+	return _c
+}
+
+func (_c *MockConfigRepository_Exists_Call) RunAndReturn(run func() bool) *MockConfigRepository_Exists_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // GetConfigPath provides a mock function for the type MockConfigRepository
 func (_mock *MockConfigRepository) GetConfigPath() string {
 	ret := _mock.Called()

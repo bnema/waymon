@@ -57,4 +57,19 @@ var (
 
 	// ErrInvalidAction is returned when an invalid action is specified.
 	ErrInvalidAction = errors.New("invalid action")
+
+	// ErrConfigSSHKeyNotSet is returned when the SSH private key path is not configured.
+	ErrConfigSSHKeyNotSet = errors.New("SSH private key path not configured")
+
+	// ErrConfigSSHKeyNotFound is returned when the SSH private key file doesn't exist.
+	ErrConfigSSHKeyNotFound = errors.New("SSH private key file not found")
+
+	// ErrConfigSSHKeyInvalid is returned when the SSH private key cannot be parsed.
+	ErrConfigSSHKeyInvalid = errors.New("SSH private key is invalid")
+
+	// ErrConfigSSHKeyEncrypted is returned when the SSH private key is password-protected.
+	ErrConfigSSHKeyEncrypted = errors.New("SSH private key is password-protected (not supported)")
+
+	// ErrConfigServerAddrEmpty is returned when no server address is specified.
+	ErrConfigServerAddrEmpty = errors.New("server address not specified")
 )

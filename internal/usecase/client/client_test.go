@@ -2,12 +2,18 @@ package client
 
 import (
 	"context"
+	"crypto/ed25519"
+	"crypto/rand"
+	"encoding/pem"
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/rs/zerolog"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
+	"golang.org/x/crypto/ssh"
 
 	"github.com/bnema/waymon/internal/domain"
 	mocks "github.com/bnema/waymon/internal/mocks/out"
@@ -17,6 +23,30 @@ import (
 func testCtx(t *testing.T) context.Context {
 	logger := zerolog.Nop()
 	return logger.WithContext(t.Context())
+}
+
+// createTestSSHKey creates a temporary SSH private key file for testing.
+// Returns the path to the key file. The file is automatically cleaned up after the test.
+func createTestSSHKey(t *testing.T) string {
+	t.Helper()
+
+	// Generate an Ed25519 key pair
+	_, privateKey, err := ed25519.GenerateKey(rand.Reader)
+	require.NoError(t, err)
+
+	// Convert to OpenSSH format
+	sshPrivateKey, err := ssh.MarshalPrivateKey(privateKey, "")
+	require.NoError(t, err)
+
+	// Create temp directory
+	tmpDir := t.TempDir()
+	keyPath := filepath.Join(tmpDir, "id_ed25519")
+
+	// Write the key file
+	err = os.WriteFile(keyPath, pem.EncodeToMemory(sshPrivateKey), 0600)
+	require.NoError(t, err)
+
+	return keyPath
 }
 
 // Helper to create a configured UseCaseImpl for tests.
@@ -45,24 +75,27 @@ func TestNewClientUseCase(t *testing.T) {
 }
 
 func TestUseCaseImpl_Connect(t *testing.T) {
+	// Create a test SSH key that will be used by tests requiring a valid key
+	testKeyPath := createTestSSHKey(t)
+
 	tests := []struct {
 		name          string
-		setupMocks    func(*mocks.MockInputInjectionPort, *mocks.MockNetworkClientPort, *mocks.MockDisplayPort, *mocks.MockConfigRepository)
+		setupMocks    func(*mocks.MockInputInjectionPort, *mocks.MockNetworkClientPort, *mocks.MockDisplayPort, *mocks.MockConfigRepository, string)
 		expectedError bool
 	}{
 		{
 			name: "successful connection",
-			setupMocks: func(ii *mocks.MockInputInjectionPort, nc *mocks.MockNetworkClientPort, dp *mocks.MockDisplayPort, cr *mocks.MockConfigRepository) {
+			setupMocks: func(ii *mocks.MockInputInjectionPort, nc *mocks.MockNetworkClientPort, dp *mocks.MockDisplayPort, cr *mocks.MockConfigRepository, keyPath string) {
 				cr.On("Load", mock.Anything).Return(&domain.Config{
 					Client: domain.ClientCfg{
 						ServerAddress: "192.168.1.100:52525",
-						SSHPrivateKey: "/path/to/key",
+						SSHPrivateKey: keyPath,
 					},
 				}, nil)
 				ii.On("Start", mock.Anything).Return(nil)
 				nc.On("SetOnInputEvent", mock.Anything).Return()
 				nc.On("SetOnDisconnected", mock.Anything).Return()
-				nc.On("Connect", mock.Anything, "192.168.1.100:52525", "/path/to/key").Return(nil)
+				nc.On("Connect", mock.Anything, "192.168.1.100:52525", keyPath).Return(nil)
 				dp.On("GetMonitors", mock.Anything).Return([]domain.Monitor{
 					{Name: "Monitor1", Width: 1920, Height: 1080},
 				}, nil)
@@ -72,16 +105,43 @@ func TestUseCaseImpl_Connect(t *testing.T) {
 		},
 		{
 			name: "fails when config load fails",
-			setupMocks: func(_ *mocks.MockInputInjectionPort, _ *mocks.MockNetworkClientPort, _ *mocks.MockDisplayPort, cr *mocks.MockConfigRepository) {
+			setupMocks: func(_ *mocks.MockInputInjectionPort, _ *mocks.MockNetworkClientPort, _ *mocks.MockDisplayPort, cr *mocks.MockConfigRepository, _ string) {
 				cr.On("Load", mock.Anything).Return(nil, domain.ErrConfigNotFound)
 			},
 			expectedError: true,
 		},
 		{
-			name: "fails when input injection start fails",
-			setupMocks: func(ii *mocks.MockInputInjectionPort, _ *mocks.MockNetworkClientPort, _ *mocks.MockDisplayPort, cr *mocks.MockConfigRepository) {
+			name: "fails when SSH key not set",
+			setupMocks: func(_ *mocks.MockInputInjectionPort, _ *mocks.MockNetworkClientPort, _ *mocks.MockDisplayPort, cr *mocks.MockConfigRepository, _ string) {
 				cr.On("Load", mock.Anything).Return(&domain.Config{
-					Client: domain.ClientCfg{ServerAddress: "192.168.1.100:52525"},
+					Client: domain.ClientCfg{
+						ServerAddress: "192.168.1.100:52525",
+						SSHPrivateKey: "", // Empty key path
+					},
+				}, nil)
+			},
+			expectedError: true,
+		},
+		{
+			name: "fails when SSH key file not found",
+			setupMocks: func(_ *mocks.MockInputInjectionPort, _ *mocks.MockNetworkClientPort, _ *mocks.MockDisplayPort, cr *mocks.MockConfigRepository, _ string) {
+				cr.On("Load", mock.Anything).Return(&domain.Config{
+					Client: domain.ClientCfg{
+						ServerAddress: "192.168.1.100:52525",
+						SSHPrivateKey: "/nonexistent/path/to/key",
+					},
+				}, nil)
+			},
+			expectedError: true,
+		},
+		{
+			name: "fails when input injection start fails",
+			setupMocks: func(ii *mocks.MockInputInjectionPort, _ *mocks.MockNetworkClientPort, _ *mocks.MockDisplayPort, cr *mocks.MockConfigRepository, keyPath string) {
+				cr.On("Load", mock.Anything).Return(&domain.Config{
+					Client: domain.ClientCfg{
+						ServerAddress: "192.168.1.100:52525",
+						SSHPrivateKey: keyPath,
+					},
 				}, nil)
 				ii.On("Start", mock.Anything).Return(domain.ErrInputDeviceUnavailable)
 			},
@@ -89,17 +149,17 @@ func TestUseCaseImpl_Connect(t *testing.T) {
 		},
 		{
 			name: "fails when network connect fails",
-			setupMocks: func(ii *mocks.MockInputInjectionPort, nc *mocks.MockNetworkClientPort, _ *mocks.MockDisplayPort, cr *mocks.MockConfigRepository) {
+			setupMocks: func(ii *mocks.MockInputInjectionPort, nc *mocks.MockNetworkClientPort, _ *mocks.MockDisplayPort, cr *mocks.MockConfigRepository, keyPath string) {
 				cr.On("Load", mock.Anything).Return(&domain.Config{
 					Client: domain.ClientCfg{
 						ServerAddress: "192.168.1.100:52525",
-						SSHPrivateKey: "/path/to/key",
+						SSHPrivateKey: keyPath,
 					},
 				}, nil)
 				ii.On("Start", mock.Anything).Return(nil)
 				nc.On("SetOnInputEvent", mock.Anything).Return()
 				nc.On("SetOnDisconnected", mock.Anything).Return()
-				nc.On("Connect", mock.Anything, "192.168.1.100:52525", "/path/to/key").Return(domain.ErrConnectionClosed)
+				nc.On("Connect", mock.Anything, "192.168.1.100:52525", keyPath).Return(domain.ErrConnectionClosed)
 				ii.On("Stop").Return(nil)
 			},
 			expectedError: true,
@@ -109,7 +169,7 @@ func TestUseCaseImpl_Connect(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			uc, inputInjection, network, display, configRepo := newTestClientUseCase(t)
-			tt.setupMocks(inputInjection, network, display, configRepo)
+			tt.setupMocks(inputInjection, network, display, configRepo, testKeyPath)
 
 			ctx := testCtx(t)
 			err := uc.Connect(ctx)

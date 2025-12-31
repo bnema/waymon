@@ -47,11 +47,19 @@ func RunClient(ctx context.Context, opts ClientOptions) error {
 		configRepo.SetConfigPath(opts.ConfigPath)
 	}
 
+	// Auto-initialize config if it doesn't exist
+	configCreated := !configRepo.Exists()
+	if err := initializeConfig(ctx, configRepo); err != nil {
+		fmt.Fprintf(os.Stderr, "Warning: could not create config file: %v\n", err)
+	}
+	if configCreated && configRepo.Exists() {
+		fmt.Fprintf(os.Stderr, "Created default config at: %s\n", configRepo.GetConfigPath())
+	}
+
 	// Load configuration
 	cfg, err := configRepo.Load(ctx)
 	if err != nil {
-		// Use defaults if config not found
-		cfg = defaultClientConfig()
+		return fmt.Errorf("failed to load configuration: %w", err)
 	}
 
 	// Determine server address
@@ -136,24 +144,27 @@ func RunClient(ctx context.Context, opts ClientOptions) error {
 
 // resolveServerAddress determines the server address from options and config.
 func resolveServerAddress(cfg *domain.Config, opts ClientOptions) string {
+	var addr string
+
 	// Priority 1: Command line --host flag
 	if opts.ServerAddress != "" {
-		return opts.ServerAddress
-	}
-
-	// Priority 2: Named host from config
-	if opts.HostName != "" {
+		addr = opts.ServerAddress
+	} else if opts.HostName != "" {
+		// Priority 2: Named host from config
 		for _, host := range cfg.Hosts {
 			if host.Name == opts.HostName {
-				return host.Address
+				addr = host.Address
+				break
 			}
 		}
-		// Host name specified but not found - return empty to trigger error
-		return ""
+		// Host name specified but not found - addr remains empty
+	} else {
+		// Priority 3: Default server address from config
+		addr = cfg.Client.ServerAddress
 	}
 
-	// Priority 3: Default server address from config
-	return cfg.Client.ServerAddress
+	// Normalize: add default port if not specified
+	return normalizeServerAddress(addr)
 }
 
 // setupClientLogging configures zerolog with file and console output.

@@ -204,6 +204,13 @@ func (r *ViperRepository) SetConfigPath(path string) {
 	r.configPath = path
 }
 
+// Exists returns true if the configuration file exists on disk.
+func (r *ViperRepository) Exists() bool {
+	path := r.GetConfigPath()
+	_, err := os.Stat(path)
+	return err == nil
+}
+
 // setDefaults sets the default configuration values.
 func (r *ViperRepository) setDefaults() {
 	hostname := getHostname()
@@ -227,7 +234,7 @@ func (r *ViperRepository) setDefaults() {
 	r.v.SetDefault("client.edge_mappings", []viperEdgeMapping{})
 	r.v.SetDefault("client.hotkey_modifier", "ctrl+alt")
 	r.v.SetDefault("client.hotkey_key", "s")
-	r.v.SetDefault("client.ssh_private_key", "")
+	r.v.SetDefault("client.ssh_private_key", getDefaultSSHKeyPath())
 
 	// Logging defaults
 	r.v.SetDefault("logging.file_logging", true)
@@ -350,4 +357,29 @@ func getHostname() string {
 		return "waymon-server"
 	}
 	return hostname
+}
+
+// getDefaultSSHKeyPath returns the path to an existing SSH private key,
+// or the preferred default path if none exist.
+func getDefaultSSHKeyPath() string {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return ""
+	}
+
+	// Try common key types in order of preference
+	keyPaths := []string{
+		filepath.Join(home, ".ssh", "id_ed25519"),
+		filepath.Join(home, ".ssh", "id_ecdsa"),
+		filepath.Join(home, ".ssh", "id_rsa"),
+	}
+
+	for _, p := range keyPaths {
+		if _, err := os.Stat(p); err == nil {
+			return p
+		}
+	}
+
+	// Return preferred default even if it doesn't exist
+	return filepath.Join(home, ".ssh", "id_ed25519")
 }

@@ -146,8 +146,8 @@ func (_c *MockNetworkServerPort_SendEventToClient_Call) RunAndReturn(run func(ct
 }
 
 // SetMaxClients provides a mock function for the type MockNetworkServerPort
-func (_mock *MockNetworkServerPort) SetMaxClients(max int) {
-	_mock.Called(max)
+func (_mock *MockNetworkServerPort) SetMaxClients(maxClients int) {
+	_mock.Called(maxClients)
 	return
 }
 
@@ -157,12 +157,12 @@ type MockNetworkServerPort_SetMaxClients_Call struct {
 }
 
 // SetMaxClients is a helper method to define mock.On call
-//   - max int
-func (_e *MockNetworkServerPort_Expecter) SetMaxClients(max interface{}) *MockNetworkServerPort_SetMaxClients_Call {
-	return &MockNetworkServerPort_SetMaxClients_Call{Call: _e.mock.On("SetMaxClients", max)}
+//   - maxClients int
+func (_e *MockNetworkServerPort_Expecter) SetMaxClients(maxClients interface{}) *MockNetworkServerPort_SetMaxClients_Call {
+	return &MockNetworkServerPort_SetMaxClients_Call{Call: _e.mock.On("SetMaxClients", maxClients)}
 }
 
-func (_c *MockNetworkServerPort_SetMaxClients_Call) Run(run func(max int)) *MockNetworkServerPort_SetMaxClients_Call {
+func (_c *MockNetworkServerPort_SetMaxClients_Call) Run(run func(maxClients int)) *MockNetworkServerPort_SetMaxClients_Call {
 	_c.Call.Run(func(args mock.Arguments) {
 		var arg0 int
 		if args[0] != nil {
@@ -180,7 +180,7 @@ func (_c *MockNetworkServerPort_SetMaxClients_Call) Return() *MockNetworkServerP
 	return _c
 }
 
-func (_c *MockNetworkServerPort_SetMaxClients_Call) RunAndReturn(run func(max int)) *MockNetworkServerPort_SetMaxClients_Call {
+func (_c *MockNetworkServerPort_SetMaxClients_Call) RunAndReturn(run func(maxClients int)) *MockNetworkServerPort_SetMaxClients_Call {
 	_c.Run(run)
 	return _c
 }

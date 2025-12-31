@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/rs/zerolog"
+	"golang.org/x/crypto/ssh"
 
 	"github.com/bnema/waymon/internal/boundaries/in"
 	"github.com/bnema/waymon/internal/boundaries/out"
@@ -90,6 +91,11 @@ func (c *UseCaseImpl) Connect(ctx context.Context) error {
 	}
 	c.config = config
 	c.serverAddress = config.Client.ServerAddress
+
+	// Validate configuration before attempting connection
+	if err := c.validateConfig(ctx); err != nil {
+		return err
+	}
 
 	// Initialize input injection
 	if err := c.inputInjection.Start(ctx); err != nil {
@@ -509,4 +515,45 @@ func getWaylandCompositor() string {
 		return compositor
 	}
 	return "unknown"
+}
+
+// validateConfig validates that all required configuration is present and valid.
+func (c *UseCaseImpl) validateConfig(ctx context.Context) error {
+	log := zerolog.Ctx(ctx)
+
+	// Validate server address
+	if c.serverAddress == "" {
+		return domain.ErrConfigServerAddrEmpty
+	}
+
+	// Validate SSH private key path is set
+	keyPath := c.config.Client.SSHPrivateKey
+	if keyPath == "" {
+		return fmt.Errorf("%w: run 'waymon config init' or set client.ssh_private_key in config",
+			domain.ErrConfigSSHKeyNotSet)
+	}
+
+	// Check key file exists
+	if _, err := os.Stat(keyPath); os.IsNotExist(err) {
+		return fmt.Errorf("%w: %s", domain.ErrConfigSSHKeyNotFound, keyPath)
+	}
+
+	// Read and validate key
+	keyData, err := os.ReadFile(keyPath) //nolint:gosec // G304: Path is user-configured
+	if err != nil {
+		return fmt.Errorf("cannot read SSH private key %s: %w", keyPath, err)
+	}
+
+	// Try to parse the key
+	_, err = ssh.ParsePrivateKey(keyData)
+	if err != nil {
+		// Check if it's a passphrase error
+		if _, ok := err.(*ssh.PassphraseMissingError); ok {
+			return fmt.Errorf("%w: %s", domain.ErrConfigSSHKeyEncrypted, keyPath)
+		}
+		return fmt.Errorf("%w at %s: %v", domain.ErrConfigSSHKeyInvalid, keyPath, err)
+	}
+
+	log.Debug().Str("sshKey", keyPath).Msg("configuration validated")
+	return nil
 }
